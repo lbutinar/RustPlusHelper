@@ -33,8 +33,9 @@ public sealed class MapDashboardServiceTests
 
         Assert.NotNull(model);
         Assert.Equal(1000, model.Width);
-        Assert.Equal(8, model.Items.Count);
+        Assert.Equal(9, model.Items.Count);
         Assert.Contains(model.Items, item => item.Kind == "vending");
+        Assert.Contains(model.Items, item => item.Kind == "death");
         Assert.Contains(model.Items, item => item.Kind == "unknown");
         Assert.True(model.LayerVisibility["team"]);
     }
@@ -83,8 +84,8 @@ public sealed class MapDashboardServiceTests
             Assert.Equal(MapDashboardDataSource.Live, liveService.Current.DataSource);
             Assert.Equal(profile.Id, liveService.Current.ServerId);
             Assert.NotNull(cache.Get(profile.Id));
-            Assert.Null(liveService.Current.Team);
-            Assert.False(liveService.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Team).IsAvailable);
+            Assert.Equal(2, liveService.Current.Team?.Members.Count);
+            Assert.True(liveService.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Team).IsAvailable);
             Assert.True(liveService.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Monuments).IsAvailable);
         }
 
@@ -93,10 +94,17 @@ public sealed class MapDashboardServiceTests
             await cachedService.InitializeAsync();
 
             Assert.Equal(MapDashboardDataSource.Cache, cachedService.Current.DataSource);
-            Assert.Equal("Cached map · offline ready", cachedService.Current.ConnectionLabel);
+            Assert.Equal("Live data refreshed", cachedService.Current.ConnectionLabel);
+            Assert.Equal(2, cachedService.Current.Team?.Members.Count);
+            Assert.NotNull(cachedService.Current.LiveDataRetrievedAtUtc);
+
+            var cachedMap = cachedService.Current.Map;
+            await cachedService.RefreshLiveDataAsync();
+            Assert.Same(cachedMap, cachedService.Current.Map);
+            Assert.Equal(2, cachedService.Current.Team?.Members.Count);
         }
 
-        Assert.Equal(1, factory.CreateCount);
+        Assert.Equal(3, factory.CreateCount);
     }
 
     private static DashboardFixture CreateFixture()

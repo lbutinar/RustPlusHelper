@@ -44,13 +44,15 @@ Implemented:
 - live server-information and map download through the selected saved profile;
 - SQLite map snapshot caching, real JPEG rendering, manual refresh, and truthful live/cached/fake
   source labels;
-- live-map layers limited to the directly returned base map and monuments until polling phases add
-  team and map markers.
+- live-map layers for the base map, monuments, team positions/notes, vending machines, and known
+  world markers when their owning request succeeds;
+- one-connection read-only live refreshes for team members/positions, team notes, recent chat, and
+  map markers, with partial failures kept independent and no automatic polling yet.
 
 Still requiring live verification or later phases:
 
 - secure Facepunch proxy validation (the tested server currently returns HTTP 418 at upgrade);
-- live validation of team, chat, and marker requests;
+- live validation of team chat for a server/team state that returns chat data;
 - capture of reviewed, sanitized raw protocol fixtures;
 - confirmation of real map/grid alignment against the official Rust+ app.
 

@@ -57,6 +57,16 @@
 - live map state disables team, vending, and event layers until their polling phases;
 - a manual local run confirmed direct `GetInfo` + `GetMap` and wrote a non-empty JPEG cache entry.
 
+## Current Phase 5 snapshot tests
+
+- one authenticated refresh requests info, optional map, team, chat, and markers before closing;
+- optional `NoTeam`/other request failures remain separate after successful authentication;
+- cached maps remain visible while team/chat/marker data refreshes;
+- live layers become available only when their owning snapshot succeeds;
+- a data-only refresh leaves the cached map untouched;
+- a private local capture confirmed a real team position and current marker rendered on the map, then
+  the capture was deleted without entering Git.
+
 ## Test layers planned
 
 ### Unit

@@ -13,7 +13,11 @@ Implemented:
 - bUnit navigation and interaction coverage.
 - real Rust+ JPEG rendering for the selected paired server;
 - cache-first startup, explicit live refresh, and live/cached/fake source badges;
-- base-map and monument layers enabled for live maps while future polling layers stay disabled.
+- base-map, monument, team, note, vending, and world-marker layers enabled only when their verified
+  snapshots are available;
+- explicit lightweight team/chat/marker refresh and full map+data refresh actions;
+- team positions, team notes, vending/world markers, and partial request errors rendered directly
+  from the latest successful Rust+ snapshot.
 
 The grid-search tool remains disabled until the community grid formula is validated against the
 official Rust+ app.

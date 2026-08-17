@@ -3,12 +3,20 @@
         <div>
             <span class="eyebrow">DIRECT MAP MARKERS</span>
             <h1>Vending</h1>
-            <p>Phase 1 exposes numeric Rust item IDs honestly; item names require a versioned catalogue.</p>
+            <p>Rust+ currently exposes numeric item IDs; item names require a versioned catalogue.</p>
         </div>
         <div class="summary-chip">@VendingMarkers.Count MACHINES</div>
     </div>
 
     <div class="card-grid">
+        @if (State.Markers is null)
+        {
+            <article class="surface-card empty-inline-state">Map markers were not returned by the latest Rust+ refresh.</article>
+        }
+        else if (VendingMarkers.Count == 0)
+        {
+            <article class="surface-card empty-inline-state">No vending-machine markers are currently visible in Rust+.</article>
+        }
         @foreach (var marker in VendingMarkers)
         {
             <article class="surface-card vending-card">

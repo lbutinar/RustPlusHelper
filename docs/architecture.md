@@ -12,7 +12,9 @@ single application-level Steam64 identity, manual per-server token entry, and an
 connection/authentication test. Automated pairing, persistent connection supervision, background
 monitoring, and notifications are not implemented yet. Phase 4 now uses that same manager for a
 short-lived `GetInfo` + `GetMap` operation, persists the latest successful snapshot, and renders the
-real JPEG without exposing credentials to UI components.
+real JPEG without exposing credentials to UI components. The next read-only slice reuses one
+authenticated connection for info, optional map, team, chat, and marker requests. Team/chat/marker
+results are independent so a `NoTeam` chat response does not discard valid team positions or markers.
 
 ## Dependency direction
 
@@ -57,6 +59,8 @@ server connection tests and live map downloads; replacing the adapter does not c
   and live map downloads; it will grow into per-server supervisors without moving socket lifetime
   into UI components.
 - `MapDashboardService` selects live, cached, or fake sources and exposes one canonical map state.
+- live overlays are memory-only snapshots refreshed explicitly; a future supervisor will own polling
+  and reconnection rather than UI timers.
 - `IMapCacheRepository` stores the latest map/server snapshot per saved server for offline reopening.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.

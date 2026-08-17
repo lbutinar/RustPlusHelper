@@ -86,6 +86,12 @@ is automated; live visual alignment is still pending.
 
 **Goal:** Provide the first useful live team dashboard.
 
+**Status:** Read-only snapshot slice implemented and partly live-verified on 2026-08-17. One explicit
+refresh retrieves server info, team members/positions/notes, recent chat, and map markers on a single
+connection. The tested server returned a team/position snapshot and current marker; chat returned
+`NoTeam` and remains visibly unavailable. Automatic polling, snapshot differencing, persistence, and
+semantic events remain.
+
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 
 **Risks/tests:** request budget, duplicates, movement spam; deterministic scenario transitions.

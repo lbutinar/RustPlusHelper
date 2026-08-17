@@ -5,8 +5,8 @@ using RustPlusHelper.Application.Servers;
 namespace RustPlusHelper.Application.Map;
 
 /// <summary>
-/// Owns the map-first read model. Saved servers use a short-lived production Rust+ connection and
-/// an offline cache; the deterministic source remains available when no server has been saved.
+/// Owns the map-first read model. Saved servers use one short-lived authenticated refresh cycle and
+/// an offline map cache; the deterministic source remains available when no server has been saved.
 /// </summary>
 public sealed class MapDashboardService(
     IRustPlusClient demoClient,
@@ -37,7 +37,7 @@ public sealed class MapDashboardService(
 
             if (servers.SelectedServerId is { } serverId)
             {
-                await LoadServerCoreAsync(serverId, forceRefresh: false, cancellationToken).ConfigureAwait(false);
+                await LoadServerCoreAsync(serverId, forceMapRefresh: false, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -76,6 +76,25 @@ public sealed class MapDashboardService(
             : Task.CompletedTask;
     }
 
+    public async Task RefreshLiveDataAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Current.ServerId is not { } serverId || Current.ConnectionState != DashboardConnectionState.Ready)
+        {
+            return;
+        }
+
+        await _initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await RefreshLiveDataCoreAsync(serverId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _initializationLock.Release();
+        }
+    }
+
     public void SetLayerVisibility(MapLayerKind kind, bool isVisible)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -111,7 +130,7 @@ public sealed class MapDashboardService(
 
     private async Task LoadServerCoreAsync(
         Guid serverId,
-        bool forceRefresh,
+        bool forceMapRefresh,
         CancellationToken cancellationToken)
     {
         if (!servers.Select(serverId))
@@ -135,25 +154,33 @@ public sealed class MapDashboardService(
         {
             cacheWarning = "The previous cached map was invalid and will be replaced by a live download.";
         }
-        if (!forceRefresh && cached is not null)
+
+        var includeMap = forceMapRefresh || cached is null;
+        if (cached is not null)
         {
             SetCachedState(cached, null);
-            return;
+            SetState(Current with
+            {
+                IsLiveDataRefreshing = true,
+                LiveDataStatus = includeMap ? "Refreshing map and live data" : "Refreshing live data"
+            });
+        }
+        else
+        {
+            SetState(MapDashboardState.NotStarted with
+            {
+                ConnectionState = DashboardConnectionState.Loading,
+                ConnectionLabel = "Loading Rust+ dashboard",
+                ServerId = serverId,
+                ErrorMessage = null
+            });
         }
 
-        var profile = servers.Profiles.First(profile => profile.Id == serverId);
-        SetState(MapDashboardState.NotStarted with
-        {
-            ConnectionState = DashboardConnectionState.Loading,
-            ConnectionLabel = "Loading live map",
-            ServerId = serverId,
-            ErrorMessage = null
-        });
-
-        RustPlusMapLoadResult result;
+        RustPlusDashboardLoadResult result;
         try
         {
-            result = await connections.LoadMapAsync(serverId, cancellationToken).ConfigureAwait(false);
+            result = await connections.LoadDashboardAsync(serverId, includeMap, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -161,23 +188,21 @@ public sealed class MapDashboardService(
         }
         catch (Exception exception)
         {
-            var safeMessage = SecretRedactor.Redact(exception.Message);
-            if (cached is not null)
-            {
-                SetCachedState(cached, $"Live refresh failed; showing the cached map. {safeMessage}");
-                return;
-            }
-
-            SetFailedState(serverId, "Live map failed", safeMessage);
+            HandleRefreshException(serverId, cached, exception);
             return;
         }
 
-        if (!result.IsSuccess || result.ServerInfo is null || result.Map is null)
+        if (!result.IsAuthenticated || result.ServerInfo is null)
         {
             var failure = result.ConnectionState.Detail ?? result.ConnectionState.Label;
             if (cached is not null)
             {
-                SetCachedState(cached, $"Live refresh failed; showing the cached map. {failure}");
+                SetState(Current with
+                {
+                    IsLiveDataRefreshing = false,
+                    LiveDataStatus = "Live data unavailable",
+                    LiveDataError = failure
+                });
                 return;
             }
 
@@ -185,29 +210,131 @@ public sealed class MapDashboardService(
             return;
         }
 
-        var retrievedAtUtc = timeProvider.GetUtcNow();
-        var saved = new CachedServerMap(serverId, retrievedAtUtc, result.ServerInfo, result.Map);
+        var map = result.Map?.IsSuccess == true ? result.Map.Data : null;
+        MapDashboardState baseState;
+        if (map is not null)
+        {
+            var retrievedAtUtc = timeProvider.GetUtcNow();
+            var saved = new CachedServerMap(serverId, retrievedAtUtc, result.ServerInfo, map);
+            try
+            {
+                mapCache.Upsert(saved);
+            }
+            catch (Exception exception)
+            {
+                cacheWarning = $"The live map loaded, but its offline cache could not be updated ({exception.GetType().Name}).";
+            }
+
+            var profile = servers.Profiles.First(profile => profile.Id == serverId);
+            baseState = new MapDashboardState(
+                DashboardConnectionState.Ready,
+                profile.UseFacepunchProxy ? "Live Rust+ · secure proxy" : "Live Rust+ · direct",
+                MapDashboardDataSource.Live,
+                serverId,
+                retrievedAtUtc,
+                null,
+                false,
+                null,
+                null,
+                result.ServerInfo,
+                map,
+                null,
+                null,
+                null,
+                MapDashboardState.CreateLiveMapLayers(),
+                cacheWarning);
+        }
+        else if (cached is not null)
+        {
+            baseState = Current with
+            {
+                Server = result.ServerInfo,
+                ErrorMessage = includeMap
+                    ? $"Live map refresh failed; showing the cached map. {DescribeFailure(result.Map)}"
+                    : Current.ErrorMessage
+            };
+        }
+        else
+        {
+            SetFailedState(
+                serverId,
+                "Map request failed",
+                DescribeFailure(result.Map));
+            return;
+        }
+
+        SetState(MergeLiveData(baseState, result));
+    }
+
+    private async Task RefreshLiveDataCoreAsync(Guid serverId, CancellationToken cancellationToken)
+    {
+        SetState(Current with
+        {
+            IsLiveDataRefreshing = true,
+            LiveDataStatus = "Refreshing team, chat, and markers",
+            LiveDataError = null
+        });
+
+        RustPlusDashboardLoadResult result;
         try
         {
-            mapCache.Upsert(saved);
+            result = await connections.LoadDashboardAsync(serverId, includeMap: false, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
-            cacheWarning = $"The live map loaded, but its offline cache could not be updated ({exception.GetType().Name}).";
+            SetState(Current with
+            {
+                IsLiveDataRefreshing = false,
+                LiveDataStatus = "Live refresh failed",
+                LiveDataError = SecretRedactor.Redact(exception.Message)
+            });
+            return;
         }
-        SetState(new MapDashboardState(
-            DashboardConnectionState.Ready,
-            profile.UseFacepunchProxy ? "Live map · secure proxy" : "Live map · direct",
-            MapDashboardDataSource.Live,
-            serverId,
-            retrievedAtUtc,
-            result.ServerInfo,
-            result.Map,
-            null,
-            null,
-            null,
-            MapDashboardState.CreateLiveMapLayers(),
-            cacheWarning));
+
+        if (!result.IsAuthenticated)
+        {
+            SetState(Current with
+            {
+                IsLiveDataRefreshing = false,
+                LiveDataStatus = "Live data unavailable",
+                LiveDataError = result.ConnectionState.Detail ?? result.ConnectionState.Label
+            });
+            return;
+        }
+
+        SetState(MergeLiveData(Current, result));
+    }
+
+    private MapDashboardState MergeLiveData(
+        MapDashboardState state,
+        RustPlusDashboardLoadResult result)
+    {
+        var team = result.Team?.IsSuccess == true ? result.Team.Data : state.Team;
+        var chat = result.Chat?.IsSuccess == true ? result.Chat.Data : state.Chat;
+        var markers = result.Markers?.IsSuccess == true ? result.Markers.Data : state.Markers;
+        var errors = new List<string>();
+        AddFailure(errors, "Team", result.Team);
+        AddFailure(errors, "Chat", result.Chat);
+        AddFailure(errors, "Map markers", result.Markers);
+
+        return state with
+        {
+            ConnectionLabel = result.ConnectionState.Label,
+            Server = result.ServerInfo ?? state.Server,
+            LiveDataRetrievedAtUtc = timeProvider.GetUtcNow(),
+            IsLiveDataRefreshing = false,
+            LiveDataStatus = errors.Count == 0 ? "Live data refreshed" : "Live data partially available",
+            LiveDataError = errors.Count == 0 ? null : string.Join(" ", errors),
+            Team = team,
+            Chat = chat,
+            Markers = markers,
+            Layers = BuildLiveLayers(state, team is not null, markers is not null)
+        };
     }
 
     private async Task LoadDemoAsync(CancellationToken cancellationToken)
@@ -224,28 +351,23 @@ public sealed class MapDashboardService(
         {
             await demoClient.ConnectAsync(demoConnectionOptions, cancellationToken).ConfigureAwait(false);
 
-            var server = Require(
-                await demoClient.GetServerInfoAsync(cancellationToken).ConfigureAwait(false),
-                "server information");
-            var map = Require(
-                await demoClient.GetMapAsync(cancellationToken).ConfigureAwait(false),
-                "map");
-            var team = Require(
-                await demoClient.GetTeamAsync(cancellationToken).ConfigureAwait(false),
-                "team information");
-            var chat = Require(
-                await demoClient.GetTeamChatAsync(cancellationToken).ConfigureAwait(false),
-                "team chat");
-            var markers = Require(
-                await demoClient.GetMapMarkersAsync(cancellationToken).ConfigureAwait(false),
-                "map markers");
+            var server = Require(await demoClient.GetServerInfoAsync(cancellationToken).ConfigureAwait(false), "server information");
+            var map = Require(await demoClient.GetMapAsync(cancellationToken).ConfigureAwait(false), "map");
+            var team = Require(await demoClient.GetTeamAsync(cancellationToken).ConfigureAwait(false), "team information");
+            var chat = Require(await demoClient.GetTeamChatAsync(cancellationToken).ConfigureAwait(false), "team chat");
+            var markers = Require(await demoClient.GetMapMarkersAsync(cancellationToken).ConfigureAwait(false), "map markers");
+            var now = timeProvider.GetUtcNow();
 
             SetState(new MapDashboardState(
                 DashboardConnectionState.Ready,
                 "Demo connected",
                 MapDashboardDataSource.Fake,
                 null,
-                timeProvider.GetUtcNow(),
+                now,
+                now,
+                false,
+                "Deterministic fake snapshot",
+                null,
                 server,
                 map,
                 team,
@@ -271,19 +393,44 @@ public sealed class MapDashboardService(
 
     private void SetCachedState(CachedServerMap cached, string? warning)
     {
+        var preserveLiveState = Current.ServerId == cached.ServerId;
+        var team = preserveLiveState ? Current.Team : null;
+        var chat = preserveLiveState ? Current.Chat : null;
+        var markers = preserveLiveState ? Current.Markers : null;
         SetState(new MapDashboardState(
             DashboardConnectionState.Ready,
-            "Cached map · offline ready",
+            "Cached map · refreshing live data",
             MapDashboardDataSource.Cache,
             cached.ServerId,
             cached.RetrievedAtUtc,
+            preserveLiveState ? Current.LiveDataRetrievedAtUtc : null,
+            preserveLiveState && Current.IsLiveDataRefreshing,
+            preserveLiveState ? Current.LiveDataStatus : null,
+            preserveLiveState ? Current.LiveDataError : null,
             cached.Server,
             cached.Map,
-            null,
-            null,
-            null,
-            MapDashboardState.CreateLiveMapLayers(),
+            team,
+            chat,
+            markers,
+            BuildLiveLayers(Current, team is not null, markers is not null),
             warning));
+    }
+
+    private void HandleRefreshException(Guid serverId, CachedServerMap? cached, Exception exception)
+    {
+        var safeMessage = SecretRedactor.Redact(exception.Message);
+        if (cached is not null)
+        {
+            SetState(Current with
+            {
+                IsLiveDataRefreshing = false,
+                LiveDataStatus = "Live refresh failed",
+                LiveDataError = safeMessage
+            });
+            return;
+        }
+
+        SetFailedState(serverId, "Rust+ refresh failed", safeMessage);
     }
 
     private void SetFailedState(Guid serverId, string label, string detail)
@@ -301,6 +448,36 @@ public sealed class MapDashboardService(
     {
         Current = state;
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static string DescribeFailure<T>(RustPlusResult<T>? result) =>
+        result?.Error is { } error
+            ? $"Rust+ request failed ({error.Code})."
+            : "Rust+ returned no data.";
+
+    private static void AddFailure<T>(ICollection<string> errors, string label, RustPlusResult<T>? result)
+    {
+        if (result?.IsSuccess == true)
+        {
+            return;
+        }
+
+        errors.Add($"{label} unavailable ({result?.Error?.Code ?? "unknown_error"}).");
+    }
+
+    private static IReadOnlyList<MapLayerState> BuildLiveLayers(
+        MapDashboardState previous,
+        bool teamAvailable,
+        bool markersAvailable)
+    {
+        var layers = MapDashboardState.CreateLiveMapLayers(teamAvailable, markersAvailable);
+        return layers.Select(layer =>
+        {
+            var existing = previous.Layers.FirstOrDefault(candidate => candidate.Kind == layer.Kind);
+            return existing?.IsAvailable == true && layer.IsAvailable
+                ? layer with { IsVisible = existing.IsVisible }
+                : layer;
+        }).ToArray();
     }
 
     private static T Require<T>(RustPlusResult<T> result, string operation)

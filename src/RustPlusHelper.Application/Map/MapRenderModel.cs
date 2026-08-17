@@ -85,6 +85,36 @@ public static class MapRenderModelFactory
                 margin));
         }
 
+        foreach (var note in state.Team?.LeaderNotes ?? [])
+        {
+            items.Add(CreateItem(
+                $"leader-note:{noteIndex++}",
+                MapLayerKind.TeamNotes,
+                "team-note",
+                note.Text ?? "Leader note",
+                note.X,
+                note.Y,
+                mapSize,
+                width,
+                height,
+                margin));
+        }
+
+        if (state.Team?.LeaderDeathPosition is { } deathPosition)
+        {
+            items.Add(CreateItem(
+                "team:leader-death",
+                MapLayerKind.Events,
+                "death",
+                "Team leader death position",
+                deathPosition.X,
+                deathPosition.Y,
+                mapSize,
+                width,
+                height,
+                margin));
+        }
+
         foreach (var marker in state.Markers?.Markers ?? [])
         {
             if (marker.X is not { } x || marker.Y is not { } y)

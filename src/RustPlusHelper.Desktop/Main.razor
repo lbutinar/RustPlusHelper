@@ -75,7 +75,8 @@
                 case AppSection.Map:
                     <MapPage State="State"
                              OnLayerChanged="HandleLayerChanged"
-                             OnRefreshRequested="RefreshMap" />
+                             OnRefreshRequested="RefreshMap"
+                             OnLiveDataRefreshRequested="RefreshLiveData" />
                     break;
                 case AppSection.Team:
                     <TeamPage State="State" />
@@ -116,14 +117,19 @@
 
     private AppSection ActiveSection { get; set; } = AppSection.Map;
 
-    private string ConnectionCssClass => State.ConnectionState switch
+    private string ConnectionCssClass => State.IsLiveDataRefreshing
+        ? "loading"
+        : State.ConnectionState switch
     {
         DashboardConnectionState.Ready => "ready",
         DashboardConnectionState.Failed => "failed",
         _ => "loading"
     };
 
-    private string DataSourceBadge => State.DataSource switch
+    private string DataSourceBadge => State.LiveDataRetrievedAtUtc is not null
+        && State.DataSource != MapDashboardDataSource.Fake
+        ? "LIVE DATA"
+        : State.DataSource switch
     {
         MapDashboardDataSource.Live => "LIVE RUST+",
         MapDashboardDataSource.Cache => "CACHED",
@@ -156,6 +162,8 @@
         Dashboard.SetLayerVisibility(change.Kind, change.IsVisible);
 
     private async Task RefreshMap() => await Dashboard.RefreshSelectedServerAsync();
+
+    private async Task RefreshLiveData() => await Dashboard.RefreshLiveDataAsync();
 
     private async Task OpenServerMap(Guid serverId)
     {

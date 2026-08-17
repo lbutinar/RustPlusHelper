@@ -21,8 +21,19 @@
           </div>
           @if (State.ServerId is not null)
           {
-              <button data-testid="refresh-live-map" type="button" class="primary-button" @onclick="RefreshMap">
-                  Refresh live map
+              <button data-testid="refresh-live-data"
+                      type="button"
+                      class="ghost-button"
+                      disabled="@State.IsLiveDataRefreshing"
+                      @onclick="RefreshLiveData">
+                  @(State.IsLiveDataRefreshing ? "Refreshing…" : "Refresh team + markers")
+              </button>
+              <button data-testid="refresh-live-map"
+                      type="button"
+                      class="primary-button"
+                      disabled="@State.IsLiveDataRefreshing"
+                      @onclick="RefreshMap">
+                  Refresh everything
               </button>
           }
         </div>
@@ -84,6 +95,10 @@
     {
         <div class="map-cache-warning" role="status">@State.ErrorMessage</div>
     }
+    @if (!string.IsNullOrWhiteSpace(State.LiveDataError))
+    {
+        <div class="map-live-warning" role="status">@State.LiveDataError</div>
+    }
 
     <div class="event-strip">
         <div class="event-title">
@@ -93,17 +108,17 @@
         <div class="event-item">
             <time>NOW</time>
             <span class="event-source direct">SNAPSHOT</span>
-            <strong>@(State.Map?.Monuments.Count ?? 0) monuments loaded</strong>
+            <strong>@(State.Team?.Members.Count ?? 0) team members · @(State.Markers?.Markers.Count ?? 0) markers</strong>
         </div>
         <div class="event-item">
             <time>NOW</time>
             <span class="event-source direct">SNAPSHOT</span>
-            <strong>@SnapshotAgeLabel</strong>
+            <strong>@LiveSnapshotAgeLabel</strong>
         </div>
         <div class="event-item muted">
             <time>NEXT</time>
             <span class="event-source derived">DERIVED</span>
-            <strong>Team and marker polling arrive in the next phases</strong>
+            <strong>Semantic movement, death, and marker events require snapshot differencing</strong>
         </div>
     </div>
 </section>
@@ -121,6 +136,9 @@
     [Parameter]
     public EventCallback OnRefreshRequested { get; set; }
 
+    [Parameter]
+    public EventCallback OnLiveDataRefreshRequested { get; set; }
+
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 
     private string SourceEyebrow => State.DataSource switch
@@ -134,6 +152,10 @@
         ? $"Map retrieved {retrieved.ToLocalTime():dd MMM · HH:mm}"
         : "Map retrieval time unavailable";
 
+    private string LiveSnapshotAgeLabel => State.LiveDataRetrievedAtUtc is { } retrieved
+        ? $"Live data refreshed {retrieved.ToLocalTime():HH:mm:ss}"
+        : SnapshotAgeLabel;
+
     private async Task ChangeLayer(MapLayerState layer, ChangeEventArgs args)
     {
         var isVisible = args.Value is bool checkedValue
@@ -145,4 +167,6 @@
     private Task FitMap() => JavaScript.InvokeVoidAsync("rustPlusMap.fitActive").AsTask();
 
     private Task RefreshMap() => OnRefreshRequested.InvokeAsync();
+
+    private Task RefreshLiveData() => OnLiveDataRefreshRequested.InvokeAsync();
 }

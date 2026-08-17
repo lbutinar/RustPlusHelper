@@ -141,6 +141,10 @@ public sealed class MainComponentTests : BunitContext
             MapDashboardDataSource.Live,
             Guid.Parse("bb1b670b-3711-42df-90d8-9f0ac9b65ea9"),
             DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            false,
+            "Live data refreshed",
+            null,
             new ServerInfoSnapshot(
                 "Live test", null, null, "Procedural Map", 4500, null,
                 null, null, null, null, null, null, null, null, null),

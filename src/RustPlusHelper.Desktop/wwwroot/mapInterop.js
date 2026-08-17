@@ -25,6 +25,7 @@
         "patrol-heli": "H",
         "crate": "□",
         "explosion": "!",
+        "death": "†",
         "radius": "○",
         "travelling-vendor": "TV",
         "unknown": "?"

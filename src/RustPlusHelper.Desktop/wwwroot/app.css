@@ -374,6 +374,28 @@ button {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
 }
 
+.map-live-warning {
+    position: absolute;
+    z-index: 850;
+    top: 132px;
+    left: 18px;
+    max-width: min(620px, calc(100% - 340px));
+    border: 1px solid rgba(98, 158, 205, 0.42);
+    border-radius: 7px;
+    padding: 8px 12px;
+    background: rgba(18, 35, 48, 0.94);
+    color: #a9d2f1;
+    font-size: 9px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+}
+
+.empty-inline-state {
+    padding: 18px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.6;
+}
+
 .page-heading {
     justify-content: space-between;
     padding: 18px 24px;
@@ -1556,6 +1578,7 @@ button {
 .marker-patrol-heli,
 .marker-crate,
 .marker-explosion,
+.marker-death,
 .marker-radius,
 .marker-travelling-vendor { background: #8b392f; border-color: #f3988e; }
 .marker-unknown { background: #4f4e4a; border-color: #bebbb1; }

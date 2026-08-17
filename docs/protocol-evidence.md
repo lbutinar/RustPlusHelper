@@ -51,6 +51,11 @@ The desktop connection test deliberately distinguishes socket-open from authenti
 the default; direct `ws://` is available only through an explicit persisted user choice and there is
 no proxy fallback.
 
+The rustplus.js rate-limit evidence lists a 25-token player bucket replenished at 3 tokens/second,
+with costs of 1 for info, team info, and map markers and 5 for map; team-chat reads use the default
+request cost of 1. The desktop therefore batches one explicit refresh on one connection. It does not
+reconnect on a UI timer; background polling waits for a supervised persistent connection.
+
 ## Source-verified fields retained by the adapter
 
 - Server: map size, wipe time, population, queue, seed/salt, branding URLs, and Nexus metadata.
@@ -89,9 +94,15 @@ That selected transport authenticated successfully: `GetInfoAsync` returned serv
 that snapshot locally. No endpoint, player identity, token, server name, map contents, or precise
 coordinates were copied into repository evidence.
 
+A later read-only cycle on the same explicitly selected transport authenticated once and requested
+team, recent team chat, and map markers. Team info returned one member with live status/position data,
+and map markers returned one current marker. Team chat returned the protocol error code `NoTeam`.
+The application retained the successful team and marker snapshots and surfaced chat as unavailable;
+no live name, Steam ID, chat body, marker identity, or coordinate was retained in repository output.
+
 These items remain **pending, not confirmed live**:
 
-- success of team, chat, and map-marker operations for the user's current team/server state;
+- a successful team-chat response for a server/team state with available chat history;
 - real optional-field population outside the confirmed server/map subset;
 - image/world coordinate alignment against the official app;
 - sanitized raw binary fixture capture.
@@ -112,4 +123,5 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Pairing-token lifetime/rejection codes | Unofficial implementations document behavior; may change | Controlled expired/re-pair test |
 | Unknown marker evolution | Expected because newer travelling-vendor fields already demonstrate drift | Preserve unknown type and capture future fixture |
 | Companion history endpoint | Documented by rustplus.js but unofficial | Defer; local history is authoritative for the app |
+| `NoTeam` from chat while team info succeeds | Observed live on the selected server; requests are independent | Re-test while in a multi-member team with chat history |
 | Killer, weapon, and cause of death | Not present in verified team structures | Requires server/plugin evidence before modelling |

@@ -96,15 +96,40 @@ public sealed class RustPlusConnectionManagerTests
             new SingleClientFactory(client),
             new FixedTimeProvider(FixedUtc));
 
-        var result = await manager.LoadMapAsync(profile.Id);
+        var result = await manager.LoadDashboardAsync(profile.Id, includeMap: true);
 
-        Assert.True(result.IsSuccess);
-        Assert.Same(map, result.Map);
+        Assert.True(result.IsAuthenticated);
+        Assert.Same(map, result.Map?.Data);
         Assert.Equal("Live map server", result.ServerInfo?.Name);
         Assert.False(client.IsConnected);
         Assert.False(client.ConnectionOptions?.UseFacepunchProxy);
         Assert.NotNull(secrets.LastRetrievedBuffer);
         Assert.All(secrets.LastRetrievedBuffer, value => Assert.Equal(0, value));
+    }
+
+    [Fact]
+    public async Task KeepsOptionalDashboardFailuresSeparateAfterAuthentication()
+    {
+        var servers = CreateServers(out var profile);
+        using var secrets = new TrackingSecretStore("123");
+        var client = new StubRustPlusClient(
+            RustPlusResult<ServerInfoSnapshot>.Success(ServerInfo("Partial server")),
+            teamResult: RustPlusResult<TeamSnapshot>.Failure("NoTeam", "Player has no team."));
+        using var manager = new RustPlusConnectionManager(
+            servers,
+            secrets,
+            new SingleClientFactory(client),
+            new FixedTimeProvider(FixedUtc));
+
+        var result = await manager.LoadDashboardAsync(profile.Id, includeMap: false);
+
+        Assert.True(result.IsAuthenticated);
+        Assert.False(result.HasCompleteLiveData);
+        Assert.Equal("NoTeam", result.Team?.Error?.Code);
+        Assert.True(result.Chat?.IsSuccess);
+        Assert.True(result.Markers?.IsSuccess);
+        Assert.Equal(RustPlusConnectionStatus.Succeeded, result.ConnectionState.Status);
+        Assert.Equal("Live data partially available", result.ConnectionState.Label);
     }
 
     [Fact]
@@ -180,7 +205,10 @@ public sealed class RustPlusConnectionManagerTests
     private sealed class StubRustPlusClient(
         RustPlusResult<ServerInfoSnapshot> serverInfo,
         bool throwTokenFromConnect = false,
-        RustPlusResult<ServerMapSnapshot>? mapResult = null) : IRustPlusClient
+        RustPlusResult<ServerMapSnapshot>? mapResult = null,
+        RustPlusResult<TeamSnapshot>? teamResult = null,
+        RustPlusResult<TeamChatSnapshot>? chatResult = null,
+        RustPlusResult<MapMarkersSnapshot>? markersResult = null) : IRustPlusClient
     {
         public bool IsConnected { get; private set; }
 
@@ -219,14 +247,25 @@ public sealed class RustPlusConnectionManagerTests
                 ?? RustPlusResult<ServerMapSnapshot>.Failure("not_configured", "No map result configured."));
         }
 
-        public Task<RustPlusResult<TeamSnapshot>> GetTeamAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<RustPlusResult<TeamSnapshot>> GetTeamAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(teamResult ?? RustPlusResult<TeamSnapshot>.Success(
+                new TeamSnapshot(0, [], [], [], null)));
+        }
 
-        public Task<RustPlusResult<TeamChatSnapshot>> GetTeamChatAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<RustPlusResult<TeamChatSnapshot>> GetTeamChatAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(chatResult ?? RustPlusResult<TeamChatSnapshot>.Success(new TeamChatSnapshot([])));
+        }
 
-        public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(markersResult
+                ?? RustPlusResult<MapMarkersSnapshot>.Success(new MapMarkersSnapshot([])));
+        }
 
         public async ValueTask DisposeAsync()
         {

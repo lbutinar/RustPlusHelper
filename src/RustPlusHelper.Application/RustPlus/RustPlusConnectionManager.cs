@@ -6,9 +6,8 @@ using RustPlusHelper.Application.Servers;
 namespace RustPlusHelper.Application.RustPlus;
 
 /// <summary>
-/// Builds a short-lived, authenticated Rust+ lifecycle from a saved server profile. A successful
-/// socket handshake is validated with the low-cost read-only server-information request before the
-/// test is reported as successful.
+/// Owns serialized, short-lived authenticated Rust+ operations for saved server profiles. Socket
+/// lifetime and cleartext pairing data never cross into UI components.
 /// </summary>
 public sealed class RustPlusConnectionManager(
     ServerManager servers,
@@ -17,7 +16,7 @@ public sealed class RustPlusConnectionManager(
     TimeProvider timeProvider) : IDisposable
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan MapLoadTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan DashboardLoadTimeout = TimeSpan.FromSeconds(60);
     private readonly Lock _stateLock = new();
     private readonly Dictionary<Guid, RustPlusConnectionState> _states = [];
     private readonly SemaphoreSlim _operationLock = new(1, 1);
@@ -51,138 +50,91 @@ public sealed class RustPlusConnectionManager(
         }
     }
 
-    public async Task<RustPlusConnectionState> TestConnectionAsync(
+    public Task<RustPlusConnectionState> TestConnectionAsync(
         Guid serverId,
-        CancellationToken cancellationToken = default)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var profile = servers.Profiles.FirstOrDefault(candidate => candidate.Id == serverId);
-            if (profile is null)
-            {
-                return SetState(new RustPlusConnectionState(
-                    serverId,
-                    RustPlusConnectionStatus.Failed,
-                    "Server not found",
-                    "The saved server profile no longer exists.",
-                    CheckedAtUtc: timeProvider.GetUtcNow()));
-            }
-
-            if (profile.PlayerId is null or 0)
-            {
-                return PairingRequired(serverId, "Save your Steam64 identity before testing this server.");
-            }
-
-            var tokenBytes = secretStore.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
-            if (tokenBytes is null)
-            {
-                return PairingRequired(serverId, "Enter the player token supplied by this server pairing.");
-            }
-
-            try
-            {
-                if (!Utf8Parser.TryParse(tokenBytes, out int playerToken, out var consumed)
-                    || consumed != tokenBytes.Length)
-                {
-                    return PairingRequired(serverId, "The protected pairing token is invalid. Re-pair this server.");
-                }
-
-                var options = new RustPlusConnectionOptions(
-                    profile.Host,
-                    profile.Port,
-                    profile.PlayerId.Value,
-                    playerToken,
-                    profile.UseFacepunchProxy);
-
-                SetState(new RustPlusConnectionState(
-                    serverId,
-                    RustPlusConnectionStatus.Connecting,
-                    "Connecting",
-                    profile.UseFacepunchProxy
-                        ? "Opening the Facepunch secure-proxy WebSocket."
-                        : "Opening the explicitly enabled direct plaintext WebSocket."));
-
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TestTimeout);
-
-                try
-                {
-                    await using var client = clientFactory.Create();
-                    await client.ConnectAsync(options, timeout.Token).ConfigureAwait(false);
-
-                    SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Authenticating,
-                        "Authenticating",
-                        "The socket is open; validating the saved pairing."));
-
-                    var serverInfo = await client.GetServerInfoAsync(timeout.Token).ConfigureAwait(false);
-                    if (serverInfo.IsSuccess && serverInfo.Data is not null)
-                    {
-                        return SetState(new RustPlusConnectionState(
-                            serverId,
-                            RustPlusConnectionStatus.Succeeded,
-                            "Connection verified",
-                            "Authenticated server information was received; the test socket was then closed.",
-                            serverInfo.Data,
-                            timeProvider.GetUtcNow()));
-                    }
-
-                    return SetState(ClassifyProtocolFailure(serverId, serverInfo.Error));
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    return SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.TimedOut,
-                        "Connection timed out",
-                        "The Rust+ companion server did not complete the test within 30 seconds.",
-                        CheckedAtUtc: timeProvider.GetUtcNow()));
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (RustPlusConnectionException exception)
-                {
-                    return SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Failed,
-                        "Connection failed",
-                        exception.Message,
-                        CheckedAtUtc: timeProvider.GetUtcNow()));
-                }
-                catch (Exception exception)
-                {
-                    return SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Failed,
-                        "Connection failed",
-                        $"The Rust+ companion endpoint could not be reached ({exception.GetType().Name}).",
-                        CheckedAtUtc: timeProvider.GetUtcNow()));
-                }
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(tokenBytes);
-            }
-        }
-        finally
-        {
-            _operationLock.Release();
-        }
-    }
+        CancellationToken cancellationToken = default) =>
+        ExecuteAuthenticatedAsync(
+            serverId,
+            TestTimeout,
+            "Authenticating",
+            "The socket is open; validating the saved pairing.",
+            (client, serverInfo, profile, token) => Task.FromResult(SetState(new RustPlusConnectionState(
+                serverId,
+                RustPlusConnectionStatus.Succeeded,
+                "Connection verified",
+                "Authenticated server information was received; the test socket was then closed.",
+                serverInfo,
+                timeProvider.GetUtcNow()))),
+            state => state,
+            "Connection timed out",
+            "The Rust+ companion server did not complete the test within 30 seconds.",
+            cancellationToken);
 
     /// <summary>
-    /// Opens a short-lived authenticated connection and downloads the two snapshots required by the
-    /// live map. The protected token is held only for this operation and the socket is always closed.
+    /// Loads server information, optional map data, team state, recent team chat, and map markers on
+    /// one connection. Info authenticates the session; later request failures are returned separately.
     /// </summary>
-    public async Task<RustPlusMapLoadResult> LoadMapAsync(
+    public Task<RustPlusDashboardLoadResult> LoadDashboardAsync(
         Guid serverId,
-        CancellationToken cancellationToken = default)
+        bool includeMap,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAuthenticatedAsync(
+            serverId,
+            DashboardLoadTimeout,
+            "Refreshing Rust+ data",
+            includeMap
+                ? "Requesting the current map, team, chat, and map-marker snapshots."
+                : "Requesting current team, chat, and map-marker snapshots.",
+            async (client, serverInfo, profile, token) =>
+            {
+                RustPlusResult<ServerMapSnapshot>? map = null;
+                if (includeMap)
+                {
+                    map = ValidateMap(serverInfo, await client.GetMapAsync(token).ConfigureAwait(false));
+                }
+
+                var team = await client.GetTeamAsync(token).ConfigureAwait(false);
+                var chat = await client.GetTeamChatAsync(token).ConfigureAwait(false);
+                var markers = await client.GetMapMarkersAsync(token).ConfigureAwait(false);
+                var unavailable = DescribeUnavailable(map, team, chat, markers, includeMap);
+                var state = SetState(new RustPlusConnectionState(
+                    serverId,
+                    RustPlusConnectionStatus.Succeeded,
+                    unavailable.Count == 0 ? "Live data refreshed" : "Live data partially available",
+                    unavailable.Count == 0
+                        ? "The requested Rust+ snapshots were received; the socket was then closed."
+                        : $"Unavailable requests: {string.Join(", ", unavailable)}. The socket was then closed.",
+                    serverInfo,
+                    timeProvider.GetUtcNow()));
+
+                return new RustPlusDashboardLoadResult(state, serverInfo, map, team, chat, markers);
+            },
+            state => new RustPlusDashboardLoadResult(state),
+            "Live refresh timed out",
+            "The Rust+ companion server did not complete the refresh within 60 seconds.",
+            cancellationToken);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _operationLock.Dispose();
+    }
+
+    private async Task<T> ExecuteAuthenticatedAsync<T>(
+        Guid serverId,
+        TimeSpan timeoutDuration,
+        string authenticatedLabel,
+        string authenticatedDetail,
+        Func<IRustPlusClient, ServerInfoSnapshot, ServerProfile, CancellationToken, Task<T>> operation,
+        Func<RustPlusConnectionState, T> failure,
+        string timeoutLabel,
+        string timeoutDetail,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -192,7 +144,7 @@ public sealed class RustPlusConnectionManager(
             var profile = servers.Profiles.FirstOrDefault(candidate => candidate.Id == serverId);
             if (profile is null)
             {
-                return Failure(SetState(new RustPlusConnectionState(
+                return failure(SetState(new RustPlusConnectionState(
                     serverId,
                     RustPlusConnectionStatus.Failed,
                     "Server not found",
@@ -202,15 +154,15 @@ public sealed class RustPlusConnectionManager(
 
             if (profile.PlayerId is null or 0)
             {
-                return Failure(PairingRequired(
+                return failure(PairingRequired(
                     serverId,
-                    "Save your Steam64 identity before loading this server map."));
+                    "Save your Steam64 identity before connecting to this server."));
             }
 
             var tokenBytes = secretStore.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
             if (tokenBytes is null)
             {
-                return Failure(PairingRequired(
+                return failure(PairingRequired(
                     serverId,
                     "Enter the player token supplied by this server pairing."));
             }
@@ -220,7 +172,7 @@ public sealed class RustPlusConnectionManager(
                 if (!Utf8Parser.TryParse(tokenBytes, out int playerToken, out var consumed)
                     || consumed != tokenBytes.Length)
                 {
-                    return Failure(PairingRequired(
+                    return failure(PairingRequired(
                         serverId,
                         "The protected pairing token is invalid. Re-pair this server."));
                 }
@@ -241,7 +193,7 @@ public sealed class RustPlusConnectionManager(
                         : "Opening the explicitly enabled direct plaintext WebSocket."));
 
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(MapLoadTimeout);
+                timeout.CancelAfter(timeoutDuration);
 
                 try
                 {
@@ -251,69 +203,24 @@ public sealed class RustPlusConnectionManager(
                     SetState(new RustPlusConnectionState(
                         serverId,
                         RustPlusConnectionStatus.Authenticating,
-                        "Loading live map",
-                        "Validating the pairing and requesting the current Rust+ map."));
+                        authenticatedLabel,
+                        authenticatedDetail));
 
                     var serverInfo = await client.GetServerInfoAsync(timeout.Token).ConfigureAwait(false);
                     if (!serverInfo.IsSuccess || serverInfo.Data is null)
                     {
-                        return Failure(SetState(ClassifyProtocolFailure(serverId, serverInfo.Error)));
+                        return failure(SetState(ClassifyProtocolFailure(serverId, serverInfo.Error)));
                     }
 
-                    var map = await client.GetMapAsync(timeout.Token).ConfigureAwait(false);
-                    if (!map.IsSuccess || map.Data is null)
-                    {
-                        var code = map.Error?.Code ?? "unknown_error";
-                        return Failure(SetState(new RustPlusConnectionState(
-                            serverId,
-                            RustPlusConnectionStatus.Failed,
-                            "Map request failed",
-                            $"Rust+ did not return the map snapshot ({code}).",
-                            serverInfo.Data,
-                            timeProvider.GetUtcNow())));
-                    }
-
-                    if (map.Data.JpegImage.Length == 0)
-                    {
-                        return Failure(SetState(new RustPlusConnectionState(
-                            serverId,
-                            RustPlusConnectionStatus.Failed,
-                            "Map request failed",
-                            "Rust+ returned an empty map image.",
-                            serverInfo.Data,
-                            timeProvider.GetUtcNow())));
-                    }
-
-                    if (serverInfo.Data.MapSize is null or 0
-                        || map.Data.Width is null or 0
-                        || map.Data.Height is null or 0
-                        || map.Data.OceanMargin is null)
-                    {
-                        return Failure(SetState(new RustPlusConnectionState(
-                            serverId,
-                            RustPlusConnectionStatus.Failed,
-                            "Map metadata incomplete",
-                            "Rust+ returned the image without the dimensions required to render it.",
-                            serverInfo.Data,
-                            timeProvider.GetUtcNow())));
-                    }
-
-                    var succeeded = SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Succeeded,
-                        "Live map loaded",
-                        "Authenticated server information and map data were received; the socket was then closed.",
-                        serverInfo.Data,
-                        timeProvider.GetUtcNow()));
-                    return new RustPlusMapLoadResult(succeeded, serverInfo.Data, map.Data);
+                    return await operation(client, serverInfo.Data, profile, timeout.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    return Failure(SetState(new RustPlusConnectionState(
+                    return failure(SetState(new RustPlusConnectionState(
                         serverId,
                         RustPlusConnectionStatus.TimedOut,
-                        "Map load timed out",
-                        "The Rust+ companion server did not return the map within 60 seconds.",
+                        timeoutLabel,
+                        timeoutDetail,
                         CheckedAtUtc: timeProvider.GetUtcNow())));
                 }
                 catch (OperationCanceledException)
@@ -322,7 +229,7 @@ public sealed class RustPlusConnectionManager(
                 }
                 catch (RustPlusConnectionException exception)
                 {
-                    return Failure(SetState(new RustPlusConnectionState(
+                    return failure(SetState(new RustPlusConnectionState(
                         serverId,
                         RustPlusConnectionStatus.Failed,
                         "Connection failed",
@@ -331,11 +238,11 @@ public sealed class RustPlusConnectionManager(
                 }
                 catch (Exception exception)
                 {
-                    return Failure(SetState(new RustPlusConnectionState(
+                    return failure(SetState(new RustPlusConnectionState(
                         serverId,
                         RustPlusConnectionStatus.Failed,
-                        "Map load failed",
-                        $"The live map could not be loaded ({exception.GetType().Name}).",
+                        "Rust+ refresh failed",
+                        $"The Rust+ data could not be loaded ({exception.GetType().Name}).",
                         CheckedAtUtc: timeProvider.GetUtcNow())));
                 }
             }
@@ -350,16 +257,6 @@ public sealed class RustPlusConnectionManager(
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-    }
-
     private RustPlusConnectionState PairingRequired(Guid serverId, string detail) =>
         SetState(new RustPlusConnectionState(
             serverId,
@@ -367,8 +264,6 @@ public sealed class RustPlusConnectionManager(
             "Pairing required",
             detail,
             CheckedAtUtc: timeProvider.GetUtcNow()));
-
-    private static RustPlusMapLoadResult Failure(RustPlusConnectionState state) => new(state);
 
     private RustPlusConnectionState ClassifyProtocolFailure(Guid serverId, RustPlusError? error)
     {
@@ -401,5 +296,61 @@ public sealed class RustPlusConnectionManager(
 
         StateChanged?.Invoke(this, EventArgs.Empty);
         return state;
+    }
+
+    private static RustPlusResult<ServerMapSnapshot> ValidateMap(
+        ServerInfoSnapshot serverInfo,
+        RustPlusResult<ServerMapSnapshot> map)
+    {
+        if (!map.IsSuccess || map.Data is null)
+        {
+            return map;
+        }
+
+        if (map.Data.JpegImage.Length == 0)
+        {
+            return RustPlusResult<ServerMapSnapshot>.Failure("empty_map_image", "Rust+ returned an empty map image.");
+        }
+
+        if (serverInfo.MapSize is null or 0
+            || map.Data.Width is null or 0
+            || map.Data.Height is null or 0
+            || map.Data.OceanMargin is null)
+        {
+            return RustPlusResult<ServerMapSnapshot>.Failure(
+                "incomplete_map_metadata",
+                "Rust+ returned the image without the dimensions required to render it.");
+        }
+
+        return map;
+    }
+
+    private static IReadOnlyList<string> DescribeUnavailable(
+        RustPlusResult<ServerMapSnapshot>? map,
+        RustPlusResult<TeamSnapshot> team,
+        RustPlusResult<TeamChatSnapshot> chat,
+        RustPlusResult<MapMarkersSnapshot> markers,
+        bool includeMap)
+    {
+        var unavailable = new List<string>();
+        AddFailure(unavailable, "map", map, includeMap);
+        AddFailure(unavailable, "team", team, required: true);
+        AddFailure(unavailable, "chat", chat, required: true);
+        AddFailure(unavailable, "markers", markers, required: true);
+        return unavailable;
+    }
+
+    private static void AddFailure<T>(
+        ICollection<string> unavailable,
+        string name,
+        RustPlusResult<T>? result,
+        bool required)
+    {
+        if (!required || result?.IsSuccess == true)
+        {
+            return;
+        }
+
+        unavailable.Add($"{name} ({result?.Error?.Code ?? "unknown_error"})");
     }
 }
