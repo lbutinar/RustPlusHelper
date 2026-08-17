@@ -15,4 +15,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Web.WebView2" />
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\rustplus-app-icon.png" />
+  </ItemGroup>
 </Project>

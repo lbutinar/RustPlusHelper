@@ -4,10 +4,12 @@
 <div class="app-shell">
     <header class="topbar">
         <div class="brand-block">
-            <div class="brand-mark">R+</div>
+            <div class="brand-mark">
+                <img src="assets/rustplus-app-icon.png" alt="" />
+            </div>
             <div>
                 <div class="brand-name">RustPlusHelper</div>
-                <div class="brand-subtitle">PERSONAL COMPANION · PHASE 2</div>
+                <div class="brand-subtitle">UNOFFICIAL PERSONAL COMPANION · PHASE 2</div>
             </div>
         </div>
 
@@ -35,7 +37,7 @@
                         class="nav-item @(ActiveSection == item.Section ? "active" : null)"
                         title="@item.Label"
                         @onclick="() => SelectSection(item.Section)">
-                    <span class="nav-icon">@item.Icon</span>
+                    <span class="nav-icon material-icons" aria-hidden="true">@item.Icon</span>
                     <span>@item.Label</span>
                 </button>
             }
@@ -98,13 +100,13 @@
 @code {
     private static readonly NavItem[] Navigation =
     [
-        new(AppSection.Map, "Map", "M"),
-        new(AppSection.Team, "Team", "T"),
-        new(AppSection.Events, "Events", "E"),
-        new(AppSection.Vending, "Vending", "V"),
-        new(AppSection.Devices, "Devices", "D"),
-        new(AppSection.Servers, "Servers", "S"),
-        new(AppSection.Settings, "Settings", "⚙")
+        new(AppSection.Map, "Map", "map"),
+        new(AppSection.Team, "Team", "chat_bubble"),
+        new(AppSection.Events, "Events", "notifications_active"),
+        new(AppSection.Vending, "Vending", "storefront"),
+        new(AppSection.Devices, "Devices", "lightbulb"),
+        new(AppSection.Servers, "Servers", "dns"),
+        new(AppSection.Settings, "Settings", "settings")
     ];
 
     private MapDashboardState State => Dashboard.Current;

@@ -19,6 +19,29 @@
     --blue: #70a8ce;
 }
 
+@font-face {
+    font-family: "Material Icons";
+    font-style: normal;
+    font-weight: 400;
+    src: url("vendor/material-icons/MaterialIcons-Regular.ttf") format("truetype");
+}
+
+.material-icons {
+    display: inline-block;
+    direction: ltr;
+    font-family: "Material Icons";
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: normal;
+    line-height: 1;
+    text-transform: none;
+    white-space: nowrap;
+    word-wrap: normal;
+    -webkit-font-feature-settings: "liga";
+    font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -60,11 +83,6 @@ button {
 
 .boot-mark,
 .brand-mark {
-    display: grid;
-    place-items: center;
-    background: linear-gradient(145deg, var(--rust-bright), var(--rust-dark));
-    color: white;
-    font-weight: 900;
     box-shadow: 0 10px 28px rgba(109, 42, 18, 0.35);
 }
 
@@ -72,7 +90,7 @@ button {
     width: 64px;
     height: 64px;
     border-radius: 16px;
-    font-size: 24px;
+    object-fit: cover;
 }
 
 .app-shell {
@@ -122,8 +140,15 @@ button {
 .brand-mark {
     width: 38px;
     height: 38px;
+    overflow: hidden;
     border-radius: 10px;
-    font-size: 15px;
+}
+
+.brand-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .brand-name {
@@ -285,14 +310,9 @@ button {
 }
 
 .nav-icon {
-    display: grid;
-    width: 25px;
-    height: 25px;
-    place-items: center;
-    border: 1px solid currentColor;
-    border-radius: 7px;
-    font-size: 10px;
-    font-weight: 900;
+    width: 28px;
+    height: 24px;
+    font-size: 20px;
 }
 
 .sidebar-footer {

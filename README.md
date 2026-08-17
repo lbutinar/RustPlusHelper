@@ -9,6 +9,10 @@ This repository currently contains the approved **Phase 0 protocol verification 
 still uses deterministic fake data until live protocol verification and later connection phases are
 complete.
 
+RustPlusHelper is an unofficial community project. It is not affiliated with or endorsed by
+Facepunch Studios. Rust and Rust+ names and brand assets belong to Facepunch Studios and are used
+only to identify compatibility with its game and companion service.
+
 ## Current status
 
 Implemented:
@@ -95,4 +99,5 @@ environment variables and run the read-only check.
 ## License
 
 RustPlusHelper is licensed under the [MIT License](LICENSE). Third-party components retain their own
-licenses as listed in [Third-party notices](THIRD-PARTY-NOTICES.md).
+licenses and terms as listed in [Third-party notices](THIRD-PARTY-NOTICES.md). Facepunch brand
+assets are not covered by this project's MIT license.

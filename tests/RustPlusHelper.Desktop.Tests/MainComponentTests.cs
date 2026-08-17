@@ -48,6 +48,26 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void UsesRustPlusBrandAssetAndMaterialNavigationIcons()
+    {
+        var component = Render<Main>();
+
+        component.WaitForAssertion(() =>
+        {
+            var brandImage = component.Find(".brand-mark img");
+            Assert.Equal("assets/rustplus-app-icon.png", brandImage.GetAttribute("src"));
+            Assert.Contains("UNOFFICIAL PERSONAL COMPANION", component.Markup, StringComparison.Ordinal);
+
+            var icons = component.FindAll(".nav-icon").Select(icon => icon.TextContent.Trim()).ToArray();
+            Assert.Equal(
+                ["map", "chat_bubble", "notifications_active", "storefront", "lightbulb", "dns", "settings"],
+                icons);
+            Assert.All(component.FindAll(".nav-icon"), icon =>
+                Assert.Contains("material-icons", icon.ClassList));
+        });
+    }
+
+    [Fact]
     public void NavigationSwitchesToTeamWithoutProtocolTypesInComponent()
     {
         var component = Render<Main>();
