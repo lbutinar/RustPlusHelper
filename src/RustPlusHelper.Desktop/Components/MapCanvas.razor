@@ -13,6 +13,8 @@
     private bool _interopCreated;
     private byte[]? _encodedImage;
     private string? _imageSource;
+    private string? _renderedImageSource;
+    private string? _renderedTopologyFingerprint;
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
@@ -27,6 +29,11 @@
             return;
         }
 
+        var imageSource = GetImageSource();
+        var topologyFingerprint = State.Topology?.Data.Sha256;
+        var includeExternalMapData = !_interopCreated
+            || !string.Equals(_renderedImageSource, imageSource, StringComparison.Ordinal)
+            || !string.Equals(_renderedTopologyFingerprint, topologyFingerprint, StringComparison.Ordinal);
         var interopModel = new
         {
             model.Width,
@@ -47,16 +54,37 @@
                 item.IsOnline,
                 item.IsAlive
             }),
+            Rasters = includeExternalMapData ? model.Rasters.Select(raster => new
+            {
+                raster.Id,
+                Layer = MapRenderModelFactory.ToLayerKey(raster.Layer),
+                raster.Width,
+                raster.Height,
+                raster.Rgba,
+                raster.PixelLeft,
+                raster.PixelTop,
+                raster.PixelRight,
+                raster.PixelBottom
+            }).ToArray() : null,
+            Polylines = includeExternalMapData ? model.Polylines.Select(polyline => new
+            {
+                polyline.Id,
+                Layer = MapRenderModelFactory.ToLayerKey(polyline.Layer),
+                polyline.Label,
+                polyline.Width,
+                polyline.Points
+            }).ToArray() : null,
             model.LayerVisibility
         };
 
-        var imageSource = GetImageSource();
         await JavaScript.InvokeVoidAsync(
             "rustPlusMap.render",
             ElementId,
             imageSource,
             interopModel);
         _interopCreated = true;
+        _renderedImageSource = imageSource;
+        _renderedTopologyFingerprint = topologyFingerprint;
     }
 
     private string GetImageSource()

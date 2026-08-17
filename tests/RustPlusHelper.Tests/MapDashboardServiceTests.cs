@@ -61,6 +61,48 @@ public sealed class MapDashboardServiceTests
     }
 
     [Fact]
+    public async Task ProjectsImportedTopologyRastersAndCenteredMapPathsIntoRustPlusImage()
+    {
+        await using var fixture = CreateFixture();
+        await fixture.Service.InitializeAsync();
+        var topology = new SavedMapTopology(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            new ImportedMapTopology(
+                "procedural.map",
+                new string('A', 64),
+                10,
+                1,
+                4500,
+                [new MapSourceLayerSnapshot("topology", 4)],
+                0,
+                [
+                    new MapPathSnapshot(
+                        "Road 0",
+                        MapPathKind.Road,
+                        12,
+                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)])
+                ],
+                new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
+                new MapRasterSnapshot(1, 1, [5, 6, 7, 8]),
+                new MapRasterSnapshot(1, 1, [9, 10, 11, 12])));
+        var state = fixture.Service.Current with
+        {
+            Topology = topology,
+            Layers = MapDashboardState.CreateLiveMapLayers(true, true, topology)
+        };
+
+        var model = MapRenderModelFactory.Create(state);
+
+        Assert.NotNull(model);
+        Assert.Equal(3, model.Rasters.Count);
+        var road = Assert.Single(model.Polylines);
+        Assert.Equal(MapLayerKind.Roads, road.Layer);
+        Assert.Equal(new ProjectedMapPoint(50, 950), road.Points[0]);
+        Assert.Equal(new ProjectedMapPoint(950, 50), road.Points[1]);
+    }
+
+    [Fact]
     public async Task SelectedServerLoadsLiveMapAndNextDashboardReopensItFromCache()
     {
         var repository = new InMemoryServerRepository();
@@ -135,6 +177,7 @@ public sealed class MapDashboardServiceTests
             connections,
             liveSession,
             new InMemoryMapCacheRepository(),
+            CreateTopologyManager(),
             TimeProvider.System);
         return new DashboardFixture(service, connections, liveSession, secrets);
     }
@@ -151,6 +194,13 @@ public sealed class MapDashboardServiceTests
             connections,
             liveSession,
             cache,
+            CreateTopologyManager(),
+            TimeProvider.System);
+
+    private static MapTopologyManager CreateTopologyManager() =>
+        new(
+            new UnavailableMapTopologyProvider(),
+            new InMemoryMapTopologyRepository(),
             TimeProvider.System);
 
     private static RustPlusLiveSessionManager CreateLiveSession(

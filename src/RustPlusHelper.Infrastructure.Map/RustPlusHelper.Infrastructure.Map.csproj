@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>External Rust .map decoding behind application-owned topology contracts.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
+    <PackageReference Include="K4os.Compression.LZ4.Legacy" />
+    <PackageReference Include="protobuf-net" />
+  </ItemGroup>
+</Project>

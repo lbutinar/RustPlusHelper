@@ -51,6 +51,30 @@ RustPlusApi is consumed as a pinned NuGet dependency and is not vendored into th
 - Project: https://learn.microsoft.com/dotnet/standard/data/sqlite/
 - License: MIT
 
+## K4os.Compression.LZ4.Legacy
+
+- Version: 1.3.8
+- Project: https://github.com/MiloszKrajewski/K4os.Compression.LZ4
+- License: MIT
+
+The package decodes the documented legacy LZ4 stream in imported Rust `.map` files.
+
+## protobuf-net
+
+- Version: 3.2.56
+- Project: https://github.com/protobuf-net/protobuf-net
+- License: Apache-2.0
+
+## Rust Map Parser research reference
+
+- Project: https://github.com/Cooperkit/Rustmap-Parser
+- Reviewed version: PyPI 0.4.0 / repository state on 2026-08-17
+- License: MIT
+
+Rust Map Parser is not bundled or executed by RustPlusHelper. Its current parser and orientation
+behavior were used as an independent implementation reference alongside Facepunch's map-data
+documentation.
+
 ## SQLitePCLRaw and bundled SQLite
 
 - SQLite bundle: `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12

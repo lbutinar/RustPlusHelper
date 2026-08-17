@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
+    <ProjectReference Include="../../src/RustPlusHelper.Infrastructure.Map/RustPlusHelper.Infrastructure.Map.csproj" />
+    <PackageReference Include="K4os.Compression.LZ4.Legacy" />
+    <PackageReference Include="protobuf-net" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>

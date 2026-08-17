@@ -19,7 +19,9 @@ Implemented:
 - team positions, team notes, vending/world markers, and partial request errors rendered directly
   from the latest successful Rust+ snapshot.
 - live connection status plus a bounded event feed for transport, online/offline, death/respawn, and
-  marker lifecycle transitions.
+  marker lifecycle transitions;
+- explicit `.map` import plus disabled-by-default biome, terrain-topology, ore-potential, road, rail,
+  and river layers. Exact no-build geometry remains disabled with its missing-source explanation.
 
 The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Grid
 references also appear in marker tooltips and the team roster. A future search box may navigate to a
@@ -78,6 +80,10 @@ A dashboard may be added later as a configurable summary; it is not the initial 
 
 Direct, derived, heuristic, and external layers must be distinguishable. An unavailable layer is
 disabled with an explanation such as “requires parsed map data”; it must not show guessed locations.
+
+The ore-potential layer is labelled `DERIVED · NOT LIVE NODES`. It currently visualizes the
+documented Cliffside topology and lower-confidence Decor/Clutter topology; it does not claim that an
+ore node is presently spawned at a pixel.
 
 World `x/y` is canonical. Pixel and grid values are projections. Marker updates should be sent to
 Leaflet as deltas rather than serializing the whole map for every team movement.

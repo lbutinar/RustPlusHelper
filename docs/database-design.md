@@ -12,7 +12,8 @@ currently create:
 - `player_identity` for the one Steam64 ID used across saved servers;
 - `servers` for non-secret connection metadata;
 - `pairings` for purpose-labelled DPAPI ciphertext.
-- `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server.
+- `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server;
+- `map_topology` for display-ready data derived from one explicitly imported Rust `.map` per server.
 
 The player identity is the application-level source of truth. A server row retains the effective
 Steam64 ID snapshot associated with its current per-server pairing token so a future identity change
@@ -24,6 +25,11 @@ verified wipe/session behavior. Creating the entire future schema now would make
 assumptions. Session, team, marker,
 market, device, camera, event, death, chat, and notification tables remain planned until their owning
 phase has real write/read behavior.
+
+`map_topology` stores the source basename, SHA-256 fingerprint, serialization version, opaque source
+timestamp, world size, layer summaries, normalized paths, prefab count, and small RGBA overlays. It
+does not store the original `.map`, its full local path, or extracted Facepunch assets. Deleting a
+server cascades both map caches.
 
 ## Planned persisted data
 

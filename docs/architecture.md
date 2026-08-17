@@ -9,12 +9,12 @@ Phase 0 contains the client boundary, real adapter, fake source, verification co
 documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phase 2 adds SQLite
 migrations, the server registry, and DPAPI-protected secret persistence. Phase 3 now includes a
 single application-level Steam64 identity, manual per-server token entry, and an explicit read-only
-connection/authentication test. Automated pairing, persistent connection supervision, background
-monitoring, and notifications are not implemented yet. Phase 4 now uses that same manager for a
-short-lived `GetInfo` + `GetMap` operation, persists the latest successful snapshot, and renders the
-real JPEG without exposing credentials to UI components. The next read-only slice reuses one
-authenticated connection for info, optional map, team, chat, and marker requests. Team/chat/marker
-results are independent so a `NoTeam` chat response does not discard valid team positions or markers.
+connection/authentication test. Automated pairing and notifications are not implemented yet;
+persistent selected-server monitoring is implemented. Phase 4 uses the connection manager for
+explicit `GetInfo` + `GetMap` operations, persists the latest successful snapshot, and renders the
+real JPEG without exposing credentials to UI components. A persistent read-only session reuses one
+authenticated connection for info, team, chat, and marker requests. Team/chat/marker results are
+independent so a `NoTeam` chat response does not discard valid team positions or markers.
 
 ## Dependency direction
 
@@ -32,6 +32,14 @@ SQLite repositories and live state
 Blazor Hybrid UI
 ```
 
+External Rust world files follow a separate boundary and never pass through the Rust+ adapter:
+
+```text
+User-selected .map → IMapTopologyProvider → MapTopologyManager
+                                      ↓
+                         IMapTopologyRepository → map layers
+```
+
 The key rule is that `RustPlusApi.Data.*` and protobuf contracts do not cross the infrastructure
 boundary. That makes a library upgrade, fork, or eventual protocol replacement local to one project.
 
@@ -40,6 +48,8 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Application`: application-owned contract, normalized snapshots, redaction utility,
   and deterministic fake client.
 - `RustPlusHelper.Infrastructure.RustPlus`: the pinned RustPlusApi adapter and mapper.
+- `RustPlusHelper.Infrastructure.Map`: bounded version-10 Rust `.map` reader using documented legacy
+  LZ4 and protobuf world contracts; outputs only application-owned display data.
 - `RustPlusHelper.Infrastructure.Storage`: SQLite migrations/repositories and Windows DPAPI secret
   protection.
 - `RustPlusHelper.Verification`: opt-in read-only protocol verification command.
@@ -63,6 +73,8 @@ server connection tests and live map downloads; replacing the adapter does not c
 - live overlays and semantic events are memory-only. Polling and reconnection are centralized in the
   supervisor rather than UI timers.
 - `IMapCacheRepository` stores the latest map/server snapshot per saved server for offline reopening.
+- `MapTopologyManager` validates imported world size and `IMapTopologyRepository` persists only
+  derived rasters/path metadata per server. Same-size wipe identity remains explicitly unproven.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
 - `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, `DeviceManager`, and

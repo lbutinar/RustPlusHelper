@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject MapDashboardService Dashboard
+@inject RustPlusHelper.Desktop.Services.IMapFilePicker MapFilePicker
 
 <div class="app-shell">
     <header class="topbar">
@@ -76,7 +77,8 @@
                     <MapPage State="State"
                              OnLayerChanged="HandleLayerChanged"
                              OnRefreshRequested="RefreshMap"
-                             OnLiveDataRefreshRequested="RefreshLiveData" />
+                             OnLiveDataRefreshRequested="RefreshLiveData"
+                             OnTopologyImportRequested="ImportTopology" />
                     break;
                 case AppSection.Team:
                     <TeamPage State="State" />
@@ -164,6 +166,15 @@
     private async Task RefreshMap() => await Dashboard.RefreshSelectedServerAsync();
 
     private async Task RefreshLiveData() => await Dashboard.RefreshLiveDataAsync();
+
+    private async Task ImportTopology()
+    {
+        var filePath = await MapFilePicker.PickRustMapAsync();
+        if (!string.IsNullOrWhiteSpace(filePath))
+        {
+            await Dashboard.ImportTopologyAsync(filePath);
+        }
+    }
 
     private async Task OpenServerMap(Guid serverId)
     {

@@ -22,6 +22,13 @@ public enum MapLayerKind
 {
     BaseMap,
     Grid,
+    Biomes,
+    Topology,
+    ResourcePotential,
+    Roads,
+    Railways,
+    Rivers,
+    NoBuildZones,
     Team,
     TeamNotes,
     VendingMachines,
@@ -56,7 +63,11 @@ public sealed record MapDashboardState(
     MapMarkersSnapshot? Markers,
     IReadOnlyList<CompanionEvent> Events,
     IReadOnlyList<MapLayerState> Layers,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    SavedMapTopology? Topology = null,
+    bool IsTopologyImporting = false,
+    string? TopologyStatus = null,
+    string? TopologyError = null)
 {
     public static MapDashboardState NotStarted { get; } = new(
         DashboardConnectionState.NotStarted,
@@ -81,6 +92,13 @@ public sealed record MapDashboardState(
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT"),
         new(MapLayerKind.Grid, "Map grid", true, true, "DERIVED"),
+        new(MapLayerKind.Biomes, "Biomes", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.Topology, "Terrain topology", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.ResourcePotential, "Ore potential", false, false, "DERIVED FROM .MAP", "Import a .map file; this never shows live nodes."),
+        new(MapLayerKind.Roads, "Road paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.Railways, "Rail paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.Rivers, "River paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.NoBuildZones, "No-build zones", false, false, "EXTERNAL BUILD DATA", "Exact prefab no-build volumes need build-matched metadata and are not implemented yet."),
         new(MapLayerKind.Team, "Team", true, true, "DIRECT"),
         new(MapLayerKind.TeamNotes, "Team notes", true, true, "DIRECT"),
         new(MapLayerKind.VendingMachines, "Vending", true, true, "DIRECT"),
@@ -104,10 +122,44 @@ public sealed record MapDashboardState(
 
     public static IReadOnlyList<MapLayerState> CreateLiveMapLayers(
         bool teamAvailable = false,
-        bool markersAvailable = false) =>
+        bool markersAvailable = false,
+        SavedMapTopology? topology = null) =>
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT RUST+"),
         new(MapLayerKind.Grid, "Map grid", true, true, "DERIVED FROM MAP SIZE"),
+        new(
+            MapLayerKind.Biomes,
+            "Biomes",
+            false,
+            topology?.Data.BiomeRaster is not null,
+            topology?.Data.BiomeRaster is not null ? "EXTERNAL .MAP" : "UNAVAILABLE",
+            topology?.Data.BiomeRaster is not null ? null : "Import the selected server's Rust .map file."),
+        new(
+            MapLayerKind.Topology,
+            "Terrain topology",
+            false,
+            topology?.Data.TopologyRaster is not null,
+            topology?.Data.TopologyRaster is not null ? "EXTERNAL .MAP" : "UNAVAILABLE",
+            topology?.Data.TopologyRaster is not null ? null : "Import the selected server's Rust .map file."),
+        new(
+            MapLayerKind.ResourcePotential,
+            "Ore potential",
+            false,
+            topology?.Data.ResourcePotentialRaster is not null,
+            topology?.Data.ResourcePotentialRaster is not null ? "DERIVED · NOT LIVE NODES" : "UNAVAILABLE",
+            topology?.Data.ResourcePotentialRaster is not null
+                ? "Potential comes from topology only; exact spawned nodes require server access."
+                : "Import a .map file; this never shows live nodes."),
+        PathLayer(MapLayerKind.Roads, "Road paths", MapPathKind.Road, topology),
+        PathLayer(MapLayerKind.Railways, "Rail paths", MapPathKind.Railway, topology),
+        PathLayer(MapLayerKind.Rivers, "River paths", MapPathKind.River, topology),
+        new(
+            MapLayerKind.NoBuildZones,
+            "No-build zones",
+            false,
+            false,
+            "EXTERNAL BUILD DATA",
+            "Exact prefab no-build volumes need build-matched metadata and are not implemented yet."),
         new(
             MapLayerKind.Team,
             "Team",
@@ -152,4 +204,20 @@ public sealed record MapDashboardState(
             "EXTERNAL",
             "Camera codes and positions require user or catalogue data.")
     ];
+
+    private static MapLayerState PathLayer(
+        MapLayerKind layer,
+        string name,
+        MapPathKind pathKind,
+        SavedMapTopology? topology)
+    {
+        var available = topology?.Data.Paths.Any(path => path.Kind == pathKind) == true;
+        return new MapLayerState(
+            layer,
+            name,
+            false,
+            available,
+            available ? "EXTERNAL .MAP" : "UNAVAILABLE",
+            available ? null : "The imported .map file does not contain this path type.");
+    }
 }

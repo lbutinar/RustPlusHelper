@@ -78,6 +78,23 @@ run north-to-south and columns use `A` through `Z`, then `AA`, `AB`, and so on.
 
 Unknown marker numeric type and unsigned marker ID are deliberately preserved.
 
+## External `.map` evidence (not Rust+)
+
+Rust+ `GetMap` does not expose terrain masks, biome channels, topology masks, paths, or the original
+world file. The optional topology importer is therefore a separate external source and never a
+protocol capability.
+
+- [Facepunch Map Data](https://wiki.facepunch.com/rust/Map_Data) documents the 12-byte header,
+  legacy LZ4 stream, protobuf `WorldData`, named byte maps, prefabs, and paths.
+- [Facepunch Topology](https://wiki.facepunch.com/rust/Topology) documents topology semantics and
+  explicitly marks several spawn descriptions as unconfirmed.
+- [Cooperkit Rust Map Parser](https://github.com/Cooperkit/Rustmap-Parser) 0.4.0 was reviewed as the
+  current independent implementation reference for layer encoding and image orientation.
+
+The importer supports world serialization version 10, rejects definite Rust+/file size mismatches,
+and keeps only display-ready derivatives. Rust+ exposes no map checksum; a same-size map from another
+wipe therefore remains uncertain. The ore overlay is topology potential, not exact live node state.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
@@ -138,3 +155,4 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Companion history endpoint | Documented by rustplus.js but unofficial | Defer; local history is authoritative for the app |
 | `NoTeam` from chat while team info succeeds | Observed live on the selected server; requests are independent | Re-test while in a multi-member team with chat history |
 | Killer, weapon, and cause of death | Not present in verified team structures | Requires server/plugin evidence before modelling |
+| Same-size `.map` wipe identity | Rust+ exposes no map checksum | User confirmation or a future authoritative external fingerprint source |

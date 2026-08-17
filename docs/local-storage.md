@@ -19,10 +19,14 @@ file-level backup while the app is open. Prefer closing the application before c
 - saved server names, companion host/port, proxy choice, effective pairing-identity snapshot, and
   timestamps;
 - purpose-labelled DPAPI ciphertext for pairing secrets.
-- latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp.
+- latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp;
+- optional per-server display rasters and paths derived from an explicitly imported Rust `.map`.
 
 Team, chat, marker history, and device data are not persisted yet. A map refresh replaces the prior
 snapshot for that server; deleting a server cascades its cached map.
+Importing topology replaces the previous derived topology for that server. Only the source filename,
+SHA-256 fingerprint, decoded metadata, normalized paths, and 384-pixel RGBA overlays are kept; the
+original file and absolute path are not copied.
 
 ## Security boundary
 

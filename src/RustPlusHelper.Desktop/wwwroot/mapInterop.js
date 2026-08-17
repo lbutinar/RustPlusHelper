@@ -7,6 +7,13 @@
     const layerKeys = [
         "baseMap",
         "grid",
+        "biomes",
+        "topology",
+        "resourcePotential",
+        "roads",
+        "railways",
+        "rivers",
+        "noBuildZones",
         "team",
         "teamNotes",
         "vendingMachines",
@@ -31,6 +38,9 @@
         "travelling-vendor": "TV",
         "unknown": "?"
     };
+
+    const externalRasterLayerKeys = new Set(["biomes", "topology", "resourcePotential"]);
+    const externalPathLayerKeys = new Set(["roads", "railways", "rivers"]);
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -61,7 +71,15 @@
         });
         layers.baseMap.addLayer(image);
 
-        const entry = { map, bounds, layers, width: model.width, height: model.height, imageUrl };
+        const entry = {
+            map,
+            bounds,
+            layers,
+            width: model.width,
+            height: model.height,
+            imageUrl,
+            rasterUrls: new Map()
+        };
         entries.set(elementId, entry);
         activeElementId = elementId;
         map.fitBounds(bounds, { animate: false, padding: [18, 18] });
@@ -182,6 +200,63 @@
         }
     }
 
+    function rasterDataUrl(entry, raster) {
+        const cached = entry.rasterUrls.get(raster.id);
+        if (cached) {
+            return cached;
+        }
+
+        const binary = atob(raster.rgba);
+        const bytes = new Uint8ClampedArray(binary.length);
+        for (let index = 0; index < binary.length; index++) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = raster.width;
+        canvas.height = raster.height;
+        const context = canvas.getContext("2d", { alpha: true });
+        context.putImageData(new ImageData(bytes, raster.width, raster.height), 0, 0);
+        const dataUrl = canvas.toDataURL("image/png");
+        entry.rasterUrls.set(raster.id, dataUrl);
+        return dataUrl;
+    }
+
+    function renderRaster(entry, raster) {
+        const layer = entry.layers[raster.layer];
+        if (!layer) {
+            return;
+        }
+
+        const bounds = L.latLngBounds(
+            [entry.height - raster.pixelBottom, raster.pixelLeft],
+            [entry.height - raster.pixelTop, raster.pixelRight]);
+        layer.addLayer(L.imageOverlay(rasterDataUrl(entry, raster), bounds, {
+            interactive: false,
+            className: `rust-derived-raster raster-${raster.layer}`
+        }));
+    }
+
+    function renderPolyline(entry, polyline) {
+        const layer = entry.layers[polyline.layer];
+        if (!layer || !polyline.points || polyline.points.length < 2) {
+            return;
+        }
+
+        const styles = {
+            roads: { color: "#d7a66b", weight: 2.2, opacity: 0.82 },
+            railways: { color: "#202426", weight: 2.5, opacity: 0.9, dashArray: "5 4" },
+            rivers: { color: "#4ab6df", weight: 2.8, opacity: 0.9 }
+        };
+        const points = polyline.points.map(point => [entry.height - point.pixelY, point.pixelX]);
+        const line = L.polyline(points, {
+            ...(styles[polyline.layer] ?? { color: "#ffffff", weight: 2, opacity: 0.8 }),
+            interactive: true
+        });
+        line.bindTooltip(escapeHtml(polyline.label), { className: "rust-map-tooltip" });
+        layer.addLayer(line);
+    }
+
     function applyVisibility(entry, visibility) {
         for (const key of layerKeys) {
             const layer = entry.layers[key];
@@ -203,11 +278,29 @@
         const entry = ensureEntry(elementId, imageUrl, model);
         for (const key of layerKeys) {
             if (key !== "baseMap") {
+                if (model.rasters == null && externalRasterLayerKeys.has(key)) {
+                    continue;
+                }
+                if (model.polylines == null && externalPathLayerKeys.has(key)) {
+                    continue;
+                }
                 entry.layers[key].clearLayers();
             }
         }
 
         renderGrid(entry, model.grid);
+
+        if (model.rasters != null) {
+            for (const raster of model.rasters) {
+                renderRaster(entry, raster);
+            }
+        }
+
+        if (model.polylines != null) {
+            for (const polyline of model.polylines) {
+                renderPolyline(entry, polyline);
+            }
+        }
 
         for (const item of model.items ?? []) {
             const layer = entry.layers[item.layer] ?? entry.layers.events;

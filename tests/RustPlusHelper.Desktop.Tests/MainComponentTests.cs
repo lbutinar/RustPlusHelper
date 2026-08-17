@@ -11,6 +11,7 @@ using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
 using RustPlusHelper.Desktop;
 using RustPlusHelper.Desktop.Components;
+using RustPlusHelper.Desktop.Services;
 
 namespace RustPlusHelper.Desktop.Tests;
 
@@ -51,6 +52,10 @@ public sealed class MainComponentTests : BunitContext
         var client = new FakeRustPlusClient();
         var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
         var mapCache = new InMemoryMapCacheRepository();
+        var mapTopology = new MapTopologyManager(
+            new UnavailableMapTopologyProvider(),
+            new InMemoryMapTopologyRepository(),
+            TimeProvider.System);
         _dashboard = new MapDashboardService(
             client,
             connection,
@@ -58,6 +63,7 @@ public sealed class MainComponentTests : BunitContext
             _connections,
             liveSession,
             mapCache,
+            mapTopology,
             TimeProvider.System);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
@@ -71,6 +77,8 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(_connections);
         Services.AddSingleton(liveSession);
         Services.AddSingleton<IMapCacheRepository>(mapCache);
+        Services.AddSingleton(mapTopology);
+        Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
     }
 
     [Fact]

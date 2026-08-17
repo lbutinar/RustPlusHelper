@@ -16,11 +16,31 @@ public sealed record MapOverlayItem(
     bool IsOnline = false,
     bool IsAlive = true);
 
+public sealed record MapRasterOverlay(
+    string Id,
+    MapLayerKind Layer,
+    int Width,
+    int Height,
+    byte[] Rgba,
+    double PixelLeft,
+    double PixelTop,
+    double PixelRight,
+    double PixelBottom);
+
+public sealed record MapPolylineOverlay(
+    string Id,
+    MapLayerKind Layer,
+    string Label,
+    float Width,
+    IReadOnlyList<ProjectedMapPoint> Points);
+
 public sealed record MapRenderModel(
     double Width,
     double Height,
     MapGridDefinition Grid,
     IReadOnlyList<MapOverlayItem> Items,
+    IReadOnlyList<MapRasterOverlay> Rasters,
+    IReadOnlyList<MapPolylineOverlay> Polylines,
     IReadOnlyDictionary<string, bool> LayerVisibility);
 
 public static class MapRenderModelFactory
@@ -36,6 +56,8 @@ public static class MapRenderModelFactory
         }
 
         var items = new List<MapOverlayItem>();
+        var rasters = new List<MapRasterOverlay>();
+        var polylines = new List<MapPolylineOverlay>();
 
         foreach (var monument in state.Map.Monuments)
         {
@@ -152,11 +174,56 @@ public static class MapRenderModelFactory
                 margin));
         }
 
+        if (state.Topology?.Data is { } topology && topology.WorldSize == mapSize)
+        {
+            AddRaster(rasters, topology.BiomeRaster, topology.Sha256, MapLayerKind.Biomes, margin, width, height);
+            AddRaster(rasters, topology.TopologyRaster, topology.Sha256, MapLayerKind.Topology, margin, width, height);
+            AddRaster(
+                rasters,
+                topology.ResourcePotentialRaster,
+                topology.Sha256,
+                MapLayerKind.ResourcePotential,
+                margin,
+                width,
+                height);
+
+            var pathIndex = 0;
+            foreach (var path in topology.Paths)
+            {
+                var layer = path.Kind switch
+                {
+                    MapPathKind.Road => MapLayerKind.Roads,
+                    MapPathKind.Railway => MapLayerKind.Railways,
+                    MapPathKind.River => MapLayerKind.Rivers,
+                    _ => (MapLayerKind?)null
+                };
+                if (layer is null || path.Nodes.Count < 2)
+                {
+                    continue;
+                }
+
+                polylines.Add(new MapPolylineOverlay(
+                    $"path:{pathIndex++}",
+                    layer.Value,
+                    path.Name,
+                    path.Width,
+                    path.Nodes.Select(node => MapProjection.WorldToImage(
+                        node.X,
+                        node.Y,
+                        mapSize,
+                        width,
+                        height,
+                        margin)).ToArray()));
+            }
+        }
+
         return new MapRenderModel(
             width,
             height,
             MapGrid.CreateDefinition(mapSize, width, height, margin),
             items,
+            rasters,
+            polylines,
             state.Layers.ToDictionary(
                 layer => ToLayerKey(layer.Kind),
                 layer => layer.IsVisible && layer.IsAvailable,
@@ -167,6 +234,13 @@ public static class MapRenderModelFactory
     {
         MapLayerKind.BaseMap => "baseMap",
         MapLayerKind.Grid => "grid",
+        MapLayerKind.Biomes => "biomes",
+        MapLayerKind.Topology => "topology",
+        MapLayerKind.ResourcePotential => "resourcePotential",
+        MapLayerKind.Roads => "roads",
+        MapLayerKind.Railways => "railways",
+        MapLayerKind.Rivers => "rivers",
+        MapLayerKind.NoBuildZones => "noBuildZones",
         MapLayerKind.Team => "team",
         MapLayerKind.TeamNotes => "teamNotes",
         MapLayerKind.VendingMachines => "vendingMachines",
@@ -176,6 +250,32 @@ public static class MapRenderModelFactory
         MapLayerKind.Cameras => "cameras",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
+
+    private static void AddRaster(
+        ICollection<MapRasterOverlay> rasters,
+        MapRasterSnapshot? raster,
+        string fingerprint,
+        MapLayerKind layer,
+        int margin,
+        uint imageWidth,
+        uint imageHeight)
+    {
+        if (raster is null)
+        {
+            return;
+        }
+
+        rasters.Add(new MapRasterOverlay(
+            $"{fingerprint}:{ToLayerKey(layer)}",
+            layer,
+            raster.Width,
+            raster.Height,
+            raster.Rgba,
+            margin,
+            margin,
+            imageWidth - margin,
+            imageHeight - margin));
+    }
 
     private static MapOverlayItem CreateItem(
         string id,

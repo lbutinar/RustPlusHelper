@@ -21,6 +21,14 @@
           </div>
           @if (State.ServerId is not null)
           {
+              <button data-testid="import-map-topology"
+                      type="button"
+                      class="ghost-button"
+                      disabled="@State.IsTopologyImporting"
+                      @onclick="ImportTopology">
+                  <span class="material-icons" aria-hidden="true">layers</span>
+                  @(State.IsTopologyImporting ? "Importing .map…" : "Import .map topology")
+              </button>
               <button data-testid="refresh-live-data"
                       type="button"
                       class="ghost-button"
@@ -88,6 +96,23 @@
                 }
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(State.TopologyStatus))
+            {
+                <div class="map-topology-status" role="status">
+                    <span class="material-icons" aria-hidden="true">terrain</span>
+                    <div>
+                        <strong>@State.TopologyStatus</strong>
+                        @if (State.Topology is { } topology)
+                        {
+                            <small>
+                                @topology.Data.WorldSize m · @topology.Data.SourceLayers.Count source layers ·
+                                @topology.Data.Paths.Count paths · @topology.Data.PrefabCount prefabs
+                            </small>
+                        }
+                    </div>
+                </div>
+            }
+
             <div class="source-note">
                 <strong>Truthful layers</strong>
                 <p>Unavailable data stays disabled. Nothing on this map is inferred without a source label.</p>
@@ -102,6 +127,11 @@
     @if (!string.IsNullOrWhiteSpace(State.LiveDataError))
     {
         <div class="map-live-warning" role="status">@State.LiveDataError</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(State.TopologyError))
+    {
+        <div class="map-topology-warning" role="alert">@State.TopologyError</div>
     }
 
     <div class="event-strip">
@@ -143,6 +173,9 @@
     [Parameter]
     public EventCallback OnLiveDataRefreshRequested { get; set; }
 
+    [Parameter]
+    public EventCallback OnTopologyImportRequested { get; set; }
+
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 
     private bool IsGridVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.Grid)
@@ -179,4 +212,6 @@
     private Task RefreshMap() => OnRefreshRequested.InvokeAsync();
 
     private Task RefreshLiveData() => OnLiveDataRefreshRequested.InvokeAsync();
+
+    private Task ImportTopology() => OnTopologyImportRequested.InvokeAsync();
 }

@@ -28,7 +28,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(3L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(4L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -97,6 +97,7 @@ public sealed class StorageTests
         {
             Execute(connection, "DROP TABLE player_identity;");
             Execute(connection, "DROP TABLE map_cache;");
+            Execute(connection, "DROP TABLE map_topology;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -134,6 +135,54 @@ public sealed class StorageTests
         Assert.Equal(map.Map.Width, restored.Map.Width);
         Assert.Equal(map.Map.Monuments, restored.Map.Monuments);
         Assert.Equal(map.Map.JpegImage, restored.Map.JpegImage);
+
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Null(repository.Get(profile.Id));
+    }
+
+    [Fact]
+    public void MapTopologyRoundTripsDerivedRastersAndPathsAndCascadesWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqliteMapTopologyRepository(temporary.Database);
+        var topology = new SavedMapTopology(
+            profile.Id,
+            FixedUtc,
+            new ImportedMapTopology(
+                "procedural.4500.123.map",
+                new string('A', 64),
+                10,
+                123456789,
+                4500,
+                [new MapSourceLayerSnapshot("topology", 16)],
+                42,
+                [
+                    new MapPathSnapshot(
+                        "Road 0",
+                        MapPathKind.Road,
+                        12,
+                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)])
+                ],
+                null,
+                new MapRasterSnapshot(2, 2, Enumerable.Range(0, 16).Select(value => (byte)value).ToArray()),
+                new MapRasterSnapshot(1, 1, [1, 2, 3, 4])));
+
+        repository.Upsert(topology);
+        var restored = repository.Get(profile.Id);
+
+        Assert.NotNull(restored);
+        Assert.Equal(topology.ImportedAtUtc, restored.ImportedAtUtc);
+        Assert.Equal(topology.Data.SourceFileName, restored.Data.SourceFileName);
+        var restoredPath = Assert.Single(restored.Data.Paths);
+        Assert.Equal("Road 0", restoredPath.Name);
+        Assert.Equal(MapPathKind.Road, restoredPath.Kind);
+        Assert.Equal(12, restoredPath.Width);
+        Assert.Equal(topology.Data.Paths[0].Nodes.ToArray(), restoredPath.Nodes.ToArray());
+        Assert.Equal(topology.Data.TopologyRaster?.Rgba, restored.Data.TopologyRaster?.Rgba);
+        Assert.Equal(topology.Data.ResourcePotentialRaster?.Rgba, restored.Data.ResourcePotentialRaster?.Rgba);
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));

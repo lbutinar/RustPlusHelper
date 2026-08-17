@@ -51,7 +51,10 @@ Implemented:
 - one-connection read-only live refreshes for team members/positions, team notes, recent chat, and
   map markers, with partial failures kept independent;
 - one persistent selected-server Rust+ monitor with centralized polling, reconnect backoff, and
-  bounded in-memory connection/team/death/respawn/marker events. The map JPEG is never polled.
+  bounded in-memory connection/team/death/respawn/marker events. The map JPEG is never polled;
+- native import of Rust `.map` files using the documented version-10, legacy-LZ4, protobuf format;
+- per-server SQLite persistence and toggleable biome, topology, ore-potential, road, rail, and river
+  overlays. Ore potential is topology-derived and never presented as exact live node locations.
 
 Still requiring live verification or later phases:
 
@@ -88,8 +91,13 @@ dotnet run --project .\src\RustPlusHelper.Desktop
 
 With no saved server, the app opens deterministic fake data. With a selected paired server, it opens
 the cached map when available or performs the first live map download. Use **Open map** on a server
-or **Refresh live map** on the map page for an explicit refresh. Team/chat/marker polling is not wired
-into the live dashboard yet.
+or **Refresh everything** on the map page for an explicit refresh. Team/chat/marker polling starts
+automatically for the selected server.
+
+Use **Import .map topology** to select the matching world file. Rust normally caches procedural files
+under `C:\Program Files (x86)\Steam\steamapps\common\Rust\maps`. The app rejects a definite world-size
+mismatch, but Rust+ does not expose a map checksum, so a same-size file from another wipe cannot be
+proven wrong. The original file and its full path are not copied into app storage.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 

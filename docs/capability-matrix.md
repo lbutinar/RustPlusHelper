@@ -8,6 +8,8 @@ Classifications describe the primary verified source.
 | Player/server pairing | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Reverse-engineered FCM/Expo/Facepunch registration |
 | Server metadata, time, population, queue | **AVAILABLE DIRECTLY THROUGH RUST+** | Typed requests |
 | Base map JPEG, dimensions, margin | **AVAILABLE DIRECTLY THROUGH RUST+** | Map request |
+| Terrain, biome, topology masks | **REQUIRES ADDITIONAL DATA SOURCE** | Imported Rust `.map`; not in Rust+ map response |
+| Roads, rails, rivers | **REQUIRES ADDITIONAL DATA SOURCE** | Imported Rust `.map` path data |
 | Monument token/name and position | **AVAILABLE DIRECTLY THROUGH RUST+** | Friendly naming may need local mapping |
 | Team roster, position, online/alive state | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |
 | Grid reference | **AVAILABLE DIRECTLY THROUGH RUST+** | Locally derived from direct coordinates/map size |
@@ -31,7 +33,8 @@ Classifications describe the primary verified source.
 | Dedicated light/door/lock/turret state | **NOT CURRENTLY POSSIBLE** | Smart Switch can only control a wired circuit indirectly |
 | CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code |
 | CCTV discovery and map position | **REQUIRES ADDITIONAL DATA SOURCE** | User/static catalogue/manual placement |
-| Resource locations | **NOT CURRENTLY POSSIBLE** | Not in verified Rust+ map response |
+| Exact live resource-node locations | **REQUIRES RUST SERVER ACCESS** | Dynamic spawned entities are not in Rust+ or static `.map` data |
+| Resource spawn potential | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from imported topology; biome/splat spawn-rule evaluation is still needed for higher fidelity |
 | Exact recycler locations | **REQUIRES ADDITIONAL DATA SOURCE** | Static catalogue or parsed server map |
 | Arbitrary world-entity enumeration | **NOT CURRENTLY POSSIBLE** | No verified generic entity request |
 | Server-wide kill feed and raid events | **REQUIRES RUST SERVER ACCESS** | Plugin/log/server source |

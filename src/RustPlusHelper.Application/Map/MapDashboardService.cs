@@ -16,6 +16,7 @@ public sealed class MapDashboardService(
     RustPlusConnectionManager connections,
     RustPlusLiveSessionManager liveSession,
     IMapCacheRepository mapCache,
+    MapTopologyManager topologyManager,
     TimeProvider timeProvider) : IDisposable, IAsyncDisposable
 {
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
@@ -101,6 +102,71 @@ public sealed class MapDashboardService(
         }
 
         await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ImportTopologyAsync(
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Current.ServerId is not { } serverId)
+        {
+            SetState(Current with
+            {
+                TopologyError = "Save and open a server before importing its Rust .map file."
+            });
+            return;
+        }
+
+        SetState(Current with
+        {
+            IsTopologyImporting = true,
+            TopologyStatus = "Reading external Rust map",
+            TopologyError = null
+        });
+
+        MapTopologyImportResult result;
+        try
+        {
+            result = await topologyManager.ImportAsync(
+                serverId,
+                filePath,
+                Current.Server?.MapSize,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            SetState(Current with
+            {
+                IsTopologyImporting = false,
+                TopologyStatus = "Map import cancelled"
+            });
+            return;
+        }
+
+        if (!result.IsSuccess || result.Topology is null)
+        {
+            SetState(Current with
+            {
+                IsTopologyImporting = false,
+                TopologyStatus = "Map import failed",
+                TopologyError = SecretRedactor.Redact(result.Message)
+            });
+            return;
+        }
+
+        SetState(Current with
+        {
+            Topology = result.Topology,
+            IsTopologyImporting = false,
+            TopologyStatus = result.Message,
+            TopologyError = null,
+            Layers = BuildLiveLayers(
+                Current,
+                Current.Team is not null,
+                Current.Markers is not null,
+                result.Topology)
+        });
     }
 
     public void SetLayerVisibility(MapLayerKind kind, bool isVisible)
@@ -270,6 +336,7 @@ public sealed class MapDashboardService(
                 [],
                 MapDashboardState.CreateLiveMapLayers(),
                 cacheWarning);
+            baseState = AttachSavedTopology(baseState);
         }
         else if (cached is not null)
         {
@@ -317,7 +384,7 @@ public sealed class MapDashboardService(
             Team = team,
             Chat = chat,
             Markers = markers,
-            Layers = BuildLiveLayers(state, team is not null, markers is not null)
+            Layers = BuildLiveLayers(state, team is not null, markers is not null, state.Topology)
         };
     }
 
@@ -382,7 +449,7 @@ public sealed class MapDashboardService(
         var team = preserveLiveState ? Current.Team : null;
         var chat = preserveLiveState ? Current.Chat : null;
         var markers = preserveLiveState ? Current.Markers : null;
-        SetState(new MapDashboardState(
+        var state = new MapDashboardState(
             DashboardConnectionState.Ready,
             "Cached map · refreshing live data",
             MapDashboardDataSource.Cache,
@@ -399,7 +466,8 @@ public sealed class MapDashboardService(
             markers,
             preserveLiveState ? Current.Events : [],
             BuildLiveLayers(Current, team is not null, markers is not null),
-            warning));
+            warning);
+        SetState(AttachSavedTopology(state));
     }
 
     private void HandleRefreshException(Guid serverId, CachedServerMap? cached, Exception exception)
@@ -483,7 +551,7 @@ public sealed class MapDashboardService(
             LiveDataStatus = live.Label,
             LiveDataError = live.Error,
             Events = live.Events,
-            Layers = BuildLiveLayers(Current, team is not null, markers is not null)
+            Layers = BuildLiveLayers(Current, team is not null, markers is not null, Current.Topology)
         });
     }
 
@@ -505,9 +573,10 @@ public sealed class MapDashboardService(
     private static IReadOnlyList<MapLayerState> BuildLiveLayers(
         MapDashboardState previous,
         bool teamAvailable,
-        bool markersAvailable)
+        bool markersAvailable,
+        SavedMapTopology? topology = null)
     {
-        var layers = MapDashboardState.CreateLiveMapLayers(teamAvailable, markersAvailable);
+        var layers = MapDashboardState.CreateLiveMapLayers(teamAvailable, markersAvailable, topology);
         return layers.Select(layer =>
         {
             var existing = previous.Layers.FirstOrDefault(candidate => candidate.Kind == layer.Kind);
@@ -515,6 +584,51 @@ public sealed class MapDashboardService(
                 ? layer with { IsVisible = existing.IsVisible }
                 : layer;
         }).ToArray();
+    }
+
+    private MapDashboardState AttachSavedTopology(MapDashboardState state)
+    {
+        if (state.ServerId is not { } serverId)
+        {
+            return state;
+        }
+
+        SavedMapTopology? topology;
+        try
+        {
+            topology = topologyManager.Get(serverId);
+        }
+        catch (InvalidDataException)
+        {
+            return state with
+            {
+                TopologyError = "The saved topology cache is invalid. Import the server's .map file again."
+            };
+        }
+
+        if (topology is null)
+        {
+            return state;
+        }
+
+        if (state.Server?.MapSize is { } mapSize && topology.Data.WorldSize != mapSize)
+        {
+            return state with
+            {
+                TopologyError = "The saved topology has a different world size and was not overlaid. Import the current .map file."
+            };
+        }
+
+        return state with
+        {
+            Topology = topology,
+            TopologyStatus = $"External map imported {topology.ImportedAtUtc.ToLocalTime():dd MMM · HH:mm}",
+            Layers = BuildLiveLayers(
+                state,
+                state.Team is not null,
+                state.Markers is not null,
+                topology)
+        };
     }
 
     private static T Require<T>(RustPlusResult<T> result, string operation)

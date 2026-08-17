@@ -85,6 +85,26 @@ golden alignment comparison remains.
 **Done:** known positions align with the official app and cached map reopens offline. Cache reopening
 is automated; live visual alignment is still pending.
 
+## Phase 4.5 — External map topology
+
+**Goal:** Add useful map data that Rust+ does not expose without contaminating the Rust+ adapter.
+
+**Status:** First slice implemented on 2026-08-17. The app imports current serialization-version-10
+Rust `.map` files, decodes the documented legacy-LZ4/protobuf container, validates world size,
+persists display-ready data per server, and renders biome, topology, ore-potential, road, rail, and
+river layers.
+
+**Modules:** `IMapTopologyProvider`, `MapTopologyManager`, native map infrastructure reader,
+`IMapTopologyRepository`, SQLite migration 4, Leaflet raster/polyline rendering, Windows file picker.
+
+**Risks/tests:** same-size wrong-wipe imports cannot be rejected because Rust+ exposes no checksum;
+format drift and large/corrupt files are bounded and tested with a synthetic container plus a manual
+read-only current-game cache smoke test. Exact node locations remain impossible without server
+access. Exact prefab no-build zones and higher-fidelity biome/splat spawn-rule evaluation remain.
+
+**Done for this slice:** a definite size mismatch stores nothing; successful imports survive restart;
+source paths are not retained; source classification remains visible in the layer panel.
+
 ## Phase 5 — Team, chat, and semantic events
 
 **Goal:** Provide the first useful live team dashboard.

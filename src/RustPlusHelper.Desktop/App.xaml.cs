@@ -8,6 +8,8 @@ using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
+using RustPlusHelper.Desktop.Services;
+using RustPlusHelper.Infrastructure.Map;
 using RustPlusHelper.Infrastructure.RustPlus;
 using RustPlusHelper.Infrastructure.Storage;
 using RustPlusHelper.Infrastructure.Storage.Identity;
@@ -46,6 +48,9 @@ public partial class App : System.Windows.Application
             ulong.MaxValue - 42,
             0));
         builder.Services.AddSingleton<MapDashboardService>();
+        builder.Services.AddSingleton<IMapTopologyProvider, RustMapTopologyProvider>();
+        builder.Services.AddSingleton<MapTopologyManager>();
+        builder.Services.AddSingleton<IMapFilePicker, WindowsMapFilePicker>();
         builder.Services.AddSingleton(TimeProvider.System);
 
         var database = new SqliteDatabase(ApplicationDataPaths.GetDatabasePath());
@@ -53,6 +58,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton<IServerRepository, SqliteServerRepository>();
         builder.Services.AddSingleton<IMapCacheRepository, SqliteMapCacheRepository>();
+        builder.Services.AddSingleton<IMapTopologyRepository, SqliteMapTopologyRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
         builder.Services.AddSingleton<PlayerIdentityManager>();
         builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();

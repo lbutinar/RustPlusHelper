@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
     <ProjectReference Include="../RustPlusHelper.Infrastructure.RustPlus/RustPlusHelper.Infrastructure.RustPlus.csproj" />
+    <ProjectReference Include="../RustPlusHelper.Infrastructure.Map/RustPlusHelper.Infrastructure.Map.csproj" />
     <ProjectReference Include="../RustPlusHelper.Infrastructure.Storage/RustPlusHelper.Infrastructure.Storage.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />

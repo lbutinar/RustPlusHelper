@@ -389,6 +389,53 @@ button {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
 }
 
+.map-topology-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 16px;
+    padding: 12px 15px;
+    border: 1px solid rgba(111, 175, 116, 0.25);
+    border-radius: 8px;
+    background: rgba(44, 91, 53, 0.2);
+    color: #dce8de;
+}
+
+.map-topology-warning {
+    position: absolute;
+    z-index: 850;
+    top: 172px;
+    left: 18px;
+    max-width: min(620px, calc(100% - 340px));
+    border: 1px solid rgba(210, 93, 70, 0.45);
+    border-radius: 7px;
+    padding: 8px 12px;
+    background: rgba(49, 23, 20, 0.95);
+    color: #f2aca0;
+    font-size: 9px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+}
+
+.map-topology-status .material-icons {
+    color: #86bb82;
+}
+
+.map-topology-status div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.map-topology-status small {
+    color: #98a69e;
+}
+
+.map-heading-actions button .material-icons {
+    margin-right: 6px;
+    font-size: 17px;
+    vertical-align: -3px;
+}
+
 .empty-inline-state {
     padding: 18px;
     color: var(--muted);
@@ -604,6 +651,13 @@ button {
 
 .layer-symbol.baseMap { border-radius: 2px; border-color: #7d8e75; }
 .layer-symbol.grid { border-radius: 2px; border-color: #d6ddd8; }
+.layer-symbol.biomes { border-color: #5f9c5b; }
+.layer-symbol.topology { border-color: #a69581; }
+.layer-symbol.resourcePotential { border-color: #ff8b3d; }
+.layer-symbol.roads { border-radius: 2px; border-color: #d7a66b; }
+.layer-symbol.railways { border-radius: 2px; border-color: #8e9699; }
+.layer-symbol.rivers { border-radius: 2px; border-color: #4ab6df; }
+.layer-symbol.noBuildZones { border-color: #d24032; }
 .layer-symbol.team { border-color: var(--green); }
 .layer-symbol.teamNotes { border-color: #ba86d6; }
 .layer-symbol.vendingMachines { border-color: var(--yellow); }
