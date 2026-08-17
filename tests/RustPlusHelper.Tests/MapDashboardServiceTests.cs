@@ -34,6 +34,12 @@ public sealed class MapDashboardServiceTests
         Assert.NotNull(model);
         Assert.Equal(1000, model.Width);
         Assert.Equal(9, model.Items.Count);
+        Assert.Equal(30, model.Grid.CellCount);
+        Assert.Equal("Launch Site", model.Items.Single(item => item.Id == "monument:0").Label);
+        Assert.Equal("LS", model.Items.Single(item => item.Id == "monument:0").Glyph);
+        Assert.Equal("F22", model.Items.Single(item => item.Id == "monument:0").GridReference);
+        Assert.Equal("Small Oil Rig", model.Items.Single(item => item.Id == "monument:1").Label);
+        Assert.Equal("SR", model.Items.Single(item => item.Id == "monument:1").Glyph);
         Assert.Contains(model.Items, item => item.Kind == "vending");
         Assert.Contains(model.Items, item => item.Kind == "death");
         Assert.Contains(model.Items, item => item.Kind == "unknown");

@@ -71,6 +71,11 @@ The five-token map is never polled. `NoTeam` backs chat off to one minute, and r
 - Vending: item/currency IDs, quantities, price, stock, blueprint/condition values, price multiplier,
   and received-quantity multiplier.
 
+Grid references are local projections, not Rust+ response fields. The current Facepunch map rule
+uses `floor(mapSize * 7 / 1024)` cells per axis and divides the playable map size evenly by that
+count. The desktop projects those cells into the Rust+ JPEG inside its supplied ocean margin; rows
+run north-to-south and columns use `A` through `Z`, then `AA`, `AB`, and so on.
+
 Unknown marker numeric type and unsigned marker ID are deliberately preserved.
 
 ## Direct versus derived behavior
@@ -127,7 +132,7 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Question | Current position | Required evidence |
 |---|---|---|
 | Facepunch secure proxy reliability | Selected live server returned HTTP 418 before WebSocket upgrade; current proxy viability is unconfirmed | Successful live check on another server or upstream clarification |
-| Exact grid-cell formula | Community implementations differ | Golden comparison with official Rust+ app |
+| Grid visual alignment | Current Facepunch formula is implemented; exact JPEG alignment still needs a live golden comparison | Compare several positions with the official Rust+ app |
 | Pairing-token lifetime/rejection codes | Unofficial implementations document behavior; may change | Controlled expired/re-pair test |
 | Unknown marker evolution | Expected because newer travelling-vendor fields already demonstrate drift | Preserve unknown type and capture future fixture |
 | Companion history endpoint | Documented by rustplus.js but unofficial | Defer; local history is authoritative for the app |

@@ -25,8 +25,8 @@
                             <small>@member.SteamId</small>
                         </div>
                         <div class="position-copy">
-                            <strong>@member.X.ToString("0") / @member.Y.ToString("0")</strong>
-                            <small>WORLD X / Y</small>
+                            <strong>@GridReference(member.X, member.Y)</strong>
+                            <small>X @member.X.ToString("0") · Y @member.Y.ToString("0")</small>
                         </div>
                         <span class="status-pill @(member.IsOnline ? "online" : "offline")">
                             @(member.IsOnline ? "ONLINE" : "OFFLINE")
@@ -69,6 +69,10 @@
     private static string Initial(string? name) => string.IsNullOrWhiteSpace(name)
         ? "?"
         : name.Trim()[..1].ToUpperInvariant();
+
+    private string GridReference(float x, float y) => State.Server?.MapSize is { } mapSize
+        ? MapGrid.WorldToGrid(x, y, mapSize)?.Label ?? "OFF GRID"
+        : "NO GRID";
 
     private string SourceLabel => State.DataSource == MapDashboardDataSource.Fake
         ? "DETERMINISTIC DEVELOPMENT SNAPSHOT"

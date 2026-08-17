@@ -74,7 +74,9 @@ selection, no fallback, and the Servers UI state.
 
 **Status:** Core slice implemented and live-verified on 2026-08-17. The selected saved profile can
 download `GetInfo` + `GetMap`, render the JPEG, cache the latest snapshot in SQLite, reopen it without
-a network request, and refresh explicitly. Golden alignment/grid validation remains.
+a network request, and refresh explicitly. The current centered Facepunch grid formula, layer toggle,
+player-facing grid references, and monument token/name/glyph catalogue are implemented. A final live
+golden alignment comparison remains.
 
 **Modules:** map/session services, coordinate projector, grid service, map repositories.
 

@@ -82,6 +82,7 @@ public sealed class MainComponentTests : BunitContext
         {
             Assert.Contains("Server map", component.Markup, StringComparison.Ordinal);
             Assert.Contains("FAKE DATA", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("Map grid", component.Markup, StringComparison.Ordinal);
             Assert.Contains("Smart devices", component.Markup, StringComparison.Ordinal);
             Assert.Contains("Rust+ does not provide device positions", component.Markup, StringComparison.Ordinal);
             Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "rustPlusMap.render");
@@ -122,6 +123,7 @@ public sealed class MainComponentTests : BunitContext
         {
             Assert.Contains("Recent team chat", component.Markup, StringComparison.Ordinal);
             Assert.Contains("Kakec", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("I14", component.Markup, StringComparison.Ordinal);
         });
     }
 
@@ -137,6 +139,16 @@ public sealed class MainComponentTests : BunitContext
 
         component.WaitForAssertion(() =>
             Assert.False(_dashboard.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Team).IsVisible));
+    }
+
+    [Fact]
+    public void MapToolbarTogglesGridLayer()
+    {
+        var component = Render<Main>();
+        component.WaitForElement("[data-testid='toggle-grid']").Click();
+
+        component.WaitForAssertion(() =>
+            Assert.False(_dashboard.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Grid).IsVisible));
     }
 
     [Fact]

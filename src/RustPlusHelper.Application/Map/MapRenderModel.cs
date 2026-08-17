@@ -7,6 +7,8 @@ public sealed record MapOverlayItem(
     MapLayerKind Layer,
     string Kind,
     string Label,
+    string Glyph,
+    string? GridReference,
     double PixelX,
     double PixelY,
     float WorldX,
@@ -17,6 +19,7 @@ public sealed record MapOverlayItem(
 public sealed record MapRenderModel(
     double Width,
     double Height,
+    MapGridDefinition Grid,
     IReadOnlyList<MapOverlayItem> Items,
     IReadOnlyDictionary<string, bool> LayerVisibility);
 
@@ -38,11 +41,13 @@ public static class MapRenderModelFactory
         {
             if (monument.X is { } x && monument.Y is { } y)
             {
+                var display = MonumentCatalog.Resolve(monument.TokenOrName);
                 items.Add(CreateItem(
                     $"monument:{items.Count}",
                     MapLayerKind.Monuments,
                     "monument",
-                    monument.TokenOrName ?? "Unknown monument",
+                    display.Name,
+                    display.Glyph,
                     x,
                     y,
                     mapSize,
@@ -59,6 +64,7 @@ public static class MapRenderModelFactory
                 MapLayerKind.Team,
                 "team",
                 member.Name ?? "Unknown teammate",
+                "T",
                 member.X,
                 member.Y,
                 mapSize,
@@ -77,6 +83,7 @@ public static class MapRenderModelFactory
                 MapLayerKind.TeamNotes,
                 "team-note",
                 note.Text ?? "Team note",
+                "+",
                 note.X,
                 note.Y,
                 mapSize,
@@ -92,6 +99,7 @@ public static class MapRenderModelFactory
                 MapLayerKind.TeamNotes,
                 "team-note",
                 note.Text ?? "Leader note",
+                "+",
                 note.X,
                 note.Y,
                 mapSize,
@@ -107,6 +115,7 @@ public static class MapRenderModelFactory
                 MapLayerKind.Events,
                 "death",
                 "Team leader death position",
+                "†",
                 deathPosition.X,
                 deathPosition.Y,
                 mapSize,
@@ -134,6 +143,7 @@ public static class MapRenderModelFactory
                 layer,
                 ToMarkerKind(marker.Kind),
                 label,
+                MarkerGlyph(marker.Kind),
                 x,
                 y,
                 mapSize,
@@ -145,6 +155,7 @@ public static class MapRenderModelFactory
         return new MapRenderModel(
             width,
             height,
+            MapGrid.CreateDefinition(mapSize, width, height, margin),
             items,
             state.Layers.ToDictionary(
                 layer => ToLayerKey(layer.Kind),
@@ -155,6 +166,7 @@ public static class MapRenderModelFactory
     public static string ToLayerKey(MapLayerKind kind) => kind switch
     {
         MapLayerKind.BaseMap => "baseMap",
+        MapLayerKind.Grid => "grid",
         MapLayerKind.Team => "team",
         MapLayerKind.TeamNotes => "teamNotes",
         MapLayerKind.VendingMachines => "vendingMachines",
@@ -170,6 +182,7 @@ public static class MapRenderModelFactory
         MapLayerKind layer,
         string kind,
         string label,
+        string glyph,
         float worldX,
         float worldY,
         uint mapSize,
@@ -180,11 +193,14 @@ public static class MapRenderModelFactory
         bool isAlive = true)
     {
         var point = MapProjection.WorldToImage(worldX, worldY, mapSize, width, height, margin);
+        var grid = MapGrid.WorldToGrid(worldX, worldY, mapSize)?.Label;
         return new MapOverlayItem(
             id,
             layer,
             kind,
             label,
+            glyph,
+            grid,
             point.PixelX,
             point.PixelY,
             worldX,
@@ -192,6 +208,20 @@ public static class MapRenderModelFactory
             isOnline,
             isAlive);
     }
+
+    private static string MarkerGlyph(MapMarkerKind kind) => kind switch
+    {
+        MapMarkerKind.Player => "T",
+        MapMarkerKind.Explosion => "!",
+        MapMarkerKind.VendingMachine => "V",
+        MapMarkerKind.Ch47 => "47",
+        MapMarkerKind.CargoShip => "C",
+        MapMarkerKind.Crate => "□",
+        MapMarkerKind.GenericRadius => "○",
+        MapMarkerKind.PatrolHelicopter => "H",
+        MapMarkerKind.TravellingVendor => "TV",
+        _ => "?"
+    };
 
     private static string ToMarkerKind(MapMarkerKind kind) => kind switch
     {

@@ -46,6 +46,8 @@ Implemented:
   source labels;
 - live-map layers for the base map, monuments, team positions/notes, vending machines, and known
   world markers when their owning request succeeds;
+- a centered Rust grid layer, player/marker grid references, and friendly monument names with
+  meaningful short glyphs;
 - one-connection read-only live refreshes for team members/positions, team notes, recent chat, and
   map markers, with partial failures kept independent;
 - one persistent selected-server Rust+ monitor with centralized polling, reconnect backoff, and

@@ -31,12 +31,15 @@
         {
             model.Width,
             model.Height,
+            model.Grid,
             Items = model.Items.Select(item => new
             {
                 item.Id,
                 Layer = MapRenderModelFactory.ToLayerKey(item.Layer),
                 item.Kind,
                 item.Label,
+                item.Glyph,
+                item.GridReference,
                 item.PixelX,
                 item.PixelY,
                 item.WorldX,

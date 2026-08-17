@@ -21,8 +21,9 @@ Implemented:
 - live connection status plus a bounded event feed for transport, online/offline, death/respawn, and
   marker lifecycle transitions.
 
-The grid-search tool remains disabled until the community grid formula is validated against the
-official Rust+ app.
+The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Grid
+references also appear in marker tooltips and the team roster. A future search box may navigate to a
+typed grid without changing the projection.
 
 ## Server registry
 

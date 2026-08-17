@@ -509,6 +509,11 @@ button {
     cursor: not-allowed;
 }
 
+.map-toolbar button.material-icons {
+    font-family: "Material Icons";
+    font-size: 19px;
+}
+
 .map-legend {
     position: absolute;
     z-index: 700;
@@ -598,6 +603,7 @@ button {
 }
 
 .layer-symbol.baseMap { border-radius: 2px; border-color: #7d8e75; }
+.layer-symbol.grid { border-radius: 2px; border-color: #d6ddd8; }
 .layer-symbol.team { border-color: var(--green); }
 .layer-symbol.teamNotes { border-color: #ba86d6; }
 .layer-symbol.vendingMachines { border-color: var(--yellow); }
@@ -1552,6 +1558,26 @@ button {
 .rust-marker-wrap {
     display: grid !important;
     place-items: center;
+}
+
+.rust-grid-label-wrap {
+    display: grid !important;
+    place-items: center;
+    pointer-events: none !important;
+}
+
+.rust-grid-label {
+    display: grid;
+    min-width: 18px;
+    height: 15px;
+    place-items: center;
+    border-radius: 3px;
+    background: rgba(12, 15, 14, 0.58);
+    color: rgba(239, 242, 239, 0.88);
+    font-size: 8px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 1px 2px #000;
 }
 
 .rust-marker {

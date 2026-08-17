@@ -45,7 +45,11 @@
 
             <div class="map-toolbar" aria-label="Map tools">
                 <button type="button" title="Fit the map" @onclick="FitMap">⌖</button>
-                <button type="button" title="Grid search arrives after live grid validation" disabled>⌕</button>
+                <button data-testid="toggle-grid"
+                        type="button"
+                        class="material-icons"
+                        title="@(IsGridVisible ? "Hide map grid" : "Show map grid")"
+                        @onclick="ToggleGrid">grid_on</button>
             </div>
 
             <div class="map-legend">
@@ -141,6 +145,9 @@
 
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 
+    private bool IsGridVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.Grid)
+        is { IsVisible: true, IsAvailable: true };
+
     private string SourceEyebrow => State.DataSource switch
     {
         MapDashboardDataSource.Live => "LIVE RUST+ SNAPSHOT",
@@ -165,6 +172,9 @@
     }
 
     private Task FitMap() => JavaScript.InvokeVoidAsync("rustPlusMap.fitActive").AsTask();
+
+    private Task ToggleGrid() => OnLayerChanged.InvokeAsync(
+        new LayerVisibilityChange(MapLayerKind.Grid, !IsGridVisible));
 
     private Task RefreshMap() => OnRefreshRequested.InvokeAsync();
 

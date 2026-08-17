@@ -21,6 +21,7 @@ public enum MapDashboardDataSource
 public enum MapLayerKind
 {
     BaseMap,
+    Grid,
     Team,
     TeamNotes,
     VendingMachines,
@@ -79,6 +80,7 @@ public sealed record MapDashboardState(
     public static IReadOnlyList<MapLayerState> CreateDefaultLayers() =>
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT"),
+        new(MapLayerKind.Grid, "Map grid", true, true, "DERIVED"),
         new(MapLayerKind.Team, "Team", true, true, "DIRECT"),
         new(MapLayerKind.TeamNotes, "Team notes", true, true, "DIRECT"),
         new(MapLayerKind.VendingMachines, "Vending", true, true, "DIRECT"),
@@ -105,6 +107,7 @@ public sealed record MapDashboardState(
         bool markersAvailable = false) =>
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT RUST+"),
+        new(MapLayerKind.Grid, "Map grid", true, true, "DERIVED FROM MAP SIZE"),
         new(
             MapLayerKind.Team,
             "Team",
