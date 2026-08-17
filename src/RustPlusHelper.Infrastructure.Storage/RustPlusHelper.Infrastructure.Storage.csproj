@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Description>SQLite persistence and Windows DPAPI secret protection for RustPlusHelper.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!-- Overrides the vulnerable 2.1.11 SQLite bundle pulled by Microsoft.Data.Sqlite 10.0.10. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+</Project>

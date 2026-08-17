@@ -1,28 +1,236 @@
-<section class="content-page">
+@implements IDisposable
+@inject ServerManager Servers
+@inject ILogger<ServersPage> Logger
+
+<section class="content-page servers-page">
     <div class="page-heading">
         <div>
-            <span class="eyebrow">SERVER REGISTRY PREVIEW</span>
+            <span class="eyebrow">LOCAL SERVER REGISTRY</span>
             <h1>Servers</h1>
-            <p>Persistence and protected pairing records are scheduled for Phase 2 and Phase 3.</p>
+            <p>Profiles are stored locally. Rust+ pairing and live connections arrive in Phase 3.</p>
         </div>
+        <span class="status-pill persistence-ready">SQLITE READY</span>
     </div>
 
-    <article class="surface-card server-card">
-        <div class="server-monogram">EU</div>
-        <div>
-            <span class="eyebrow">SELECTED DEMO</span>
-            <h2>@(State.Server?.Name ?? "Fake EU Main")</h2>
-            <p>@State.Server?.MapName · @State.Server?.MapSize m</p>
+    <div class="server-layout">
+        <div class="server-list-column">
+            <article class="surface-card server-card demo-server-card">
+                <div class="server-monogram">EU</div>
+                <div>
+                    <span class="eyebrow">CURRENT MAP DEMO</span>
+                    <h2>@(State.Server?.Name ?? "Fake EU Main")</h2>
+                    <p>@State.Server?.MapName · @State.Server?.MapSize m · not persisted</p>
+                </div>
+                <div class="server-stats">
+                    <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
+                    <span>PLAYERS</span>
+                </div>
+                <span class="status-pill online">FAKE DATA</span>
+            </article>
+
+            <div class="section-label-row">
+                <div>
+                    <span class="eyebrow">SAVED CONNECTION PROFILES</span>
+                    <h2>@Servers.Profiles.Count server@(Servers.Profiles.Count == 1 ? null : "s")</h2>
+                </div>
+            </div>
+
+            @if (Servers.Profiles.Count == 0)
+            {
+                <article class="surface-card empty-server-state">
+                    <span class="empty-icon">+</span>
+                    <h2>No saved servers</h2>
+                    <p>Add connection information here. This phase does not ask for or store a player token.</p>
+                </article>
+            }
+            else
+            {
+                <div class="saved-server-list">
+                    @foreach (var profile in Servers.Profiles)
+                    {
+                        <article class="surface-card saved-server-card" @key="profile.Id">
+                            <div class="server-monogram">@Monogram(profile.DisplayName)</div>
+                            <div class="saved-server-main">
+                                <div class="server-title-line">
+                                    <h2>@profile.DisplayName</h2>
+                                    @if (profile.Id == Servers.SelectedServerId)
+                                    {
+                                        <span class="status-pill selected">SELECTED</span>
+                                    }
+                                </div>
+                                <p>@profile.Host:@profile.Port</p>
+                                <span class="server-transport">
+                                    @(profile.UseFacepunchProxy ? "Facepunch secure proxy" : "Direct transport requires later explicit opt-in")
+                                </span>
+                            </div>
+                            <div class="server-actions">
+                                <button type="button" class="ghost-button" @onclick="() => SelectProfile(profile.Id)">Select</button>
+                                <button type="button" class="ghost-button" @onclick="() => EditProfile(profile)">Edit</button>
+                                @if (_removeConfirmationId == profile.Id)
+                                {
+                                    <button type="button" class="danger-button" @onclick="() => ConfirmRemove(profile.Id)">Confirm remove</button>
+                                    <button type="button" class="ghost-button" @onclick="CancelRemove">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="ghost-button danger-text" @onclick="() => BeginRemove(profile.Id)">Remove</button>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
         </div>
-        <div class="server-stats">
-            <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
-            <span>PLAYERS</span>
-        </div>
-        <span class="status-pill online">DEMO READY</span>
-    </article>
+
+        <aside class="surface-card server-editor">
+            <span class="eyebrow">@(_editingId is null ? "ADD PROFILE" : "EDIT PROFILE")</span>
+            <h2>@(_editingId is null ? "Save a Rust+ server" : "Update saved server")</h2>
+            <p>Connection data is not authentication. Pairing credentials remain separate and protected.</p>
+
+            <form @onsubmit="SaveProfile" @onsubmit:preventDefault>
+                <label>
+                    <span>Display name</span>
+                    <input data-testid="server-name" maxlength="100" autocomplete="off" @bind="_displayName" placeholder="EU Main" />
+                </label>
+                <label>
+                    <span>Companion host or IP</span>
+                    <input data-testid="server-host" maxlength="255" autocomplete="off" @bind="_host" placeholder="companion.example.com" />
+                </label>
+                <label>
+                    <span>Companion port</span>
+                    <input data-testid="server-port" type="number" min="1" max="65535" @bind="_port" />
+                </label>
+                <label class="proxy-choice">
+                    <input data-testid="server-proxy" type="checkbox" @bind="_useFacepunchProxy" />
+                    <span>
+                        <strong>Use Facepunch secure proxy</strong>
+                        <small>Recommended. Direct ws:// transport is never enabled silently.</small>
+                    </span>
+                </label>
+
+                @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                {
+                    <div class="form-error" role="alert">@_errorMessage</div>
+                }
+
+                <div class="editor-actions">
+                    <button data-testid="save-server" type="submit" class="primary-button">
+                        @(_editingId is null ? "Save server" : "Save changes")
+                    </button>
+                    @if (_editingId is not null)
+                    {
+                        <button type="button" class="ghost-button" @onclick="ResetEditor">Cancel edit</button>
+                    }
+                </div>
+            </form>
+
+            <div class="security-note">
+                <strong>No token field</strong>
+                <span>Phase 3 pairing will write DPAPI-protected ciphertext through <code>ISecretStore</code>.</span>
+            </div>
+        </aside>
+    </div>
 </section>
 
 @code {
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private Guid? _editingId;
+    private Guid? _removeConfirmationId;
+    private string _displayName = string.Empty;
+    private string _host = string.Empty;
+    private int _port = 28082;
+    private bool _useFacepunchProxy = true;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        Servers.Changed += HandleServersChanged;
+        Servers.Load();
+    }
+
+    public void Dispose() => Servers.Changed -= HandleServersChanged;
+
+    private void SaveProfile()
+    {
+        try
+        {
+            Servers.Save(new ServerProfileDraft(
+                _editingId,
+                _displayName,
+                _host,
+                _port,
+                _useFacepunchProxy));
+            ResetEditor();
+        }
+        catch (ArgumentException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to save a server profile.");
+            _errorMessage = "The server profile could not be saved.";
+        }
+    }
+
+    private void SelectProfile(Guid id)
+    {
+        if (!Servers.Select(id))
+        {
+            _errorMessage = "The selected server no longer exists.";
+        }
+    }
+
+    private void EditProfile(ServerProfile profile)
+    {
+        _editingId = profile.Id;
+        _displayName = profile.DisplayName;
+        _host = profile.Host;
+        _port = profile.Port;
+        _useFacepunchProxy = profile.UseFacepunchProxy;
+        _errorMessage = null;
+    }
+
+    private void BeginRemove(Guid id) => _removeConfirmationId = id;
+
+    private void CancelRemove() => _removeConfirmationId = null;
+
+    private void ConfirmRemove(Guid id)
+    {
+        try
+        {
+            Servers.Remove(id);
+            _removeConfirmationId = null;
+            if (_editingId == id)
+            {
+                ResetEditor();
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to remove a server profile.");
+            _errorMessage = "The server profile could not be removed.";
+        }
+    }
+
+    private void ResetEditor()
+    {
+        _editingId = null;
+        _displayName = string.Empty;
+        _host = string.Empty;
+        _port = 28082;
+        _useFacepunchProxy = true;
+        _errorMessage = null;
+    }
+
+    private void HandleServersChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private static string Monogram(string name)
+    {
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
 }

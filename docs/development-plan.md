@@ -32,11 +32,16 @@ WebView-only smoke capture verifies that the rendered shell starts successfully.
 
 **Goal:** Persist multiple servers safely.
 
+**Status:** Implemented on 2026-08-17. Pairing itself remains Phase 3.
+
 **Modules:** migration runner, repositories, `ServerManager`, `ISecretStore`, DPAPI implementation.
 
 **Risks/tests:** schema upgrades, unsigned IDs, secret leaks; real SQLite and DPAPI tests.
 
-**Done:** server profiles survive restart and no token is stored in plaintext.
+**Done evidence:** server profiles survive a repository/process restart; unsigned player IDs round-trip
+as decimal text; WAL, foreign keys, migration replay, delete cascade, and current-user DPAPI round-trip
+are tested; SQLite receives only protected blobs. The desktop Servers page performs persistent
+add/edit/select/confirm-remove operations and exposes no token input.
 
 ## Phase 3 — Pairing and connection supervision
 

@@ -15,6 +15,13 @@ Implemented with deterministic fake data:
 The grid-search tool remains disabled until the community grid formula is validated against the
 official Rust+ app. The desktop does not connect to a live server in this phase.
 
+## Phase 2 server registry
+
+The Servers page now uses the real local SQLite registry while the map remains fake. It provides
+add, edit, select, and two-step removal for connection profiles. The form defaults to the Facepunch
+secure proxy and deliberately has no token field; authentication enters only through the future
+pairing workflow and protected secret store.
+
 The application opens to the map, not a generic dashboard.
 
 ```text

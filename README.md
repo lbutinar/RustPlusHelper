@@ -4,9 +4,10 @@ RustPlusHelper is a Windows-first Rust+ companion dashboard under active develop
 feature will be an interactive Rust map with team positions, map notes, vending machines, world-event
 markers, supported smart devices, cameras, notifications, and locally recorded history.
 
-This repository currently contains the approved **Phase 0 protocol verification spike** and the
-**Phase 1 map-first desktop skeleton**. The desktop uses deterministic fake data until live protocol
-verification and later connection phases are complete.
+This repository currently contains the approved **Phase 0 protocol verification spike**, the
+**Phase 1 map-first desktop skeleton**, and the **Phase 2 local persistence foundation**. The map
+still uses deterministic fake data until live protocol verification and later connection phases are
+complete.
 
 ## Current status
 
@@ -27,7 +28,11 @@ Implemented:
   server, and settings previews;
 - application-owned map dashboard state and tested world-to-image projection;
 - privacy-safe Debug smoke capture that validates the rendered app shell without reading desktop
-  pixels.
+  pixels;
+- SQLite migrations and persistent multi-server profiles under the current Windows user's local app
+  data;
+- a DPAPI `CurrentUser` secret store that persists only ciphertext;
+- an add/edit/select/confirm-remove Servers interface with no manual token field.
 
 Still requiring a real paired server:
 
@@ -61,8 +66,8 @@ Launch the Phase 1 desktop shell:
 dotnet run --project .\src\RustPlusHelper.Desktop
 ```
 
-The desktop is intentionally marked `FAKE DATA`. It does not read local credentials or contact a
-Rust server in Phase 1.
+The map is intentionally marked `FAKE DATA`. The app does not contact a Rust server or ask for Rust+
+credentials yet. Saved server profiles contain connection metadata only.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 
@@ -80,6 +85,7 @@ environment variables and run the read-only check.
 - [Security model](docs/security-model.md)
 - [Live verification procedure](docs/live-verification.md)
 - [Database design](docs/database-design.md)
+- [Local storage operations](docs/local-storage.md)
 - [UI design](docs/ui-design.md)
 - [Testing strategy](docs/testing.md)
 - [Development plan](docs/development-plan.md)

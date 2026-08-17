@@ -6,8 +6,9 @@ The planned desktop product uses C#/.NET 10, a WPF host, Blazor Hybrid UI, Leafl
 SQLite, and application-owned abstractions around Rust+.
 
 Phase 0 contains the client boundary, real adapter, fake source, verification command, tests, and
-documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. SQLite, pairing UI, live
-connection supervision, background monitoring, and notifications are not implemented yet.
+documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phase 2 adds SQLite
+migrations, the server registry, and DPAPI-protected secret persistence. Pairing UI, live connection
+supervision, background monitoring, and notifications are not implemented yet.
 
 ## Dependency direction
 
@@ -33,14 +34,17 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Application`: application-owned contract, normalized snapshots, redaction utility,
   and deterministic fake client.
 - `RustPlusHelper.Infrastructure.RustPlus`: the pinned RustPlusApi adapter and mapper.
+- `RustPlusHelper.Infrastructure.Storage`: SQLite migrations/repositories and Windows DPAPI secret
+  protection.
 - `RustPlusHelper.Verification`: opt-in read-only protocol verification command.
 - `RustPlusHelper.Desktop`: WPF host, Blazor map-first shell, and local Leaflet assets.
 - `RustPlusHelper.Tests`: focused unit and adapter-mapping tests.
 - `RustPlusHelper.Desktop.Tests`: bUnit component and interaction tests.
+- `RustPlusHelper.Infrastructure.Storage.Tests`: real temporary-SQLite and current-user DPAPI tests.
 
-The desktop project references `RustPlusHelper.Application`, not `RustPlusApi` or the Rust+ adapter.
-Its current composition root injects `FakeRustPlusClient`; replacing that wiring does not change UI
-components.
+The desktop composition root references Application and Storage, but not `RustPlusApi` or the Rust+
+adapter. It injects `FakeRustPlusClient` for map data and the real local SQLite services for saved
+profiles; replacing Rust+ wiring does not change UI components.
 
 ## Planned services
 

@@ -26,9 +26,13 @@ The verification command accepts credentials only through:
 It does not accept credential command-line arguments. .NET user-secrets are a development convenience,
 not encrypted production storage.
 
-The production desktop application will use `ISecretStore` with Windows DPAPI current-user encryption.
-SQLite will hold ciphertext and non-secret metadata only. Cross-machine export will require explicit
+The Phase 2 desktop application uses `ISecretStore` with Windows DPAPI current-user encryption.
+SQLite holds ciphertext and non-secret metadata only. Additional entropy binds each protected value
+to the application version, server ID, and secret purpose. Cross-machine export will require explicit
 password-based re-encryption; copying DPAPI ciphertext is not a portable backup.
+
+No UI currently accepts a player token. Phase 3 pairing will pass token bytes directly to
+`ISecretStore`; callers retrieving cleartext own the returned buffer and must zero it after use.
 
 ## Transport
 

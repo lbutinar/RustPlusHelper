@@ -4,7 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.RustPlus;
+using RustPlusHelper.Application.Security;
+using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
+using RustPlusHelper.Infrastructure.Storage;
+using RustPlusHelper.Infrastructure.Storage.Security;
+using RustPlusHelper.Infrastructure.Storage.Servers;
+using RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 namespace RustPlusHelper.Desktop;
 
@@ -28,9 +34,19 @@ public partial class App : System.Windows.Application
             ulong.MaxValue - 42,
             0));
         builder.Services.AddSingleton<MapDashboardService>();
+        builder.Services.AddSingleton(TimeProvider.System);
+
+        var database = new SqliteDatabase(ApplicationDataPaths.GetDatabasePath());
+        database.Initialize();
+        builder.Services.AddSingleton(database);
+        builder.Services.AddSingleton<IServerRepository, SqliteServerRepository>();
+        builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();
+        builder.Services.AddSingleton<ISecretStore, SqliteSecretStore>();
+        builder.Services.AddSingleton<ServerManager>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();
+        _host.Services.GetRequiredService<ServerManager>().Load();
 
         var window = new MainWindow(_host.Services);
         MainWindow = window;

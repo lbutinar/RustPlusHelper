@@ -1,7 +1,20 @@
 # Database design
 
-SQLite is planned for the desktop application. It needs no service, administrator setup, or separate
+SQLite is used by the desktop application. It needs no service, administrator setup, or separate
 installer and remains relational and inspectable.
+
+## Phase 2 implementation
+
+The current database lives at `%LOCALAPPDATA%\RustPlusHelper\rustplushelper.db`. Versioned migrations
+currently create only:
+
+- `schema_migrations`;
+- `servers` for non-secret connection metadata;
+- `pairings` for purpose-labelled DPAPI ciphertext.
+
+Creating the entire future schema now would make unverified assumptions. Session, map, team, marker,
+market, device, camera, event, death, chat, and notification tables remain planned until their owning
+phase has real write/read behavior.
 
 ## Planned persisted data
 
@@ -52,4 +65,7 @@ external/server data source requires one.
 - Keep secrets encrypted through `ISecretStore`; never place plaintext tokens in a normal column.
 - Apply bounded retention to events, chat, vending history, and optional sampled trails.
 
-The schema will be created in Phase 2, after live Phase 0 evidence and the map-first shell.
+Phase 2 uses `Microsoft.Data.Sqlite` synchronous APIs because its documented async methods execute
+synchronously. Connections explicitly enable foreign keys, the database uses WAL and `NORMAL`
+synchronous mode, and mutations use parameters. The native SQLite asset is explicitly pinned to
+`SQLitePCLRaw.bundle_e_sqlite3` 2.1.12 because the transitive 2.1.11 bundle is vulnerable.

@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$OutputPath = '.\artifacts\ui\phase1-smoke.png',
+    [ValidateSet('Map', 'Servers')]
+    [string]$Section = 'Map',
     [int]$TimeoutSeconds = 30
 )
 
@@ -23,6 +25,7 @@ $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = $executable
 $startInfo.UseShellExecute = $false
 $startInfo.Environment['RUSTPLUSHELPER_UI_CAPTURE_PATH'] = $resolvedOutput
+$startInfo.Environment['RUSTPLUSHELPER_UI_CAPTURE_SECTION'] = $Section
 
 $process = [System.Diagnostics.Process]::Start($startInfo)
 if ($null -eq $process) {

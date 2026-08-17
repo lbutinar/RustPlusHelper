@@ -25,6 +25,18 @@
 - toggling a layer updates application state;
 - application public contracts do not expose RustPlusApi types.
 
+## Current Phase 2 tests
+
+- server profiles save, select, reload, validate, and remove through `ServerManager`;
+- real temporary SQLite databases apply migration 1 idempotently;
+- WAL and foreign keys are enabled;
+- profiles survive reopening and `ulong.MaxValue` remains canonical decimal text;
+- DPAPI `CurrentUser` data round-trips and fails with the wrong context;
+- SQLite stores a protected blob rather than the supplied cleartext;
+- deleting a server cascades its pairing ciphertext;
+- the actual Servers component saves through `ServerManager`;
+- the privacy-safe smoke runner can navigate to and validate the Servers page.
+
 ## Test layers planned
 
 ### Unit
@@ -71,6 +83,7 @@ For a local Windows visual smoke check after a Debug build:
 
 ```powershell
 .\scripts\Capture-DesktopSmoke.ps1
+.\scripts\Capture-DesktopSmoke.ps1 -Section Servers -OutputPath .\artifacts\ui\phase2-servers.png
 ```
 
 The script launches only the built Debug executable with a one-process environment flag. The app

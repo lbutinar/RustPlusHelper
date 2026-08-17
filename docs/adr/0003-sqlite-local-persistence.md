@@ -1,6 +1,6 @@
 # ADR 0003: SQLite local persistence
 
-- Status: Accepted for Phase 2
+- Status: Implemented in Phase 2
 - Date: 2026-08-17
 
 ## Context
@@ -19,4 +19,7 @@ migrations.
 - Background writes must remain short and batched.
 - Retention is required for event/chat/history growth.
 - Unsigned Rust identifiers use decimal text when they exceed signed 64-bit range.
-- Secrets stay in an OS-backed `ISecretStore`; SQLite receives ciphertext only.
+- Secrets use Windows DPAPI `CurrentUser` protection through `ISecretStore`; SQLite receives
+  ciphertext only.
+- Microsoft.Data.Sqlite's synchronous APIs are used deliberately because its async methods execute
+  synchronously.
