@@ -9,6 +9,8 @@ public interface ISecretStore
 {
     void Store(Guid serverId, SecretKind kind, ReadOnlySpan<byte> secret);
 
+    bool Contains(Guid serverId, SecretKind kind);
+
     /// <summary>Returns a caller-owned cleartext buffer that should be zeroed after use.</summary>
     byte[]? Retrieve(Guid serverId, SecretKind kind);
 

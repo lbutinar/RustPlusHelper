@@ -1,6 +1,14 @@
+using System.Buffers.Text;
+using System.Globalization;
+using System.Security.Cryptography;
+using RustPlusHelper.Application.Security;
+
 namespace RustPlusHelper.Application.Servers;
 
-public sealed class ServerManager(IServerRepository repository, TimeProvider timeProvider)
+public sealed class ServerManager(
+    IServerRepository repository,
+    TimeProvider timeProvider,
+    ISecretStore? secretStore = null)
 {
     private readonly object _stateLock = new();
 
@@ -35,6 +43,11 @@ public sealed class ServerManager(IServerRepository repository, TimeProvider tim
             throw new ArgumentOutOfRangeException(nameof(draft.Port), "Port must be between 1 and 65535.");
         }
 
+        if (draft.PlayerId == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(draft.PlayerId), "Steam64 ID must be greater than zero.");
+        }
+
         ServerProfile profile;
         lock (_stateLock)
         {
@@ -59,6 +72,54 @@ public sealed class ServerManager(IServerRepository repository, TimeProvider tim
         Changed?.Invoke(this, EventArgs.Empty);
         return profile;
     }
+
+    public ServerProfile SaveWithPairing(ServerProfileDraft draft, ReadOnlySpan<char> playerToken)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+
+        var normalizedToken = playerToken.Trim();
+        if (normalizedToken.IsEmpty)
+        {
+            EnsurePlayerChangeDoesNotInvalidatePairing(draft);
+            return Save(draft);
+        }
+
+        if (draft.PlayerId is null or 0)
+        {
+            throw new ArgumentException("Steam64 ID is required when saving a player token.", nameof(draft.PlayerId));
+        }
+
+        if (!int.TryParse(normalizedToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedToken))
+        {
+            throw new ArgumentException("Player token must be a signed 32-bit integer.", nameof(playerToken));
+        }
+
+        if (secretStore is null)
+        {
+            throw new InvalidOperationException("Protected pairing storage is not available.");
+        }
+
+        var profile = Save(draft);
+        Span<byte> tokenBytes = stackalloc byte[11];
+        if (!Utf8Formatter.TryFormat(parsedToken, tokenBytes, out var bytesWritten))
+        {
+            throw new InvalidOperationException("The player token could not be prepared for protected storage.");
+        }
+
+        try
+        {
+            secretStore.Store(profile.Id, SecretKind.RustPlusPlayerToken, tokenBytes[..bytesWritten]);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(tokenBytes);
+        }
+
+        return profile;
+    }
+
+    public bool HasPairing(Guid serverId) =>
+        secretStore?.Contains(serverId, SecretKind.RustPlusPlayerToken) == true;
 
     public bool Select(Guid id)
     {
@@ -98,10 +159,32 @@ public sealed class ServerManager(IServerRepository repository, TimeProvider tim
 
         if (removed)
         {
+            secretStore?.Delete(id, SecretKind.RustPlusPlayerToken);
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
         return removed;
+    }
+
+    private void EnsurePlayerChangeDoesNotInvalidatePairing(ServerProfileDraft draft)
+    {
+        if (draft.Id is not Guid id || !HasPairing(id))
+        {
+            return;
+        }
+
+        ServerProfile? existing;
+        lock (_stateLock)
+        {
+            existing = Profiles.FirstOrDefault(profile => profile.Id == id) ?? repository.GetById(id);
+        }
+
+        if (existing is not null && existing.PlayerId != draft.PlayerId)
+        {
+            throw new ArgumentException(
+                "Enter the player token again when changing the Steam64 ID.",
+                nameof(draft.PlayerId));
+        }
     }
 
     private static string RequireText(string value, string parameterName, int maximumLength)

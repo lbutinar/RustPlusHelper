@@ -36,7 +36,9 @@ Implemented:
 - SQLite migrations and persistent multi-server profiles under the current Windows user's local app
   data;
 - a DPAPI `CurrentUser` secret store that persists only ciphertext;
-- an add/edit/select/confirm-remove Servers interface with no manual token field.
+- an add/edit/select/confirm-remove Servers interface;
+- masked manual entry for Steam64 ID and the signed Rust+ player token, with pairing status and
+  DPAPI-protected token persistence.
 
 Still requiring a real paired server:
 

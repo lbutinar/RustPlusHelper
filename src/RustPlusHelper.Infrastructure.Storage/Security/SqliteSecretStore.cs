@@ -41,6 +41,22 @@ public sealed class SqliteSecretStore(
         }
     }
 
+    public bool Contains(Guid serverId, SecretKind kind)
+    {
+        database.Initialize();
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM pairings
+                WHERE server_id = $serverId AND secret_kind = $secretKind);
+            """;
+        command.Parameters.AddWithValue("$serverId", serverId.ToString("D"));
+        command.Parameters.AddWithValue("$secretKind", ToStorageName(kind));
+        return Convert.ToInt64(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
     public byte[]? Retrieve(Guid serverId, SecretKind kind)
     {
         database.Initialize();

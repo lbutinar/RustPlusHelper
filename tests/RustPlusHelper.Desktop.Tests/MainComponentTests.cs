@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
+using System.Text;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.RustPlus;
+using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
 using RustPlusHelper.Desktop;
@@ -13,6 +16,7 @@ public sealed class MainComponentTests : BunitContext
 {
     private readonly MapDashboardService _dashboard;
     private readonly InMemoryServerRepository _serverRepository;
+    private readonly InMemorySecretStore _secretStore;
 
     public MainComponentTests()
     {
@@ -22,13 +26,15 @@ public sealed class MainComponentTests : BunitContext
         var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
         _dashboard = new MapDashboardService(client, connection);
         _serverRepository = new InMemoryServerRepository();
-        var serverManager = new ServerManager(_serverRepository, TimeProvider.System);
+        _secretStore = new InMemorySecretStore();
+        var serverManager = new ServerManager(_serverRepository, TimeProvider.System, _secretStore);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
         // component test independent from the Windows desktop composition root.
         Services.AddSingleton<IRustPlusClient>(client);
         Services.AddSingleton(connection);
         Services.AddSingleton(_dashboard);
+        Services.AddSingleton<ISecretStore>(_secretStore);
         Services.AddSingleton(serverManager);
     }
 
@@ -119,6 +125,44 @@ public sealed class MainComponentTests : BunitContext
             Assert.Equal("companion.example.invalid", saved.Host);
             Assert.Equal(28100, saved.Port);
             Assert.Contains("SQLITE READY", component.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void ServerPageMasksAndProtectsManualPairingDetails()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Servers", StringComparison.Ordinal))
+            .Click();
+
+        component.Find("[data-testid='server-name']").Change("Test Dev");
+        component.Find("[data-testid='server-host']").Change("companion.example.invalid");
+        component.Find("[data-testid='server-player-id']").Change("76561198000000000");
+        component.Find("[data-testid='server-player-token']").Change("-123456789");
+        component.Find("[data-testid='save-server']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            var saved = Assert.Single(_serverRepository.GetAll());
+            Assert.Equal(76561198000000000UL, saved.PlayerId);
+            Assert.Contains("PAIRING SAVED", component.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("-123456789", component.Markup, StringComparison.Ordinal);
+
+            var restored = _secretStore.Retrieve(saved.Id, SecretKind.RustPlusPlayerToken);
+            try
+            {
+                Assert.NotNull(restored);
+                Assert.Equal("-123456789", Encoding.UTF8.GetString(restored));
+            }
+            finally
+            {
+                if (restored is not null)
+                {
+                    CryptographicOperations.ZeroMemory(restored);
+                }
+            }
         });
     }
 }

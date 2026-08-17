@@ -7,8 +7,9 @@ SQLite, and application-owned abstractions around Rust+.
 
 Phase 0 contains the client boundary, real adapter, fake source, verification command, tests, and
 documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phase 2 adds SQLite
-migrations, the server registry, and DPAPI-protected secret persistence. Pairing UI, live connection
-supervision, background monitoring, and notifications are not implemented yet.
+migrations, the server registry, and DPAPI-protected secret persistence. Phase 3 now includes manual
+pairing-detail entry; automated pairing, live connection supervision, background monitoring, and
+notifications are not implemented yet.
 
 ## Dependency direction
 

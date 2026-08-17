@@ -81,6 +81,7 @@ public sealed class StorageTests
         try
         {
             secretStore.Store(profile.Id, SecretKind.RustPlusPlayerToken, cleartext);
+            Assert.True(secretStore.Contains(profile.Id, SecretKind.RustPlusPlayerToken));
             var restored = secretStore.Retrieve(profile.Id, SecretKind.RustPlusPlayerToken);
             try
             {
@@ -103,6 +104,7 @@ public sealed class StorageTests
             }
 
             Assert.True(repository.Remove(profile.Id));
+            Assert.False(secretStore.Contains(profile.Id, SecretKind.RustPlusPlayerToken));
             using var cascadeConnection = temporary.Database.OpenConnection();
             Assert.Equal(0L, ExecuteScalar<long>(cascadeConnection, "SELECT COUNT(*) FROM pairings;"));
         }

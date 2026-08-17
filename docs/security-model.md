@@ -31,8 +31,12 @@ SQLite holds ciphertext and non-secret metadata only. Additional entropy binds e
 to the application version, server ID, and secret purpose. Cross-machine export will require explicit
 password-based re-encryption; copying DPAPI ciphertext is not a portable backup.
 
-No UI currently accepts a player token. Phase 3 pairing will pass token bytes directly to
-`ISecretStore`; callers retrieving cleartext own the returned buffer and must zero it after use.
+The Servers UI accepts a signed player token through a masked field for manual pairing import. The
+application validates it without logging it, converts the canonical integer directly into a
+short-lived byte buffer, passes that buffer to `ISecretStore`, and zeroes the buffer immediately.
+The immutable UI string is dereferenced after submission and is never persisted. Editing a server
+leaves the field blank and preserves the existing token unless the user enters a replacement.
+Callers retrieving cleartext own the returned buffer and must zero it after use.
 
 ## Transport
 

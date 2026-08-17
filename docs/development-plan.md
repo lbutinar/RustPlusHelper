@@ -47,6 +47,9 @@ add/edit/select/confirm-remove operations and exposes no token input.
 
 **Goal:** Pair, validate, reconnect, re-pair, and remove servers.
 
+**Status:** In progress. Manual Steam64/player-token entry and DPAPI persistence are implemented;
+automated pairing and live connection supervision remain.
+
 **Modules:** pairing provider, connection manager, per-server supervisor, connection-state view.
 
 **Risks/tests:** FCM/Expo/Steam changes, browser automation, auth classification; mock pairing and

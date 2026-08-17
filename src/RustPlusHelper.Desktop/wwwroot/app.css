@@ -818,6 +818,16 @@ button {
     color: var(--muted);
 }
 
+.status-pill.paired {
+    background: rgba(101, 211, 145, 0.1);
+    color: var(--green);
+}
+
+.status-pill.unpaired {
+    background: rgba(226, 184, 92, 0.1);
+    color: var(--yellow);
+}
+
 .life-pill.dead {
     background: rgba(239, 106, 101, 0.1);
     color: var(--red);
@@ -1126,7 +1136,16 @@ button {
 }
 
 .server-transport {
+    display: block;
     color: var(--muted-2);
+    font-size: 8px;
+}
+
+.server-player-id {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
     font-size: 8px;
 }
 
@@ -1209,7 +1228,8 @@ button {
 
 .server-editor input[type="text"],
 .server-editor input:not([type]),
-.server-editor input[type="number"] {
+.server-editor input[type="number"],
+.server-editor input[type="password"] {
     width: 100%;
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -1219,6 +1239,29 @@ button {
     color: var(--text);
     font: inherit;
     font-size: 10px;
+}
+
+.form-section-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 16px;
+}
+
+.form-section-heading span {
+    color: #d99770;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: 0.14em;
+}
+
+.form-section-heading small,
+.field-help {
+    color: var(--muted-2);
+    font-size: 8px;
+    line-height: 1.45;
 }
 
 .server-editor input:focus {
