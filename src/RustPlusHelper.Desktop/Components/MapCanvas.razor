@@ -60,7 +60,7 @@
                 Layer = MapRenderModelFactory.ToLayerKey(raster.Layer),
                 raster.Width,
                 raster.Height,
-                raster.Rgba,
+                Rgba = Convert.ToBase64String(raster.Rgba),
                 raster.PixelLeft,
                 raster.PixelTop,
                 raster.PixelRight,

@@ -53,6 +53,8 @@ Implemented:
 - one persistent selected-server Rust+ monitor with centralized polling, reconnect backoff, and
   bounded in-memory connection/team/death/respawn/marker events. The map JPEG is never polled;
 - native import of Rust `.map` files using the documented version-10, legacy-LZ4, protobuf format;
+- automatic discovery through Steam libraries, with a server-to-world match from Rust's client log
+  or an exact documented procedural size+seed filename; ambiguous same-size files are never guessed;
 - per-server SQLite persistence and toggleable biome, topology, ore-potential, road, rail, and river
   overlays. Ore potential is topology-derived and never presented as exact live node locations.
 
@@ -94,10 +96,12 @@ the cached map when available or performs the first live map download. Use **Ope
 or **Refresh everything** on the map page for an explicit refresh. Team/chat/marker polling starts
 automatically for the selected server.
 
-Use **Import .map topology** to select the matching world file. Rust normally caches procedural files
-under `C:\Program Files (x86)\Steam\steamapps\common\Rust\maps`. The app rejects a definite world-size
-mismatch, but Rust+ does not expose a map checksum, so a same-size file from another wipe cannot be
-proven wrong. The original file and its full path are not copied into app storage.
+The app automatically checks Steam's Rust map cache after obtaining current server information. It
+uses Rust's connection log when current cache filenames hide the Rust+ seed, or exact size+seed for
+the documented procedural filename. Join the selected server in Rust once if the status asks for a
+connection-log match. **Choose .map manually** remains available when evidence is missing or
+ambiguous. The app never selects a file only because it is newest or the same size, and the original
+file and its full path are not copied into app storage.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 

@@ -20,8 +20,9 @@ Implemented:
   from the latest successful Rust+ snapshot.
 - live connection status plus a bounded event feed for transport, online/offline, death/respawn, and
   marker lifecycle transitions;
-- explicit `.map` import plus disabled-by-default biome, terrain-topology, ore-potential, road, rail,
-  and river layers. Exact no-build geometry remains disabled with its missing-source explanation.
+- automatic Steam-cache `.map` matching with a manual chooser fallback, plus disabled-by-default
+  biome, terrain-topology, ore-potential, road, rail, and river layers. Exact no-build geometry
+  remains disabled with its missing-source explanation.
 
 The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Grid
 references also appear in marker tooltips and the team roster. A future search box may navigate to a

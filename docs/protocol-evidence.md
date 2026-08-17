@@ -92,8 +92,11 @@ protocol capability.
   current independent implementation reference for layer encoding and image orientation.
 
 The importer supports world serialization version 10, rejects definite Rust+/file size mismatches,
-and keeps only display-ready derivatives. Rust+ exposes no map checksum; a same-size map from another
-wipe therefore remains uncertain. The ore overlay is topology potential, not exact live node state.
+and keeps only display-ready derivatives. Automatic discovery first correlates the saved server host
+and world name in Rust's local `output_log.txt`; documented `MapType.Size.Seed.map` matching is a
+secondary path. Current client cache names may append build/hash/checksum segments and may not expose
+the Rust+ seed. Rust+ exposes no map checksum, so same-size-only candidates are never auto-selected.
+The ore overlay is topology potential, not exact live node state.
 
 ## Direct versus derived behavior
 

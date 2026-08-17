@@ -13,7 +13,8 @@ currently create:
 - `servers` for non-secret connection metadata;
 - `pairings` for purpose-labelled DPAPI ciphertext.
 - `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server;
-- `map_topology` for display-ready data derived from one explicitly imported Rust `.map` per server.
+- `map_topology` for display-ready data derived from one automatically matched or manually selected
+  Rust `.map` per server.
 
 The player identity is the application-level source of truth. A server row retains the effective
 Steam64 ID snapshot associated with its current per-server pairing token so a future identity change

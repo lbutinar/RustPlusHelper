@@ -54,6 +54,7 @@ public sealed class MainComponentTests : BunitContext
         var mapCache = new InMemoryMapCacheRepository();
         var mapTopology = new MapTopologyManager(
             new UnavailableMapTopologyProvider(),
+            new UnavailableMapTopologyDiscovery(),
             new InMemoryMapTopologyRepository(),
             TimeProvider.System);
         _dashboard = new MapDashboardService(
@@ -191,6 +192,60 @@ public sealed class MainComponentTests : BunitContext
             candidate => candidate.Identifier == "rustPlusMap.render");
         var imageSource = Assert.IsType<string>(invocation.Arguments[1]);
         Assert.StartsWith("data:image/jpeg;base64,", imageSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MapCanvasPassesTopologyRasterThroughExplicitBase64Contract()
+    {
+        var topology = new SavedMapTopology(
+            Guid.Parse("bb1b670b-3711-42df-90d8-9f0ac9b65ea9"),
+            DateTimeOffset.UtcNow,
+            new ImportedMapTopology(
+                "proceduralmap.4500.123.map",
+                new string('A', 64),
+                10,
+                1,
+                4500,
+                [],
+                0,
+                [],
+                null,
+                new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
+                null));
+        var state = new MapDashboardState(
+            DashboardConnectionState.Ready,
+            "Live map · direct",
+            MapDashboardDataSource.Live,
+            topology.ServerId,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            false,
+            "Live data refreshed",
+            null,
+            new ServerInfoSnapshot(
+                "Live test", null, null, "Procedural Map", 4500, null,
+                null, null, null, null, null, null, null, null, null),
+            new ServerMapSnapshot(
+                1000, 1000, 50, "#FF102030", [], [0xFF, 0xD8, 0xFF, 0xD9]),
+            null,
+            null,
+            null,
+            [],
+            MapDashboardState.CreateLiveMapLayers(topology: topology),
+            null,
+            topology);
+
+        Render<MapCanvas>(parameters => parameters.Add(component => component.State, state));
+
+        var invocation = Assert.Single(
+            JSInterop.Invocations,
+            candidate => candidate.Identifier == "rustPlusMap.render");
+        var model = Assert.IsAssignableFrom<object>(invocation.Arguments[2]);
+        var rasters = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
+            model.GetType().GetProperty("Rasters")?.GetValue(model));
+        var raster = Assert.Single(rasters.Cast<object>());
+        var rgba = Assert.IsType<string>(raster.GetType().GetProperty("Rgba")?.GetValue(raster));
+        Assert.Equal("AQIDBA==", rgba);
     }
 
     [Fact]

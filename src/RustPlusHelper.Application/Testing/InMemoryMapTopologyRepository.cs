@@ -24,3 +24,12 @@ public sealed class UnavailableMapTopologyProvider : IMapTopologyProvider
         Task.FromException<ImportedMapTopology>(
             new InvalidDataException("Rust map import is unavailable in this test source."));
 }
+
+public sealed class UnavailableMapTopologyDiscovery : IMapTopologyDiscovery
+{
+    public Task<MapTopologyDiscoveryResult> DiscoverAsync(
+        MapTopologyDiscoveryRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(MapTopologyDiscoveryResult.NotFound(
+            "No automatically matched Rust map was found. Choose a .map file manually."));
+}

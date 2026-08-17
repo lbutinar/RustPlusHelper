@@ -200,6 +200,7 @@ public sealed class MapDashboardServiceTests
     private static MapTopologyManager CreateTopologyManager() =>
         new(
             new UnavailableMapTopologyProvider(),
+            new UnavailableMapTopologyDiscovery(),
             new InMemoryMapTopologyRepository(),
             TimeProvider.System);
 

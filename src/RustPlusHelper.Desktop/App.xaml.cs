@@ -49,6 +49,8 @@ public partial class App : System.Windows.Application
             0));
         builder.Services.AddSingleton<MapDashboardService>();
         builder.Services.AddSingleton<IMapTopologyProvider, RustMapTopologyProvider>();
+        builder.Services.AddSingleton<IMapTopologyDiscovery>(_ =>
+            new RustMapCacheDiscovery(WindowsSteamRustInstallLocator.FindInstallations()));
         builder.Services.AddSingleton<MapTopologyManager>();
         builder.Services.AddSingleton<IMapFilePicker, WindowsMapFilePicker>();
         builder.Services.AddSingleton(TimeProvider.System);

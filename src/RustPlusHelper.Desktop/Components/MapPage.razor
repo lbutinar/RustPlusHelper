@@ -27,7 +27,7 @@
                       disabled="@State.IsTopologyImporting"
                       @onclick="ImportTopology">
                   <span class="material-icons" aria-hidden="true">layers</span>
-                  @(State.IsTopologyImporting ? "Importing .map…" : "Import .map topology")
+                  @(State.IsTopologyImporting ? "Finding Rust map…" : "Choose .map manually")
               </button>
               <button data-testid="refresh-live-data"
                       type="button"

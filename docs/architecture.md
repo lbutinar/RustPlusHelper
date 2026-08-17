@@ -35,9 +35,10 @@ Blazor Hybrid UI
 External Rust world files follow a separate boundary and never pass through the Rust+ adapter:
 
 ```text
-User-selected .map → IMapTopologyProvider → MapTopologyManager
-                                      ↓
-                         IMapTopologyRepository → map layers
+Steam cache/log → IMapTopologyDiscovery ─┐
+User-selected .map ──────────────────────┴→ IMapTopologyProvider → MapTopologyManager
+                                                                  ↓
+                                                     IMapTopologyRepository → map layers
 ```
 
 The key rule is that `RustPlusApi.Data.*` and protobuf contracts do not cross the infrastructure
@@ -48,8 +49,8 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Application`: application-owned contract, normalized snapshots, redaction utility,
   and deterministic fake client.
 - `RustPlusHelper.Infrastructure.RustPlus`: the pinned RustPlusApi adapter and mapper.
-- `RustPlusHelper.Infrastructure.Map`: bounded version-10 Rust `.map` reader using documented legacy
-  LZ4 and protobuf world contracts; outputs only application-owned display data.
+- `RustPlusHelper.Infrastructure.Map`: bounded version-10 Rust `.map` reader plus conservative Steam
+  cache/log discovery; outputs only application-owned matches and display data.
 - `RustPlusHelper.Infrastructure.Storage`: SQLite migrations/repositories and Windows DPAPI secret
   protection.
 - `RustPlusHelper.Verification`: opt-in read-only protocol verification command.
@@ -74,7 +75,9 @@ server connection tests and live map downloads; replacing the adapter does not c
   supervisor rather than UI timers.
 - `IMapCacheRepository` stores the latest map/server snapshot per saved server for offline reopening.
 - `MapTopologyManager` validates imported world size and `IMapTopologyRepository` persists only
-  derived rasters/path metadata per server. Same-size wipe identity remains explicitly unproven.
+  derived rasters/path metadata per server. `IMapTopologyDiscovery` only auto-selects a cache file
+  when Rust's connection log names it or documented procedural size+seed is unique; same-size-only
+  candidates stay manual.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
 - `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, `DeviceManager`, and

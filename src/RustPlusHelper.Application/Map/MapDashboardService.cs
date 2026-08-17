@@ -20,6 +20,10 @@ public sealed class MapDashboardService(
     TimeProvider timeProvider) : IDisposable, IAsyncDisposable
 {
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
+    private readonly Lock _autoImportLock = new();
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private Task _autoImportTask = Task.CompletedTask;
+    private string? _lastAutoImportKey;
     private bool _liveSessionSubscribed;
     private bool _disposed;
 
@@ -190,6 +194,7 @@ public sealed class MapDashboardService(
         }
 
         _disposed = true;
+        _lifetimeCancellation.Cancel();
         try
         {
             if (_liveSessionSubscribed)
@@ -199,9 +204,24 @@ public sealed class MapDashboardService(
 
             await liveSession.StopAsync(CancellationToken.None).ConfigureAwait(false);
             await demoClient.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+            Task autoImportTask;
+            lock (_autoImportLock)
+            {
+                autoImportTask = _autoImportTask;
+            }
+
+            try
+            {
+                await autoImportTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Application shutdown cancels any in-progress cache scan or map decode.
+            }
         }
         finally
         {
+            _lifetimeCancellation.Dispose();
             _initializationLock.Dispose();
         }
     }
@@ -358,8 +378,130 @@ public sealed class MapDashboardService(
         }
 
         SetState(MergeLiveData(baseState, result));
+        RememberAutoImportKey(serverId, result.ServerInfo);
+        await TryAutoImportTopologyAsync(serverId, result.ServerInfo, cancellationToken).ConfigureAwait(false);
         await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task TryAutoImportTopologyAsync(
+        Guid serverId,
+        ServerInfoSnapshot server,
+        CancellationToken cancellationToken)
+    {
+        var profile = servers.Profiles.FirstOrDefault(candidate => candidate.Id == serverId);
+        if (profile is null || Current.ServerId != serverId)
+        {
+            return;
+        }
+
+        SetState(Current with
+        {
+            IsTopologyImporting = true,
+            TopologyStatus = "Checking Rust's local map cache",
+            TopologyError = null
+        });
+
+        MapTopologyAutoImportResult result;
+        try
+        {
+            result = await topologyManager.TryAutoImportAsync(
+                serverId,
+                profile.Host,
+                server,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_disposed)
+            {
+                SetState(Current with { IsTopologyImporting = false });
+            }
+
+            throw;
+        }
+        catch (Exception)
+        {
+            if (!_disposed && Current.ServerId == serverId)
+            {
+                SetState(Current with
+                {
+                    IsTopologyImporting = false,
+                    TopologyStatus = "Automatic map import failed",
+                    TopologyError = "Rust's local map cache could not be processed automatically. Choose a .map file manually."
+                });
+            }
+
+            return;
+        }
+
+        if (_disposed || Current.ServerId != serverId)
+        {
+            return;
+        }
+
+        var topology = result.Topology ?? Current.Topology;
+        SetState(Current with
+        {
+            Topology = topology,
+            IsTopologyImporting = false,
+            TopologyStatus = result.Message,
+            TopologyError = result.IsError ? result.Message : null,
+            Layers = BuildLiveLayers(
+                Current,
+                Current.Team is not null,
+                Current.Markers is not null,
+                topology)
+        });
+    }
+
+    private void QueueAutoImportTopology(Guid serverId, ServerInfoSnapshot server)
+    {
+        var key = AutoImportKey(serverId, server);
+        lock (_autoImportLock)
+        {
+            if (_disposed || string.Equals(_lastAutoImportKey, key, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastAutoImportKey = key;
+            var previousTask = _autoImportTask;
+            _autoImportTask = RunQueuedAutoImportAsync(previousTask, serverId, server);
+        }
+    }
+
+    private async Task RunQueuedAutoImportAsync(
+        Task previousTask,
+        Guid serverId,
+        ServerInfoSnapshot server)
+    {
+        try
+        {
+            await previousTask.ConfigureAwait(false);
+            if (!_disposed)
+            {
+                await TryAutoImportTopologyAsync(
+                    serverId,
+                    server,
+                    _lifetimeCancellation.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // Expected during application shutdown.
+        }
+    }
+
+    private void RememberAutoImportKey(Guid serverId, ServerInfoSnapshot server)
+    {
+        lock (_autoImportLock)
+        {
+            _lastAutoImportKey = AutoImportKey(serverId, server);
+        }
+    }
+
+    private static string AutoImportKey(Guid serverId, ServerInfoSnapshot server) =>
+        $"{serverId:N}:{server.MapSize}:{server.Seed}:{server.Salt}:{server.WipeTimeUtc?.UtcTicks}";
 
     private MapDashboardState MergeLiveData(
         MapDashboardState state,
@@ -553,6 +695,11 @@ public sealed class MapDashboardService(
             Events = live.Events,
             Layers = BuildLiveLayers(Current, team is not null, markers is not null, Current.Topology)
         });
+
+        if (live.Status == RustPlusLiveSessionStatus.Connected && live.Server is not null)
+        {
+            QueueAutoImportTopology(live.ServerId.Value, live.Server);
+        }
     }
 
     private static string DescribeFailure<T>(RustPlusResult<T>? result) =>

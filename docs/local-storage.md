@@ -20,7 +20,8 @@ file-level backup while the app is open. Prefer closing the application before c
   timestamps;
 - purpose-labelled DPAPI ciphertext for pairing secrets.
 - latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp;
-- optional per-server display rasters and paths derived from an explicitly imported Rust `.map`.
+- optional per-server display rasters and paths derived from an automatically matched or manually
+  selected Rust `.map`.
 
 Team, chat, marker history, and device data are not persisted yet. A map refresh replaces the prior
 snapshot for that server; deleting a server cascades its cached map.

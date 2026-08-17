@@ -92,15 +92,18 @@ is automated; live visual alignment is still pending.
 **Status:** First slice implemented on 2026-08-17. The app imports current serialization-version-10
 Rust `.map` files, decodes the documented legacy-LZ4/protobuf container, validates world size,
 persists display-ready data per server, and renders biome, topology, ore-potential, road, rail, and
-river layers.
+river layers. Steam libraries are checked automatically; Rust's connection log or a unique exact
+procedural size+seed match can select the cache file without user input.
 
-**Modules:** `IMapTopologyProvider`, `MapTopologyManager`, native map infrastructure reader,
-`IMapTopologyRepository`, SQLite migration 4, Leaflet raster/polyline rendering, Windows file picker.
+**Modules:** `IMapTopologyProvider`, `IMapTopologyDiscovery`, `MapTopologyManager`, native map
+infrastructure reader/cache matcher, `IMapTopologyRepository`, SQLite migration 4, Leaflet
+raster/polyline rendering, Windows fallback file picker.
 
-**Risks/tests:** same-size wrong-wipe imports cannot be rejected because Rust+ exposes no checksum;
-format drift and large/corrupt files are bounded and tested with a synthetic container plus a manual
-read-only current-game cache smoke test. Exact node locations remain impossible without server
-access. Exact prefab no-build zones and higher-fidelity biome/splat spawn-rule evaluation remain.
+**Risks/tests:** Rust+ exposes no map checksum, and client log/cache formats can drift. Automatic
+matching therefore never uses recency or size alone. Format drift and large/corrupt files are bounded
+and tested with synthetic containers/cache layouts plus a manual read-only current-game cache smoke
+test. Exact node locations remain impossible without server access. Exact prefab no-build zones and
+higher-fidelity biome/splat spawn-rule evaluation remain.
 
 **Done for this slice:** a definite size mismatch stores nothing; successful imports survive restart;
 source paths are not retained; source classification remains visible in the layer panel.

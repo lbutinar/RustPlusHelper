@@ -78,6 +78,8 @@
 - a synthetic documented container round-trips version-10 header, legacy LZ4, protobuf world data,
   topology, biome channels, prefabs, and centered path coordinates through the production reader;
 - unsupported serialization versions and definite world-size mismatches are rejected;
+- cache discovery tests cover current client suffixes linked through `output_log.txt`, documented
+  procedural size+seed filenames, wipe-time filtering, and refusal to guess among same-size maps;
 - a real temporary SQLite database round-trips derived rasters and paths and verifies delete cascade;
 - a manual read-only smoke test parsed a current locally cached game map into 7 source layers,
   32,112 prefab records, 144 paths, and 384-pixel biome/topology rasters;
