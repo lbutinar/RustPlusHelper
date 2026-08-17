@@ -56,7 +56,8 @@ Implemented:
 - automatic discovery through Steam libraries, with a server-to-world match from Rust's client log
   or an exact documented procedural size+seed filename; ambiguous same-size files are never guessed;
 - per-server SQLite persistence and toggleable biome, topology, ore-potential, road, rail, and river
-  overlays. Ore potential is topology-derived and never presented as exact live node locations.
+  overlays. Raster overlays are cached into one map image and visibility-only changes avoid a full
+  Leaflet rebuild. Ore potential is topology-derived and never presented as exact live node locations.
 
 Still requiring live verification or later phases:
 

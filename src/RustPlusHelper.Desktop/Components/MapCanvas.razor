@@ -15,6 +15,12 @@
     private string? _imageSource;
     private string? _renderedImageSource;
     private string? _renderedTopologyFingerprint;
+    private ServerMapSnapshot? _renderedMap;
+    private TeamSnapshot? _renderedTeam;
+    private MapMarkersSnapshot? _renderedMarkers;
+    private SavedMapTopology? _renderedTopology;
+    private uint? _renderedMapSize;
+    private IReadOnlyDictionary<string, bool>? _renderedLayerVisibility;
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
@@ -23,6 +29,30 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        var layerVisibility = State.Layers.ToDictionary(
+            layer => MapRenderModelFactory.ToLayerKey(layer.Kind),
+            layer => layer.IsVisible && layer.IsAvailable,
+            StringComparer.Ordinal);
+        var requiresFullRender = !_interopCreated
+            || !ReferenceEquals(_renderedMap, State.Map)
+            || !ReferenceEquals(_renderedTeam, State.Team)
+            || !ReferenceEquals(_renderedMarkers, State.Markers)
+            || !ReferenceEquals(_renderedTopology, State.Topology)
+            || _renderedMapSize != State.Server?.MapSize;
+        if (!requiresFullRender)
+        {
+            if (!LayerVisibilityEquals(_renderedLayerVisibility, layerVisibility))
+            {
+                await JavaScript.InvokeVoidAsync(
+                    "rustPlusMap.setLayerVisibility",
+                    ElementId,
+                    layerVisibility);
+                _renderedLayerVisibility = layerVisibility;
+            }
+
+            return;
+        }
+
         var model = MapRenderModelFactory.Create(State);
         if (model is null)
         {
@@ -85,7 +115,20 @@
         _interopCreated = true;
         _renderedImageSource = imageSource;
         _renderedTopologyFingerprint = topologyFingerprint;
+        _renderedMap = State.Map;
+        _renderedTeam = State.Team;
+        _renderedMarkers = State.Markers;
+        _renderedTopology = State.Topology;
+        _renderedMapSize = State.Server?.MapSize;
+        _renderedLayerVisibility = layerVisibility;
     }
+
+    private static bool LayerVisibilityEquals(
+        IReadOnlyDictionary<string, bool>? previous,
+        IReadOnlyDictionary<string, bool> current) =>
+        previous is not null
+        && previous.Count == current.Count
+        && current.All(entry => previous.TryGetValue(entry.Key, out var value) && value == entry.Value);
 
     private string GetImageSource()
     {

@@ -83,6 +83,9 @@
 - a real temporary SQLite database round-trips derived rasters and paths and verifies delete cascade;
 - a manual read-only smoke test parsed a current locally cached game map into 7 source layers,
   32,112 prefab records, 144 paths, and 384-pixel biome/topology rasters;
+- a component regression test proves a visibility-only layer change does not resend the full map
+  model, and a private Debug smoke run kept topology enabled across live updates while remaining
+  responsive (0.28 process CPU seconds over 5 seconds versus 0.33 with derived rasters disabled);
 - the repository contains no live `.map` fixture or source path.
 
 ## Test layers planned

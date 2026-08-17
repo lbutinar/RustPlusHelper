@@ -205,6 +205,37 @@ public partial class MainWindow : Window
                 }
             }
 
+            var layerToToggle = Environment.GetEnvironmentVariable("RUSTPLUSHELPER_UI_CAPTURE_LAYER");
+            if (!string.IsNullOrWhiteSpace(layerToToggle))
+            {
+                var encodedLayer = System.Text.Json.JsonSerializer.Serialize(layerToToggle);
+                var toggled = await blazorWebView.WebView.CoreWebView2.ExecuteScriptAsync(
+                    $"(() => {{ const label = [...document.querySelectorAll('.layer-row')].find(item => item.querySelector('strong')?.textContent.trim() === {encodedLayer}); const input = label?.querySelector('input'); if (!input || input.disabled) return false; input.checked = true; input.dispatchEvent(new Event('change', {{ bubbles: true }})); return input.checked; }})()");
+                if (!string.Equals(toggled, "true", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The requested map layer was not available for UI capture.");
+                }
+            }
+
+            if (int.TryParse(
+                    Environment.GetEnvironmentVariable("RUSTPLUSHELPER_UI_CAPTURE_HOLD_SECONDS"),
+                    out var holdSeconds)
+                && holdSeconds > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(holdSeconds, 60)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(layerToToggle))
+            {
+                var encodedLayer = System.Text.Json.JsonSerializer.Serialize(layerToToggle);
+                var remainsEnabled = await blazorWebView.WebView.CoreWebView2.ExecuteScriptAsync(
+                    $"(() => {{ const label = [...document.querySelectorAll('.layer-row')].find(item => item.querySelector('strong')?.textContent.trim() === {encodedLayer}); return label?.querySelector('input')?.checked === true; }})()");
+                if (!string.Equals(remainsEnabled, "true", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The requested map layer did not remain enabled during UI capture.");
+                }
+            }
+
             await using var output = File.Create(fullPath);
             await blazorWebView.WebView.CoreWebView2.CapturePreviewAsync(
                 CoreWebView2CapturePreviewImageFormat.Png,

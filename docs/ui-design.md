@@ -59,8 +59,11 @@ The application opens to the map, not a generic dashboard.
 - Leaflet `CRS.Simple` for the Rust JPEG and overlays;
 - small JavaScript adapter receiving canonical map DTOs and batched deltas.
 
-Phase 1 currently sends normalized complete overlay snapshots to a persistent Leaflet map and clears
-individual layer groups. Fine-grained add/update/remove deltas are deferred until live polling exists.
+The UI sends normalized overlay snapshots to a persistent Leaflet map when source data changes.
+Visibility-only changes use a small interop call and do not rebuild markers, paths, or the grid.
+Biome, terrain-topology, and ore-potential rasters are flattened into one cached, opaque map image so
+WebView2 does not continuously composite multiple full-map transparent layers. Fine-grained
+add/update/remove deltas for moving markers remain deferred.
 
 Keeping the full interactive content inside `BlazorWebView` avoids mixing native WPF overlays with the
 browser-rendered map.

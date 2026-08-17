@@ -195,6 +195,50 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void MapCanvasChangesOnlyLeafletVisibilityWhenDataSnapshotsAreUnchanged()
+    {
+        var state = new MapDashboardState(
+            DashboardConnectionState.Ready,
+            "Live map · direct",
+            MapDashboardDataSource.Live,
+            Guid.Parse("bb1b670b-3711-42df-90d8-9f0ac9b65ea9"),
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            false,
+            "Live data refreshed",
+            null,
+            new ServerInfoSnapshot(
+                "Live test", null, null, "Procedural Map", 4500, null,
+                null, null, null, null, null, null, null, null, null),
+            new ServerMapSnapshot(
+                1000, 1000, 50, "#FF102030", [], [0xFF, 0xD8, 0xFF, 0xD9]),
+            null,
+            null,
+            null,
+            [],
+            MapDashboardState.CreateLiveMapLayers(),
+            null);
+        var component = Render<MapCanvas>(parameters => parameters.Add(canvas => canvas.State, state));
+        var layers = state.Layers
+            .Select(layer => layer.Kind == MapLayerKind.Grid ? layer with { IsVisible = false } : layer)
+            .ToArray();
+
+        component.Render(parameters => parameters.Add(canvas => canvas.State, state with
+        {
+            Layers = layers,
+            LiveDataStatus = "Status-only change"
+        }));
+
+        Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "rustPlusMap.render");
+        var visibilityInvocation = Assert.Single(
+            JSInterop.Invocations,
+            invocation => invocation.Identifier == "rustPlusMap.setLayerVisibility");
+        var visibility = Assert.IsAssignableFrom<IReadOnlyDictionary<string, bool>>(
+            visibilityInvocation.Arguments[1]);
+        Assert.False(visibility["grid"]);
+    }
+
+    [Fact]
     public void MapCanvasPassesTopologyRasterThroughExplicitBase64Contract()
     {
         var topology = new SavedMapTopology(
