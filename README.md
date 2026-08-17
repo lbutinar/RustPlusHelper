@@ -94,5 +94,5 @@ environment variables and run the read-only check.
 
 ## License
 
-No project license has been selected yet. The pinned `RustPlusApi` dependency is MIT licensed. Do not
-assume this repository itself is open source until a project license is explicitly added.
+RustPlusHelper is licensed under the [MIT License](LICENSE). Third-party components retain their own
+licenses as listed in [Third-party notices](THIRD-PARTY-NOTICES.md).
