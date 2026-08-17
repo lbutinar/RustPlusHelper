@@ -1,0 +1,39 @@
+# Rust+ capability matrix
+
+Classifications describe the primary verified source.
+
+| Feature | Classification | Boundary |
+|---|---|---|
+| Companion WebSocket and authenticated requests | **AVAILABLE DIRECTLY THROUGH RUST+** | Host/port plus player ID/token |
+| Player/server pairing | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Reverse-engineered FCM/Expo/Facepunch registration |
+| Server metadata, time, population, queue | **AVAILABLE DIRECTLY THROUGH RUST+** | Typed requests |
+| Base map JPEG, dimensions, margin | **AVAILABLE DIRECTLY THROUGH RUST+** | Map request |
+| Monument token/name and position | **AVAILABLE DIRECTLY THROUGH RUST+** | Friendly naming may need local mapping |
+| Team roster, position, online/alive state | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |
+| Grid reference | **AVAILABLE DIRECTLY THROUGH RUST+** | Locally derived from direct coordinates/map size |
+| Team chat read/send | **AVAILABLE DIRECTLY THROUGH RUST+** | Team chat requests/broadcast |
+| Team map notes | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |
+| Death/respawn event | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Snapshot-derived from alive and timestamps |
+| Killer, weapon, cause of death | **REQUIRES RUST SERVER ACCESS** | Plugin/log/RCON-class data source |
+| Steam avatar/profile | **REQUIRES ADDITIONAL DATA SOURCE** | Steam/profile API |
+| Cargo, CH47, patrol heli, crates, explosions | **AVAILABLE DIRECTLY THROUGH RUST+** | Current map markers |
+| Travelling vendor | **AVAILABLE DIRECTLY THROUGH RUST+** | Newer marker type; older schemas may label unknown |
+| Marker lifecycle events | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Snapshot diff |
+| Oil-rig monument | **AVAILABLE DIRECTLY THROUGH RUST+** | Monument data |
+| Oil-rig activation | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Heuristic, not direct event |
+| Vending position, orders, price, stock | **AVAILABLE DIRECTLY THROUGH RUST+** | Vending marker sell orders |
+| Vending item names/icons | **REQUIRES ADDITIONAL DATA SOURCE** | Versioned Rust item catalogue |
+| Vending owner Steam ID | **NOT CURRENTLY POSSIBLE** | Not in verified marker contract |
+| Smart Switch read/control | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
+| Smart Alarm state/subscription | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
+| Storage Monitor | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
+| Generic electrical entity discovery | **NOT CURRENTLY POSSIBLE** | No verified enumeration request |
+| Dedicated light/door/lock/turret state | **NOT CURRENTLY POSSIBLE** | Smart Switch can only control a wired circuit indirectly |
+| CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code |
+| CCTV discovery and map position | **REQUIRES ADDITIONAL DATA SOURCE** | User/static catalogue/manual placement |
+| Resource locations | **NOT CURRENTLY POSSIBLE** | Not in verified Rust+ map response |
+| Exact recycler locations | **REQUIRES ADDITIONAL DATA SOURCE** | Static catalogue or parsed server map |
+| Arbitrary world-entity enumeration | **NOT CURRENTLY POSSIBLE** | No verified generic entity request |
+| Server-wide kill feed and raid events | **REQUIRES RUST SERVER ACCESS** | Plugin/log/server source |
+| Historical positions/events | **AVAILABLE DIRECTLY THROUGH RUST+** | Application records successive direct snapshots locally |
+| Existing authoritative history archive | **REQUIRES ADDITIONAL DATA SOURCE** | Unofficial history API is deferred |

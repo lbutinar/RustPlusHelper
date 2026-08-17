@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Application-owned Rust+ contracts and canonical data models.</Description>
+  </PropertyGroup>
+</Project>

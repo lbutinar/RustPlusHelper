@@ -1,0 +1,35 @@
+# .NET build output
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDEs
+.vs/
+.idea/
+.vscode/
+
+# Phase 0 verification output (may contain server-derived data)
+artifacts/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+credentials.json
+pairing*.json
+
+# Logs and databases
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+Thumbs.db
+.DS_Store

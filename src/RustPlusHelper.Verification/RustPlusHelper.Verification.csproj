@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Read-only Phase 0 Rust+ protocol verification command.</Description>
+    <UserSecretsId>RustPlusHelper-Phase0-Verification</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
+    <ProjectReference Include="../RustPlusHelper.Infrastructure.RustPlus/RustPlusHelper.Infrastructure.RustPlus.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="RustPlusHelper.Tests" />
+  </ItemGroup>
+</Project>
