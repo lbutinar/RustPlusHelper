@@ -5,11 +5,13 @@
         xmlns:local="clr-namespace:RustPlusHelper.Desktop"
         Title="RustPlusHelper"
         Icon="/RustPlusHelper;component/Assets/rustplus-app-icon.png"
-        Width="1440"
-        Height="900"
-        MinWidth="1100"
-        MinHeight="700"
-        WindowStartupLocation="CenterScreen"
+        Width="1280"
+        Height="720"
+        MinWidth="900"
+        MinHeight="600"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         Background="#101312">
     <Grid>
         <blazor:BlazorWebView x:Name="blazorWebView"

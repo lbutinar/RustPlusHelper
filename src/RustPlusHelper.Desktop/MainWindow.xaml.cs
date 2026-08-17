@@ -1,5 +1,7 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
 
 namespace RustPlusHelper.Desktop;
@@ -11,10 +13,128 @@ public partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(services);
         Resources.Add("services", services);
         InitializeComponent();
+        SourceInitialized += PlaceOnLargestDisplay;
 #if DEBUG
         Loaded += CaptureWebViewForSmokeTestAsync;
 #endif
     }
+
+    private void PlaceOnLargestDisplay(object? sender, EventArgs e)
+    {
+        var workArea = GetDisplayWorkAreas()
+            .OrderByDescending(area => (long)area.Width * area.Height)
+            .FirstOrDefault();
+        if (workArea.Width <= 0 || workArea.Height <= 0)
+        {
+            return;
+        }
+
+        const double workAreaUsage = 0.9;
+        var width = Math.Max(1, (int)Math.Round(workArea.Width * workAreaUsage));
+        var height = Math.Max(1, (int)Math.Round(workArea.Height * workAreaUsage));
+        var left = workArea.Left + ((workArea.Width - width) / 2);
+        var top = workArea.Top + ((workArea.Height - height) / 2);
+        var windowHandle = new WindowInteropHelper(this).Handle;
+
+        if (!SetWindowPos(
+                windowHandle,
+                IntPtr.Zero,
+                left,
+                top,
+                width,
+                height,
+                SetWindowPosFlags.NoActivate | SetWindowPosFlags.NoZOrder))
+        {
+            System.Diagnostics.Debug.WriteLine("The initial window bounds could not be applied.");
+        }
+    }
+
+    private static IReadOnlyList<PixelBounds> GetDisplayWorkAreas()
+    {
+        var workAreas = new List<PixelBounds>();
+        MonitorEnumerationCallback callback = (monitor, _, _, _) =>
+        {
+            var monitorInfo = new MonitorInfo
+            {
+                Size = (uint)Marshal.SizeOf<MonitorInfo>()
+            };
+
+            if (GetMonitorInfo(monitor, ref monitorInfo))
+            {
+                workAreas.Add(new PixelBounds(
+                    monitorInfo.WorkArea.Left,
+                    monitorInfo.WorkArea.Top,
+                    monitorInfo.WorkArea.Right - monitorInfo.WorkArea.Left,
+                    monitorInfo.WorkArea.Bottom - monitorInfo.WorkArea.Top));
+            }
+
+            return true;
+        };
+
+        if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero))
+        {
+            System.Diagnostics.Debug.WriteLine("Connected displays could not be enumerated.");
+        }
+
+        GC.KeepAlive(callback);
+        return workAreas;
+    }
+
+    private delegate bool MonitorEnumerationCallback(
+        IntPtr monitor,
+        IntPtr deviceContext,
+        IntPtr monitorBounds,
+        IntPtr state);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayMonitors(
+        IntPtr deviceContext,
+        IntPtr clippingRectangle,
+        MonitorEnumerationCallback callback,
+        IntPtr state);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo monitorInfo);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr windowHandle,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        SetWindowPosFlags flags);
+
+    [Flags]
+    private enum SetWindowPosFlags : uint
+    {
+        NoZOrder = 0x0004,
+        NoActivate = 0x0010
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public uint Size;
+        public NativeRectangle MonitorArea;
+        public NativeRectangle WorkArea;
+        public uint Flags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRectangle
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    private readonly record struct PixelBounds(int Left, int Top, int Width, int Height);
 
 #if DEBUG
     private async void CaptureWebViewForSmokeTestAsync(object sender, RoutedEventArgs e)
