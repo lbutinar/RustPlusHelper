@@ -19,6 +19,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly InMemoryServerRepository _serverRepository;
     private readonly InMemorySecretStore _secretStore;
     private readonly PlayerIdentityManager _identityManager;
+    private readonly RustPlusConnectionManager _connections;
 
     public MainComponentTests()
     {
@@ -39,6 +40,11 @@ public sealed class MainComponentTests : BunitContext
             TimeProvider.System,
             _secretStore,
             _identityManager);
+        _connections = new RustPlusConnectionManager(
+            serverManager,
+            _secretStore,
+            new FakeClientFactory(),
+            TimeProvider.System);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
         // component test independent from the Windows desktop composition root.
@@ -48,6 +54,7 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton<ISecretStore>(_secretStore);
         Services.AddSingleton(_identityManager);
         Services.AddSingleton(serverManager);
+        Services.AddSingleton(_connections);
     }
 
     [Fact]
@@ -128,6 +135,8 @@ public sealed class MainComponentTests : BunitContext
         component.Find("[data-testid='server-name']").Change("EU Medium");
         component.Find("[data-testid='server-host']").Change("companion.example.invalid");
         component.Find("[data-testid='server-port']").Change("28100");
+        component.Find("[data-testid='server-proxy']").Change(false);
+        Assert.Contains("Direct connection is not encrypted", component.Markup, StringComparison.Ordinal);
         component.Find("[data-testid='save-server']").Click();
 
         component.WaitForAssertion(() =>
@@ -136,6 +145,7 @@ public sealed class MainComponentTests : BunitContext
             Assert.Equal("EU Medium", saved.DisplayName);
             Assert.Equal("companion.example.invalid", saved.Host);
             Assert.Equal(28100, saved.Port);
+            Assert.False(saved.UseFacepunchProxy);
             Assert.Contains("SQLITE READY", component.Markup, StringComparison.Ordinal);
         });
     }
@@ -179,5 +189,36 @@ public sealed class MainComponentTests : BunitContext
                 }
             }
         });
+    }
+
+    [Fact]
+    public void ServerPageTestsSavedPairingWithReadOnlyServerInformation()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Servers", StringComparison.Ordinal))
+            .Click();
+
+        component.Find("[data-testid='player-identity-id']").Change("76561198000000000");
+        component.Find("[data-testid='save-player-identity']").Click();
+        component.Find("[data-testid='server-name']").Change("Test Dev");
+        component.Find("[data-testid='server-host']").Change("companion.example.invalid");
+        component.Find("[data-testid='server-player-token']").Change("123456789");
+        component.Find("[data-testid='save-server']").Click();
+        component.Find("[data-testid='test-server-connection']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            var result = component.Find("[data-testid='connection-test-result']");
+            Assert.Contains("Connection verified", result.TextContent, StringComparison.Ordinal);
+            Assert.Contains("Fake EU Main", result.TextContent, StringComparison.Ordinal);
+            Assert.Contains("87 / 200 players", result.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    private sealed class FakeClientFactory : IRustPlusClientFactory
+    {
+        public IRustPlusClient Create() => new FakeRustPlusClient();
     }
 }

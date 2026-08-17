@@ -37,6 +37,16 @@
 - the actual Servers component saves through `ServerManager`;
 - the privacy-safe smoke runner can navigate to and validate the Servers page.
 
+## Current Phase 3 tests
+
+- a successful connection test opens a client, validates with read-only server information, closes
+  the socket, and clears the retrieved token buffer;
+- `AccessDenied` is reported as rejected pairing rather than a generic transport failure;
+- direct `ws://` is used only when explicitly persisted on the profile;
+- a failed secure-proxy attempt is never retried through direct transport;
+- transport exceptions cannot surface a numeric player token in connection state;
+- the Servers page exercises the saved-pairing **Test connection** flow through a fake client factory.
+
 ## Test layers planned
 
 ### Unit
@@ -90,6 +100,11 @@ The script launches only the built Debug executable with a one-process environme
 captures its own WebView content through WebView2, stores the PNG under ignored `artifacts/ui/`, and
 then closes. It never reads desktop pixels, so other applications and notifications cannot appear in
 the image. The capture-only hook is excluded from Release builds.
+
+For an explicit local live diagnostic, set `RUSTPLUSHELPER_UI_CAPTURE_LIVE_TEST=1` for a Servers
+capture. That makes the Debug-only hook click the first saved server's **Test connection** button and
+wait for its terminal status before capturing. This opt-in path must never be enabled in CI, and its
+ignored screenshot can contain private server/profile data.
 
 ### Live
 

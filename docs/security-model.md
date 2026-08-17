@@ -40,6 +40,14 @@ The immutable UI string is dereferenced after submission and is never persisted.
 leaves the field blank and preserves the existing token unless the user enters a replacement.
 Callers retrieving cleartext own the returned buffer and must zero it after use.
 
+The explicit desktop connection test retrieves the token only after the user clicks **Test
+connection**, parses it directly from the caller-owned UTF-8 buffer, and zeroes that buffer in a
+`finally` block. It reports allowlisted status text rather than raw transport exceptions and validates
+authentication only with the read-only server-information request. Expected adapter failures use a
+credential-redacted exception type, allowing useful local diagnostics without exposing the token;
+all other unexpected exceptions receive generic UI text. The short-lived socket is closed after the
+test.
+
 ## Transport
 
 The official companion server exposes direct `ws://`. Authenticated requests carry player identity
@@ -49,6 +57,8 @@ The application therefore:
 
 - defaults to the Facepunch secure proxy supported by the selected libraries;
 - requires `--allow-insecure-direct` when Phase 0 configuration disables the proxy;
+- requires an explicit persisted desktop transport choice and displays a plaintext-credential
+  warning before the desktop can use direct `ws://`;
 - will never silently downgrade to direct transport;
 - still requires live confirmation that proxy behavior works for the selected server.
 

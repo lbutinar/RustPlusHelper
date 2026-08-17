@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject PlayerIdentityManager Identity
 @inject ServerManager Servers
+@inject RustPlusConnectionManager Connections
 @inject ILogger<ServersPage> Logger
 
 <section class="content-page servers-page">
@@ -50,6 +51,7 @@
                     @foreach (var profile in Servers.Profiles)
                     {
                         var hasPairing = Servers.HasPairing(profile.Id) && Identity.Current is not null;
+                        var connection = Connections.GetState(profile.Id);
                         <article class="surface-card saved-server-card" @key="profile.Id">
                             <div class="server-monogram">@Monogram(profile.DisplayName)</div>
                             <div class="saved-server-main">
@@ -69,6 +71,13 @@
                                 <span class="status-pill @(hasPairing ? "paired" : "unpaired")">
                                     @(hasPairing ? "PAIRING SAVED" : "NOT PAIRED")
                                 </span>
+                                <button data-testid="test-server-connection"
+                                        type="button"
+                                        class="ghost-button test-connection-button"
+                                        disabled="@connection.IsInProgress"
+                                        @onclick="() => TestConnection(profile.Id)">
+                                    @(connection.IsInProgress ? "Testing…" : "Test connection")
+                                </button>
                                 <button type="button" class="ghost-button" @onclick="() => SelectProfile(profile.Id)">Select</button>
                                 <button type="button" class="ghost-button" @onclick="() => EditProfile(profile)">Edit</button>
                                 @if (_removeConfirmationId == profile.Id)
@@ -81,6 +90,28 @@
                                     <button type="button" class="ghost-button danger-text" @onclick="() => BeginRemove(profile.Id)">Remove</button>
                                 }
                             </div>
+                            @if (connection.Status != RustPlusConnectionStatus.NotTested)
+                            {
+                                <div data-testid="connection-test-result"
+                                     class="connection-test-result @ConnectionResultCss(connection.Status)"
+                                     role="status">
+                                    <span class="material-icons" aria-hidden="true">@ConnectionResultIcon(connection.Status)</span>
+                                    <div>
+                                        <strong>@connection.Label</strong>
+                                        @if (!string.IsNullOrWhiteSpace(connection.Detail))
+                                        {
+                                            <p>@connection.Detail</p>
+                                        }
+                                        @if (connection.ServerInfo is { } serverInfo)
+                                        {
+                                            <small>
+                                                @(serverInfo.Name ?? profile.DisplayName)
+                                                @FormatPopulation(serverInfo)
+                                            </small>
+                                        }
+                                    </div>
+                                </div>
+                            }
                         </article>
                     }
                 </div>
@@ -165,9 +196,16 @@
                     <input data-testid="server-proxy" type="checkbox" @bind="_useFacepunchProxy" />
                     <span>
                         <strong>Use Facepunch secure proxy</strong>
-                        <small>Recommended. Direct ws:// transport is never enabled silently.</small>
+                        <small>Recommended. Unchecking this explicitly enables plaintext direct transport.</small>
                     </span>
                 </label>
+                @if (!_useFacepunchProxy)
+                {
+                    <div class="transport-warning" role="alert">
+                        <strong>Direct connection is not encrypted</strong>
+                        <span>Your Steam64 ID and player token will be sent to the server over <code>ws://</code>. The app never falls back to this mode automatically.</span>
+                    </div>
+                }
 
                 @if (!string.IsNullOrWhiteSpace(_errorMessage))
                 {
@@ -213,6 +251,7 @@
     {
         Identity.Changed += HandleIdentityChanged;
         Servers.Changed += HandleServersChanged;
+        Connections.StateChanged += HandleConnectionStateChanged;
         Identity.Load();
         Servers.Load();
         _playerId = Identity.Current?.SteamId.ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -223,6 +262,7 @@
     {
         Identity.Changed -= HandleIdentityChanged;
         Servers.Changed -= HandleServersChanged;
+        Connections.StateChanged -= HandleConnectionStateChanged;
     }
 
     private void SaveIdentity()
@@ -259,7 +299,7 @@
     {
         try
         {
-            Servers.SaveWithPairing(new ServerProfileDraft(
+            var profile = Servers.SaveWithPairing(new ServerProfileDraft(
                 _editingId,
                 _displayName,
                 _host,
@@ -267,6 +307,7 @@
                 _useFacepunchProxy,
                 null),
                 _playerToken.AsSpan());
+            Connections.Reset(profile.Id);
             ResetEditor();
         }
         catch (ArgumentException exception)
@@ -285,6 +326,30 @@
         if (!Servers.Select(id))
         {
             _errorMessage = "The selected server no longer exists.";
+        }
+    }
+
+    private async Task TestConnection(Guid id)
+    {
+        _errorMessage = null;
+        if (!Servers.Select(id))
+        {
+            _errorMessage = "The selected server no longer exists.";
+            return;
+        }
+
+        try
+        {
+            await Connections.TestConnectionAsync(id);
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "The connection test was cancelled.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unexpected failure while testing Rust+ server {ServerId}.", id);
+            _errorMessage = "The connection test failed unexpectedly.";
         }
     }
 
@@ -308,6 +373,7 @@
         try
         {
             Servers.Remove(id);
+            Connections.Reset(id);
             _removeConfirmationId = null;
             if (_editingId == id)
             {
@@ -337,6 +403,30 @@
 
     private void HandleIdentityChanged(object? sender, EventArgs args) =>
         _ = InvokeAsync(StateHasChanged);
+
+    private void HandleConnectionStateChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private static string ConnectionResultCss(RustPlusConnectionStatus status) => status switch
+    {
+        RustPlusConnectionStatus.Succeeded => "connection-success",
+        RustPlusConnectionStatus.Connecting or RustPlusConnectionStatus.Authenticating => "connection-progress",
+        _ => "connection-failure"
+    };
+
+    private static string ConnectionResultIcon(RustPlusConnectionStatus status) => status switch
+    {
+        RustPlusConnectionStatus.Succeeded => "check_circle",
+        RustPlusConnectionStatus.Connecting or RustPlusConnectionStatus.Authenticating => "sync",
+        RustPlusConnectionStatus.PairingRequired => "key",
+        RustPlusConnectionStatus.AuthenticationRejected => "lock",
+        _ => "error"
+    };
+
+    private static string FormatPopulation(ServerInfoSnapshot serverInfo) =>
+        serverInfo.PlayerCount is { } players && serverInfo.MaxPlayerCount is { } maximum
+            ? $" · {players} / {maximum} players"
+            : string.Empty;
 
     private static string Monogram(string name)
     {

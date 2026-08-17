@@ -45,6 +45,12 @@ Connection authentication is represented by server, companion port, Steam64 play
 request flow; the application keeps them behind `RustPlusConnectionOptions` and redacts token string
 output.
 
+The desktop connection test deliberately distinguishes socket-open from authenticated-ready. It uses
+`GetInfoAsync` as the one-token read-only validation request, classifies the pinned library's verified
+`AccessDenied` code as rejected pairing, and closes the test socket after validation. Secure proxy is
+the default; direct `ws://` is available only through an explicit persisted user choice and there is
+no proxy fallback.
+
 ## Source-verified fields retained by the adapter
 
 - Server: map size, wipe time, population, queue, seed/salt, branding URLs, and Nexus metadata.
@@ -73,10 +79,15 @@ Unknown marker numeric type and unsigned marker ID are deliberately preserved.
 
 ## Live evidence status
 
-No real credentials were supplied during repository creation. Therefore these items remain **pending,
-not confirmed live**:
+On 2026-08-17, an explicit read-only desktop test used a locally DPAPI-protected pairing against the
+selected server. The dependency graph and credential retrieval succeeded, and the TLS endpoint at
+Facepunch was reached, but the proxy rejected the WebSocket upgrade with HTTP `418` instead of `101`.
+No protobuf request was sent, so this is transport evidence only—not authenticated protocol success.
+The test did not fall back to plaintext direct transport.
 
-- secure proxy connection against the user's server;
+These items remain **pending, not confirmed live**:
+
+- a successful connection through either explicitly selected transport;
 - success of all five read-only operations for the user's current team/server state;
 - real optional-field population;
 - image/world coordinate alignment against the official app;
@@ -93,7 +104,7 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 
 | Question | Current position | Required evidence |
 |---|---|---|
-| Facepunch secure proxy reliability | Supported by both selected libraries; not officially specified like direct server port | Live Phase 0 run |
+| Facepunch secure proxy reliability | Selected live server returned HTTP 418 before WebSocket upgrade; current proxy viability is unconfirmed | Successful live check on another server or upstream clarification |
 | Exact grid-cell formula | Community implementations differ | Golden comparison with official Rust+ app |
 | Pairing-token lifetime/rejection codes | Unofficial implementations document behavior; may change | Controlled expired/re-pair test |
 | Unknown marker evolution | Expected because newer travelling-vendor fields already demonstrate drift | Preserve unknown type and capture future fixture |

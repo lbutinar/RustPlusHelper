@@ -8,6 +8,7 @@ using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
+using RustPlusHelper.Infrastructure.RustPlus;
 using RustPlusHelper.Infrastructure.Storage;
 using RustPlusHelper.Infrastructure.Storage.Identity;
 using RustPlusHelper.Infrastructure.Storage.Security;
@@ -30,6 +31,8 @@ public partial class App : System.Windows.Application
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif
         builder.Services.AddSingleton<IRustPlusClient, FakeRustPlusClient>();
+        builder.Services.AddSingleton<IRustPlusClientFactory, RustPlusApiClientFactory>();
+        builder.Services.AddSingleton<RustPlusConnectionManager>();
         builder.Services.AddSingleton(new RustPlusConnectionOptions(
             "fake.invalid",
             28082,

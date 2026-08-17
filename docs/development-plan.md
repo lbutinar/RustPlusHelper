@@ -7,7 +7,9 @@
 **Current deliverables:** application-owned client boundary, RustPlusApi adapter, fake source,
 read-only verification CLI, aggregate report, map output, tests, and protocol/security documents.
 
-**Remaining dependency:** a real paired server and credentials supplied outside Git.
+**Remaining dependency:** a successful authenticated live connection. A paired server is now stored
+outside Git, but its first secure-proxy attempt returned HTTP 418 before WebSocket upgrade; direct
+plaintext transport has not been enabled without explicit user consent.
 
 **Done:** five live read-only calls succeed through the selected transport; map is saved; protocol
 evidence is updated; secrets are absent from output; reviewed fixture capture is resolved.
@@ -48,12 +50,20 @@ add/edit/select/confirm-remove operations and exposes no token input.
 **Goal:** Pair, validate, reconnect, re-pair, and remove servers.
 
 **Status:** In progress. One application-level Steam64 identity, manual per-server player-token entry,
-and DPAPI persistence are implemented; automated pairing and live connection supervision remain.
+DPAPI persistence, and an explicit secure read-only connection/authentication test are implemented.
+Automated pairing, persistent connection supervision, and reconnection remain.
 
 **Modules:** pairing provider, connection manager, per-server supervisor, connection-state view.
 
 **Risks/tests:** FCM/Expo/Steam changes, browser automation, auth classification; mock pairing and
 reconnection tests.
+
+**Current evidence:** the connection test reads the selected profile and protected token, clears the
+retrieved cleartext buffer, uses exactly the explicitly saved transport, and requires a successful
+`GetInfoAsync` response before reporting success. Secure proxy remains the default; direct `ws://`
+requires an explicit plaintext warning and there is no automatic fallback. Unit/component tests
+cover success, token-buffer clearing, `AccessDenied`, transport failure redaction, explicit direct
+selection, no fallback, and the Servers UI state.
 
 **Done:** user can pair, restart, reconnect, test, re-pair, and remove credentials safely.
 

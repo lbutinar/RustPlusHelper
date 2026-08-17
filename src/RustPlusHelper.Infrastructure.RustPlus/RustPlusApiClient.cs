@@ -51,7 +51,9 @@ public sealed class RustPlusApiClient : IRustPlusClient
             await client.DisposeAsync().ConfigureAwait(false);
             var safeMessage = SecretRedactor.Redact(exception.Message, _tokenText);
             _tokenText = null;
-            throw new InvalidOperationException($"Rust+ connection failed: {safeMessage}");
+            throw new RustPlusConnectionException(
+                "websocket_connect_failed",
+                $"Rust+ connection failed: {safeMessage}");
         }
     }
 

@@ -1146,6 +1146,69 @@ button {
     flex-wrap: wrap;
 }
 
+.test-connection-button {
+    border-color: rgba(112, 168, 206, 0.35);
+    color: #a9d2ed;
+}
+
+.ghost-button:disabled,
+.primary-button:disabled,
+.danger-button:disabled {
+    cursor: wait;
+    opacity: 0.58;
+}
+
+.connection-test-result {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 12px;
+}
+
+.connection-test-result > .material-icons {
+    font-size: 18px;
+}
+
+.connection-test-result strong,
+.connection-test-result p,
+.connection-test-result small {
+    display: block;
+}
+
+.connection-test-result strong {
+    font-size: 10px;
+}
+
+.connection-test-result p,
+.connection-test-result small {
+    margin: 3px 0 0;
+    color: var(--muted);
+    font-size: 8px;
+    line-height: 1.5;
+}
+
+.connection-success > .material-icons,
+.connection-success strong {
+    color: var(--green);
+}
+
+.connection-progress > .material-icons,
+.connection-progress strong {
+    color: var(--blue);
+}
+
+.connection-progress > .material-icons {
+    animation: spin 1.1s linear infinite;
+}
+
+.connection-failure > .material-icons,
+.connection-failure strong {
+    color: var(--red);
+}
+
 .ghost-button,
 .primary-button,
 .danger-button {
@@ -1330,6 +1393,30 @@ button {
     color: var(--muted-2);
     font-size: 8px;
     line-height: 1.45;
+}
+
+.transport-warning {
+    border: 1px solid rgba(226, 184, 92, 0.38);
+    border-radius: 8px;
+    padding: 10px 11px;
+    background: rgba(226, 184, 92, 0.08);
+}
+
+.transport-warning strong,
+.transport-warning span {
+    display: block;
+}
+
+.transport-warning strong {
+    color: var(--yellow);
+    font-size: 9px;
+}
+
+.transport-warning span {
+    margin-top: 4px;
+    color: #c4b58e;
+    font-size: 8px;
+    line-height: 1.5;
 }
 
 .form-error {

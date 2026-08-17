@@ -39,6 +39,9 @@ Implemented:
 - an add/edit/select/confirm-remove Servers interface;
 - one application-level Steam64 identity plus masked per-server Rust+ player-token entry, pairing
   status, and DPAPI-protected token persistence.
+- a read-only per-server connection test that uses the saved transport choice, validates pairing with
+  server information, reports distinct failure states, and closes the test socket. Secure proxy is
+  the default; plaintext direct transport requires an explicit persisted opt-in.
 
 Still requiring a real paired server:
 
@@ -72,8 +75,9 @@ Launch the Phase 1 desktop shell:
 dotnet run --project .\src\RustPlusHelper.Desktop
 ```
 
-The map is intentionally marked `FAKE DATA`. The app does not contact a Rust server or ask for Rust+
-credentials yet. Saved server profiles contain connection metadata only.
+The map is intentionally marked `FAKE DATA`. The Servers page can make an explicit, read-only Rust+
+connection test when the user clicks **Test connection**; it never connects merely because a profile
+was saved or selected. Live map/team/marker data is not wired into the main dashboard yet.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 

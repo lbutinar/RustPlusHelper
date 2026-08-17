@@ -174,6 +174,37 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("The Blazor application did not reach its rendered shell.");
             }
 
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable("RUSTPLUSHELPER_UI_CAPTURE_LIVE_TEST"),
+                    "1",
+                    StringComparison.Ordinal))
+            {
+                var started = await blazorWebView.WebView.CoreWebView2.ExecuteScriptAsync(
+                    "(() => { const button = document.querySelector('[data-testid=\"test-server-connection\"]'); if (!button) return false; button.click(); return true; })()");
+                if (!string.Equals(started, "true", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("A saved server connection test was not available.");
+                }
+
+                var completed = false;
+                for (var attempt = 0; attempt < 70; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(500));
+                    var testState = await blazorWebView.WebView.CoreWebView2.ExecuteScriptAsync(
+                        "(() => { const result = document.querySelector('[data-testid=\"connection-test-result\"]'); if (!result || result.classList.contains('connection-progress')) return 'waiting'; return 'complete'; })()");
+                    if (string.Equals(testState, "\"complete\"", StringComparison.Ordinal))
+                    {
+                        completed = true;
+                        break;
+                    }
+                }
+
+                if (!completed)
+                {
+                    throw new TimeoutException("The saved server connection test did not finish within 35 seconds.");
+                }
+            }
+
             await using var output = File.Create(fullPath);
             await blazorWebView.WebView.CoreWebView2.CapturePreviewAsync(
                 CoreWebView2CapturePreviewImageFormat.Png,

@@ -8,8 +8,9 @@ SQLite, and application-owned abstractions around Rust+.
 Phase 0 contains the client boundary, real adapter, fake source, verification command, tests, and
 documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phase 2 adds SQLite
 migrations, the server registry, and DPAPI-protected secret persistence. Phase 3 now includes a
-single application-level Steam64 identity and manual per-server token entry; automated pairing, live
-connection supervision, background monitoring, and notifications are not implemented yet.
+single application-level Steam64 identity, manual per-server token entry, and an explicit read-only
+connection/authentication test. Automated pairing, persistent connection supervision, background
+monitoring, and notifications are not implemented yet.
 
 ## Dependency direction
 
@@ -43,13 +44,15 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Desktop.Tests`: bUnit component and interaction tests.
 - `RustPlusHelper.Infrastructure.Storage.Tests`: real temporary-SQLite and current-user DPAPI tests.
 
-The desktop composition root references Application and Storage, but not `RustPlusApi` or the Rust+
-adapter. It injects `FakeRustPlusClient` for map data and the real local SQLite services for saved
-profiles; replacing Rust+ wiring does not change UI components.
+The desktop composition root references the application boundary plus the Rust+ and storage
+infrastructure projects. Third-party types remain contained inside the Rust+ adapter. It injects
+`FakeRustPlusClient` for the still-demonstration map and `RustPlusApiClientFactory` only for explicit
+saved-server connection tests; replacing the adapter does not change UI components.
 
 ## Planned services
 
-- `RustPlusConnectionManager` owns per-server supervisors.
+- `RustPlusConnectionManager` currently owns serialized, short-lived saved-server connection tests;
+  it will grow into per-server supervisors without moving socket lifetime into UI components.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
 - `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, `DeviceManager`, and
@@ -69,6 +72,10 @@ Ready → ConnectionLost → Reconnecting ────────────�
 
 WebSocket-open is not authenticated-ready. A low-cost authenticated call such as server information
 must complete before entering `Ready`.
+
+Each attempt uses exactly the transport stored on the profile. Secure proxy is the default. Direct
+`ws://` requires an explicit UI choice with a plaintext-credential warning, and a failed proxy
+attempt is never retried through direct transport.
 
 ## Data acquisition
 
