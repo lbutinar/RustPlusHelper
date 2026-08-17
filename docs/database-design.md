@@ -3,14 +3,19 @@
 SQLite is used by the desktop application. It needs no service, administrator setup, or separate
 installer and remains relational and inspectable.
 
-## Phase 2 implementation
+## Current implementation
 
 The current database lives at `%LOCALAPPDATA%\RustPlusHelper\rustplushelper.db`. Versioned migrations
 currently create only:
 
 - `schema_migrations`;
+- `player_identity` for the one Steam64 ID used across saved servers;
 - `servers` for non-secret connection metadata;
 - `pairings` for purpose-labelled DPAPI ciphertext.
+
+The player identity is the application-level source of truth. A server row retains the effective
+Steam64 ID snapshot associated with its current per-server pairing token so a future identity change
+cannot silently reuse a token issued to a different player.
 
 Creating the entire future schema now would make unverified assumptions. Session, map, team, marker,
 market, device, camera, event, death, chat, and notification tables remain planned until their owning

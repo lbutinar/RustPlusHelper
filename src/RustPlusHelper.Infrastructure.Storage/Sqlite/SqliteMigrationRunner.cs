@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 1;
+    private const int LatestVersion = 2;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -33,6 +33,21 @@ internal static class SqliteMigrationRunner
             ON servers(last_selected_utc_ms DESC);
         """;
 
+    private const string PlayerIdentitySchema = """
+        CREATE TABLE player_identity (
+            singleton_id INTEGER NOT NULL PRIMARY KEY CHECK(singleton_id = 1),
+            steam_id TEXT NOT NULL CHECK(length(steam_id) BETWEEN 1 AND 20),
+            updated_utc_ms INTEGER NOT NULL
+        );
+
+        INSERT INTO player_identity(singleton_id, steam_id, updated_utc_ms)
+        SELECT 1, player_id, updated_utc_ms
+        FROM servers
+        WHERE player_id IS NOT NULL
+        ORDER BY COALESCE(last_selected_utc_ms, updated_utc_ms) DESC, id
+        LIMIT 1;
+        """;
+
     public static void Apply(SqliteConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -56,20 +71,31 @@ internal static class SqliteMigrationRunner
                 $"Database schema version {currentVersion} is newer than supported version {LatestVersion}.");
         }
 
-        if (currentVersion == LatestVersion)
+        for (var version = currentVersion + 1; version <= LatestVersion; version++)
         {
-            return;
+            ApplyMigration(connection, version);
         }
+    }
 
+    private static void ApplyMigration(SqliteConnection connection, int version)
+    {
         using var transaction = connection.BeginTransaction();
-        Execute(connection, InitialSchema, transaction);
+        var (name, sql) = version switch
+        {
+            1 => ("initial server registry and protected pairings", InitialSchema),
+            2 => ("application player identity", PlayerIdentitySchema),
+            _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
+        };
+        Execute(connection, sql, transaction);
 
         using var recordCommand = connection.CreateCommand();
         recordCommand.Transaction = transaction;
         recordCommand.CommandText = """
             INSERT INTO schema_migrations(version, name, applied_utc_ms)
-            VALUES (1, 'initial server registry and protected pairings', $appliedUtcMs);
+            VALUES ($version, $name, $appliedUtcMs);
             """;
+        recordCommand.Parameters.AddWithValue("$version", version);
+        recordCommand.Parameters.AddWithValue("$name", name);
         recordCommand.Parameters.AddWithValue("$appliedUtcMs", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         recordCommand.ExecuteNonQuery();
         transaction.Commit();

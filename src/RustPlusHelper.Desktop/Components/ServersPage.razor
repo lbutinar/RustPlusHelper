@@ -1,4 +1,5 @@
 @implements IDisposable
+@inject PlayerIdentityManager Identity
 @inject ServerManager Servers
 @inject ILogger<ServersPage> Logger
 
@@ -48,7 +49,7 @@
                 <div class="saved-server-list">
                     @foreach (var profile in Servers.Profiles)
                     {
-                        var hasPairing = Servers.HasPairing(profile.Id) && profile.PlayerId is not null;
+                        var hasPairing = Servers.HasPairing(profile.Id) && Identity.Current is not null;
                         <article class="surface-card saved-server-card" @key="profile.Id">
                             <div class="server-monogram">@Monogram(profile.DisplayName)</div>
                             <div class="saved-server-main">
@@ -60,10 +61,6 @@
                                     }
                                 </div>
                                 <p>@profile.Host:@profile.Port</p>
-                                @if (profile.PlayerId is not null)
-                                {
-                                    <span class="server-player-id">Steam64 @MaskPlayerId(profile.PlayerId.Value)</span>
-                                }
                                 <span class="server-transport">
                                     @(profile.UseFacepunchProxy ? "Facepunch secure proxy" : "Direct transport requires later explicit opt-in")
                                 </span>
@@ -93,7 +90,43 @@
         <aside class="surface-card server-editor">
             <span class="eyebrow">@(_editingId is null ? "ADD PROFILE" : "EDIT PROFILE")</span>
             <h2>@(_editingId is null ? "Add a Rust+ server" : "Update saved server")</h2>
-            <p>The server profile is stored in SQLite. The player token is encrypted for your Windows account.</p>
+            <p>Your Steam64 ID is shared across servers. Each server pairing still has its own encrypted player token.</p>
+
+            <div class="identity-editor">
+                <div class="form-section-heading">
+                    <span>PLAYER IDENTITY · SAVED ONCE</span>
+                    <small>This Steam64 ID is used for every server paired by this Windows user.</small>
+                </div>
+                <form class="identity-form" @onsubmit="SaveIdentity" @onsubmit:preventDefault>
+                    <label>
+                        <span>Steam64 ID</span>
+                        <input data-testid="player-identity-id"
+                               type="text"
+                               inputmode="numeric"
+                               maxlength="20"
+                               autocomplete="off"
+                               spellcheck="false"
+                               @bind="_playerId"
+                               placeholder="7656119…" />
+                    </label>
+                    <button data-testid="save-player-identity" type="submit" class="ghost-button">
+                        @(Identity.Current is null ? "Save identity" : "Update identity")
+                    </button>
+                </form>
+                @if (!string.IsNullOrWhiteSpace(_identityMessage))
+                {
+                    <div class="form-success" role="status">@_identityMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_identityError))
+                {
+                    <div class="form-error" role="alert">@_identityError</div>
+                }
+            </div>
+
+            <div class="form-section-heading server-details-heading">
+                <span>SERVER CONNECTION</span>
+                <small>Connection address and the token issued by this server pairing.</small>
+            </div>
 
             <form @onsubmit="SaveProfile" @onsubmit:preventDefault>
                 <label>
@@ -109,20 +142,9 @@
                     <input data-testid="server-port" type="number" min="1" max="65535" @bind="_port" />
                 </label>
                 <div class="form-section-heading">
-                    <span>PAIRING DETAILS</span>
-                    <small>Use the values from the server's Rust+ pairing notification or pairing tool.</small>
+                    <span>SERVER PAIRING</span>
+                    <small>The pairing notification supplies a different token for each Rust server.</small>
                 </div>
-                <label>
-                    <span>Steam64 ID</span>
-                    <input data-testid="server-player-id"
-                           type="text"
-                           inputmode="numeric"
-                           maxlength="20"
-                           autocomplete="off"
-                           spellcheck="false"
-                           @bind="_playerId"
-                           placeholder="7656119…" />
-                </label>
                 <label>
                     <span>Rust+ player token</span>
                     <input data-testid="server-player-token"
@@ -136,7 +158,7 @@
                     <small class="field-help">
                         @(_editingId is null
                             ? "Required for a live connection. It will not be displayed again."
-                            : "Leave blank to keep the saved token. Enter it again if you change Steam64 ID.")
+                            : "Leave blank to keep this server's saved token.")
                     </small>
                 </label>
                 <label class="proxy-choice">
@@ -184,27 +206,66 @@
     private string _playerId = string.Empty;
     private string _playerToken = string.Empty;
     private string? _errorMessage;
+    private string? _identityMessage;
+    private string? _identityError;
 
     protected override void OnInitialized()
     {
+        Identity.Changed += HandleIdentityChanged;
         Servers.Changed += HandleServersChanged;
+        Identity.Load();
         Servers.Load();
+        _playerId = Identity.Current?.SteamId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            ?? string.Empty;
     }
 
-    public void Dispose() => Servers.Changed -= HandleServersChanged;
+    public void Dispose()
+    {
+        Identity.Changed -= HandleIdentityChanged;
+        Servers.Changed -= HandleServersChanged;
+    }
+
+    private void SaveIdentity()
+    {
+        try
+        {
+            var playerId = ParsePlayerId()
+                ?? throw new ArgumentException("Steam64 ID is required.");
+            Identity.Save(playerId);
+            _playerId = playerId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _identityMessage = "Steam64 identity saved for all servers.";
+            _identityError = null;
+            _errorMessage = null;
+        }
+        catch (ArgumentException exception)
+        {
+            _identityMessage = null;
+            _identityError = exception.Message;
+        }
+        catch (InvalidOperationException exception)
+        {
+            _identityMessage = null;
+            _identityError = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to save the player identity.");
+            _identityMessage = null;
+            _identityError = "The player identity could not be saved.";
+        }
+    }
 
     private void SaveProfile()
     {
         try
         {
-            var playerId = ParsePlayerId();
             Servers.SaveWithPairing(new ServerProfileDraft(
                 _editingId,
                 _displayName,
                 _host,
                 _port,
                 _useFacepunchProxy,
-                playerId),
+                null),
                 _playerToken.AsSpan());
             ResetEditor();
         }
@@ -234,7 +295,6 @@
         _host = profile.Host;
         _port = profile.Port;
         _useFacepunchProxy = profile.UseFacepunchProxy;
-        _playerId = profile.PlayerId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         _playerToken = string.Empty;
         _errorMessage = null;
     }
@@ -268,12 +328,14 @@
         _host = string.Empty;
         _port = 28082;
         _useFacepunchProxy = true;
-        _playerId = string.Empty;
         _playerToken = string.Empty;
         _errorMessage = null;
     }
 
     private void HandleServersChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private void HandleIdentityChanged(object? sender, EventArgs args) =>
         _ = InvokeAsync(StateHasChanged);
 
     private static string Monogram(string name)
@@ -302,9 +364,4 @@
         return playerId;
     }
 
-    private static string MaskPlayerId(ulong playerId)
-    {
-        var value = playerId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return value.Length <= 8 ? value : $"{value[..4]}…{value[^4..]}";
-    }
 }

@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Infrastructure.Storage.Security;
+using RustPlusHelper.Infrastructure.Storage.Identity;
 using RustPlusHelper.Infrastructure.Storage.Servers;
 using RustPlusHelper.Infrastructure.Storage.Sqlite;
 
@@ -23,7 +25,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(1L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(2L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -63,6 +65,41 @@ public sealed class StorageTests
         Assert.Equal("text", ExecuteScalar<string>(connection, "SELECT typeof(player_id) FROM servers;"));
         Assert.Equal(ulong.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ExecuteScalar<string>(connection, "SELECT player_id FROM servers;"));
+    }
+
+    [Fact]
+    public void PlayerIdentitySurvivesRestartAndUsesCanonicalUnsignedText()
+    {
+        using var temporary = new TemporaryDatabase();
+        var identity = new PlayerIdentity(ulong.MaxValue, FixedUtc);
+        new SqlitePlayerIdentityRepository(temporary.Database).Upsert(identity);
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        var restored = new SqlitePlayerIdentityRepository(reopenedDatabase).Get();
+
+        Assert.Equal(identity, restored);
+        using var connection = reopenedDatabase.OpenConnection();
+        Assert.Equal("text", ExecuteScalar<string>(connection, "SELECT typeof(steam_id) FROM player_identity;"));
+    }
+
+    [Fact]
+    public void VersionTwoMigrationImportsMostRecentLegacyServerPlayerId()
+    {
+        using var temporary = new TemporaryDatabase();
+        temporary.Database.Initialize();
+        var profile = CreateProfile(playerId: ulong.MaxValue);
+        new SqliteServerRepository(temporary.Database).Upsert(profile);
+
+        using (var connection = temporary.Database.OpenConnection())
+        {
+            Execute(connection, "DROP TABLE player_identity;");
+            Execute(connection, "DELETE FROM schema_migrations WHERE version = 2;");
+        }
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        reopenedDatabase.Initialize();
+
+        Assert.Equal(ulong.MaxValue, new SqlitePlayerIdentityRepository(reopenedDatabase).Get()?.SteamId);
     }
 
     [Fact]
@@ -161,6 +198,13 @@ public sealed class StorageTests
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return (T)command.ExecuteScalar()!;
+    }
+
+    private static void Execute(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

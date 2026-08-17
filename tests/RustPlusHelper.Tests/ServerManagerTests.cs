@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
@@ -130,6 +131,75 @@ public sealed class ServerManagerTests
             new ServerProfileDraft(original.Id, "Dev renamed", "host", 28082, true, 76561198000000001UL),
             ReadOnlySpan<char>.Empty));
         Assert.Contains("Enter the player token again", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GlobalPlayerIdentityIsReusedWhileTokensRemainPerServer()
+    {
+        var identityRepository = new InMemoryPlayerIdentityRepository();
+        var identity = new PlayerIdentityManager(identityRepository, new FixedTimeProvider(FixedUtc));
+        identity.Save(76561198000000000UL);
+        using var secrets = new InMemorySecretStore();
+        var manager = new ServerManager(
+            new InMemoryServerRepository(),
+            new FixedTimeProvider(FixedUtc),
+            secrets,
+            identity);
+
+        var first = manager.SaveWithPairing(
+            new ServerProfileDraft(null, "One", "one.invalid", 28082),
+            "101".AsSpan());
+        var second = manager.SaveWithPairing(
+            new ServerProfileDraft(null, "Two", "two.invalid", 28083),
+            "-202".AsSpan());
+
+        Assert.Equal(identity.Current?.SteamId, first.PlayerId);
+        Assert.Equal(identity.Current?.SteamId, second.PlayerId);
+        AssertToken(secrets, first.Id, "101");
+        AssertToken(secrets, second.Id, "-202");
+        var reloadedIdentity = new PlayerIdentityManager(identityRepository, new FixedTimeProvider(FixedUtc));
+        reloadedIdentity.Load();
+        Assert.Equal(identity.Current, reloadedIdentity.Current);
+    }
+
+    [Fact]
+    public void PlayerIdentityCannotChangeWhileServerPairingsExist()
+    {
+        var servers = new InMemoryServerRepository();
+        using var secrets = new InMemorySecretStore();
+        var identity = new PlayerIdentityManager(
+            new InMemoryPlayerIdentityRepository(),
+            new FixedTimeProvider(FixedUtc),
+            servers,
+            secrets);
+        identity.Save(76561198000000000UL);
+        var manager = new ServerManager(servers, new FixedTimeProvider(FixedUtc), secrets, identity);
+        manager.SaveWithPairing(
+            new ServerProfileDraft(null, "Dev", "dev.invalid", 28082),
+            "42".AsSpan());
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            identity.Save(76561198000000001UL));
+
+        Assert.Contains("Remove or re-pair", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(76561198000000000UL, identity.Current?.SteamId);
+    }
+
+    private static void AssertToken(InMemorySecretStore secrets, Guid serverId, string expected)
+    {
+        var restored = secrets.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
+        try
+        {
+            Assert.NotNull(restored);
+            Assert.Equal(expected, Encoding.UTF8.GetString(restored));
+        }
+        finally
+        {
+            if (restored is not null)
+            {
+                CryptographicOperations.ZeroMemory(restored);
+            }
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

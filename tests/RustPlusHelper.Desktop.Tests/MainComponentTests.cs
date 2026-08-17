@@ -3,6 +3,7 @@ using System.Text;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
@@ -17,6 +18,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly MapDashboardService _dashboard;
     private readonly InMemoryServerRepository _serverRepository;
     private readonly InMemorySecretStore _secretStore;
+    private readonly PlayerIdentityManager _identityManager;
 
     public MainComponentTests()
     {
@@ -27,7 +29,16 @@ public sealed class MainComponentTests : BunitContext
         _dashboard = new MapDashboardService(client, connection);
         _serverRepository = new InMemoryServerRepository();
         _secretStore = new InMemorySecretStore();
-        var serverManager = new ServerManager(_serverRepository, TimeProvider.System, _secretStore);
+        _identityManager = new PlayerIdentityManager(
+            new InMemoryPlayerIdentityRepository(),
+            TimeProvider.System,
+            _serverRepository,
+            _secretStore);
+        var serverManager = new ServerManager(
+            _serverRepository,
+            TimeProvider.System,
+            _secretStore,
+            _identityManager);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
         // component test independent from the Windows desktop composition root.
@@ -35,6 +46,7 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(connection);
         Services.AddSingleton(_dashboard);
         Services.AddSingleton<ISecretStore>(_secretStore);
+        Services.AddSingleton(_identityManager);
         Services.AddSingleton(serverManager);
     }
 
@@ -139,7 +151,8 @@ public sealed class MainComponentTests : BunitContext
 
         component.Find("[data-testid='server-name']").Change("Test Dev");
         component.Find("[data-testid='server-host']").Change("companion.example.invalid");
-        component.Find("[data-testid='server-player-id']").Change("76561198000000000");
+        component.Find("[data-testid='player-identity-id']").Change("76561198000000000");
+        component.Find("[data-testid='save-player-identity']").Click();
         component.Find("[data-testid='server-player-token']").Change("-123456789");
         component.Find("[data-testid='save-server']").Click();
 
@@ -147,7 +160,9 @@ public sealed class MainComponentTests : BunitContext
         {
             var saved = Assert.Single(_serverRepository.GetAll());
             Assert.Equal(76561198000000000UL, saved.PlayerId);
+            Assert.Equal(76561198000000000UL, _identityManager.Current?.SteamId);
             Assert.Contains("PAIRING SAVED", component.Markup, StringComparison.Ordinal);
+            Assert.Single(component.FindAll("[data-testid='player-identity-id']"));
             Assert.DoesNotContain("-123456789", component.Markup, StringComparison.Ordinal);
 
             var restored = _secretStore.Retrieve(saved.Id, SecretKind.RustPlusPlayerToken);

@@ -1141,14 +1141,6 @@ button {
     font-size: 8px;
 }
 
-.server-player-id {
-    display: block;
-    margin-bottom: 4px;
-    color: var(--muted);
-    font-family: ui-monospace, monospace;
-    font-size: 8px;
-}
-
 .server-actions {
     justify-content: flex-end;
     flex-wrap: wrap;
@@ -1262,6 +1254,45 @@ button {
     color: var(--muted-2);
     font-size: 8px;
     line-height: 1.45;
+}
+
+.identity-editor {
+    margin-bottom: 18px;
+    border: 1px solid rgba(112, 168, 206, 0.2);
+    border-radius: 9px;
+    padding: 13px;
+    background: rgba(112, 168, 206, 0.035);
+}
+
+.identity-editor .form-section-heading {
+    margin: 0 0 11px;
+    border-top: 0;
+    padding-top: 0;
+}
+
+.server-editor .identity-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+}
+
+.identity-form .ghost-button {
+    min-height: 36px;
+}
+
+.server-details-heading {
+    margin-bottom: 14px;
+}
+
+.form-success {
+    margin-top: 9px;
+    border: 1px solid rgba(101, 211, 145, 0.28);
+    border-radius: 7px;
+    padding: 8px 9px;
+    background: rgba(101, 211, 145, 0.07);
+    color: var(--green);
+    font-size: 8px;
 }
 
 .server-editor input:focus {

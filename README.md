@@ -37,8 +37,8 @@ Implemented:
   data;
 - a DPAPI `CurrentUser` secret store that persists only ciphertext;
 - an add/edit/select/confirm-remove Servers interface;
-- masked manual entry for Steam64 ID and the signed Rust+ player token, with pairing status and
-  DPAPI-protected token persistence.
+- one application-level Steam64 identity plus masked per-server Rust+ player-token entry, pairing
+  status, and DPAPI-protected token persistence.
 
 Still requiring a real paired server:
 

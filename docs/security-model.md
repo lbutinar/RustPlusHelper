@@ -31,8 +31,10 @@ SQLite holds ciphertext and non-secret metadata only. Additional entropy binds e
 to the application version, server ID, and secret purpose. Cross-machine export will require explicit
 password-based re-encryption; copying DPAPI ciphertext is not a portable backup.
 
-The Servers UI accepts a signed player token through a masked field for manual pairing import. The
-application validates it without logging it, converts the canonical integer directly into a
+The Servers UI stores one Steam64 identity for the Windows user and accepts a separate signed player
+token through a masked field for each manual server pairing. A token is never treated as an
+account-global credential. The application validates it without logging it, converts the canonical
+integer directly into a
 short-lived byte buffer, passes that buffer to `ISecretStore`, and zeroes the buffer immediately.
 The immutable UI string is dereferenced after submission and is never persisted. Editing a server
 leaves the field blank and preserves the existing token unless the user enters a replacement.

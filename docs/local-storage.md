@@ -15,7 +15,9 @@ file-level backup while the app is open. Prefer closing the application before c
 ## Current contents
 
 - migration history;
-- saved server names, companion host/port, proxy choice, optional player ID, and timestamps;
+- one application-level Steam64 player identity;
+- saved server names, companion host/port, proxy choice, effective pairing-identity snapshot, and
+  timestamps;
 - purpose-labelled DPAPI ciphertext for pairing secrets.
 
 Map, team, chat, history, and device data are not persisted yet.

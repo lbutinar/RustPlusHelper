@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Security.Cryptography;
+using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Security;
 
 namespace RustPlusHelper.Application.Servers;
@@ -8,7 +9,8 @@ namespace RustPlusHelper.Application.Servers;
 public sealed class ServerManager(
     IServerRepository repository,
     TimeProvider timeProvider,
-    ISecretStore? secretStore = null)
+    ISecretStore? secretStore = null,
+    PlayerIdentityManager? playerIdentity = null)
 {
     private readonly object _stateLock = new();
 
@@ -77,16 +79,21 @@ public sealed class ServerManager(
     {
         ArgumentNullException.ThrowIfNull(draft);
 
+        var effectiveDraft = playerIdentity?.Current is { } identity
+            ? draft with { PlayerId = identity.SteamId }
+            : draft;
         var normalizedToken = playerToken.Trim();
         if (normalizedToken.IsEmpty)
         {
-            EnsurePlayerChangeDoesNotInvalidatePairing(draft);
-            return Save(draft);
+            EnsurePlayerChangeDoesNotInvalidatePairing(effectiveDraft);
+            return Save(effectiveDraft);
         }
 
-        if (draft.PlayerId is null or 0)
+        if (effectiveDraft.PlayerId is null or 0)
         {
-            throw new ArgumentException("Steam64 ID is required when saving a player token.", nameof(draft.PlayerId));
+            throw new ArgumentException(
+                "Steam64 ID is required. Save your player identity before adding a player token.",
+                nameof(draft.PlayerId));
         }
 
         if (!int.TryParse(normalizedToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedToken))
@@ -99,7 +106,7 @@ public sealed class ServerManager(
             throw new InvalidOperationException("Protected pairing storage is not available.");
         }
 
-        var profile = Save(draft);
+        var profile = Save(effectiveDraft);
         Span<byte> tokenBytes = stackalloc byte[11];
         if (!Utf8Formatter.TryFormat(parsedToken, tokenBytes, out var bytesWritten))
         {
