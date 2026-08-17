@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <AssemblyName>RustPlusHelper</AssemblyName>
+    <RootNamespace>RustPlusHelper.Desktop</RootNamespace>
+    <Description>Windows WPF and Blazor Hybrid host for RustPlusHelper.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
+  </ItemGroup>
+</Project>

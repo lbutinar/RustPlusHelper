@@ -4,8 +4,9 @@ RustPlusHelper is a Windows-first Rust+ companion dashboard under active develop
 feature will be an interactive Rust map with team positions, map notes, vending machines, world-event
 markers, supported smart devices, cameras, notifications, and locally recorded history.
 
-This repository currently contains the approved **Phase 0 protocol verification spike**, not the
-desktop UI.
+This repository currently contains the approved **Phase 0 protocol verification spike** and the
+**Phase 1 map-first desktop skeleton**. The desktop uses deterministic fake data until live protocol
+verification and later connection phases are complete.
 
 ## Current status
 
@@ -19,7 +20,14 @@ Implemented:
 - aggregate-only redacted reports and map-JPEG output;
 - tests for optional fields, unsigned 64-bit IDs, unknown markers, disconnect behavior, and secret
   redaction;
-- project architecture, protocol, security, database, UI, and roadmap documents.
+- project architecture, protocol, security, database, UI, and roadmap documents;
+- WPF and Blazor Hybrid Windows host;
+- offline Leaflet `CRS.Simple` map with a local fake development image;
+- map-first navigation, independent truthful layers, team/chat, event-source, vending, device,
+  server, and settings previews;
+- application-owned map dashboard state and tested world-to-image projection;
+- privacy-safe Debug smoke capture that validates the rendered app shell without reading desktop
+  pixels.
 
 Still requiring a real paired server:
 
@@ -47,6 +55,15 @@ Run the deterministic verification without credentials:
 dotnet run --project .\src\RustPlusHelper.Verification -- --fake
 ```
 
+Launch the Phase 1 desktop shell:
+
+```powershell
+dotnet run --project .\src\RustPlusHelper.Desktop
+```
+
+The desktop is intentionally marked `FAKE DATA`. It does not read local credentials or contact a
+Rust server in Phase 1.
+
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 
 ## Live verification
@@ -67,6 +84,7 @@ environment variables and run the read-only check.
 - [Testing strategy](docs/testing.md)
 - [Development plan](docs/development-plan.md)
 - [Architecture decisions](docs/adr/README.md)
+- [Third-party notices](THIRD-PARTY-NOTICES.md)
 
 ## License
 

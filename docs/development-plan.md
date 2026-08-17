@@ -16,13 +16,17 @@ evidence is updated; secrets are absent from output; reviewed fixture capture is
 
 **Goal:** Establish WPF/Blazor/Leaflet boundaries using fake data.
 
-**Modules:** desktop host, Blazor routes/components, `MapManager`, map view state, Leaflet adapter, fake
-scenario selector.
+**Status:** Implemented on 2026-08-17. Live Phase 0 acceptance remains separately pending.
+
+**Modules:** desktop host, Blazor components, `MapDashboardService`, map view state, Leaflet adapter,
+and deterministic fake source.
 
 **Risks/tests:** JS interop and update frequency; component tests and coordinate adapter contract.
 
-**Done:** application opens directly to an interactive fake Rust map with independent layers and no
-third-party protocol types in UI code.
+**Done evidence:** application builds as a WPF/Blazor Hybrid executable, opens directly to an
+interactive offline fake Rust map, supports independent layer toggles and navigation, and has an
+architecture test confirming application contracts expose no RustPlusApi types. A privacy-safe
+WebView-only smoke capture verifies that the rendered shell starts successfully.
 
 ## Phase 2 — SQLite, server registry, and secrets
 

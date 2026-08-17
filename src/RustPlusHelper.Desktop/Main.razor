@@ -1,0 +1,154 @@
+@implements IDisposable
+@inject MapDashboardService Dashboard
+
+<div class="app-shell">
+    <header class="topbar">
+        <div class="brand-block">
+            <div class="brand-mark">R+</div>
+            <div>
+                <div class="brand-name">RustPlusHelper</div>
+                <div class="brand-subtitle">PERSONAL COMPANION · PHASE 1</div>
+            </div>
+        </div>
+
+        <button class="server-selector" type="button" aria-label="Selected demo server">
+            <span class="server-dot"></span>
+            <span>
+                <strong>@(State.Server?.Name ?? "Demo server")</strong>
+                <small>@(State.Server?.MapName ?? "Loading fake Rust+ data")</small>
+            </span>
+            <span class="selector-chevron">⌄</span>
+        </button>
+
+        <div class="connection-state @ConnectionCssClass">
+            <span class="pulse-dot"></span>
+            <span>@State.ConnectionLabel</span>
+            <span class="demo-badge">FAKE DATA</span>
+        </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Primary navigation">
+        <nav>
+            @foreach (var item in Navigation)
+            {
+                <button type="button"
+                        class="nav-item @(ActiveSection == item.Section ? "active" : null)"
+                        title="@item.Label"
+                        @onclick="() => SelectSection(item.Section)">
+                    <span class="nav-icon">@item.Icon</span>
+                    <span>@item.Label</span>
+                </button>
+            }
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="wipe-label">DEMO WIPE</div>
+            <strong>@FormatWipeTime()</strong>
+            <span>Local fake session</span>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        @if (State.ConnectionState == DashboardConnectionState.Loading)
+        {
+            <section class="loading-state">
+                <div class="loader-ring"></div>
+                <h1>Loading Rust+ demo session</h1>
+                <p>Building the map-first view through <code>IRustPlusClient</code>.</p>
+            </section>
+        }
+        else if (State.ConnectionState == DashboardConnectionState.Failed)
+        {
+            <section class="error-state">
+                <span class="error-code">DEMO LOAD FAILED</span>
+                <h1>The fake Rust+ source could not be loaded.</h1>
+                <p>@State.ErrorMessage</p>
+            </section>
+        }
+        else
+        {
+            @switch (ActiveSection)
+            {
+                case AppSection.Map:
+                    <MapPage State="State" OnLayerChanged="HandleLayerChanged" />
+                    break;
+                case AppSection.Team:
+                    <TeamPage State="State" />
+                    break;
+                case AppSection.Events:
+                    <EventsPage State="State" />
+                    break;
+                case AppSection.Vending:
+                    <VendingPage State="State" />
+                    break;
+                case AppSection.Devices:
+                    <DevicesPage />
+                    break;
+                case AppSection.Servers:
+                    <ServersPage State="State" />
+                    break;
+                case AppSection.Settings:
+                    <SettingsPage />
+                    break;
+            }
+        }
+    </main>
+</div>
+
+@code {
+    private static readonly NavItem[] Navigation =
+    [
+        new(AppSection.Map, "Map", "M"),
+        new(AppSection.Team, "Team", "T"),
+        new(AppSection.Events, "Events", "E"),
+        new(AppSection.Vending, "Vending", "V"),
+        new(AppSection.Devices, "Devices", "D"),
+        new(AppSection.Servers, "Servers", "S"),
+        new(AppSection.Settings, "Settings", "⚙")
+    ];
+
+    private MapDashboardState State => Dashboard.Current;
+
+    private AppSection ActiveSection { get; set; } = AppSection.Map;
+
+    private string ConnectionCssClass => State.ConnectionState switch
+    {
+        DashboardConnectionState.Ready => "ready",
+        DashboardConnectionState.Failed => "failed",
+        _ => "loading"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Dashboard.StateChanged += HandleStateChanged;
+        await Dashboard.InitializeAsync();
+    }
+
+    public void Dispose()
+    {
+        Dashboard.StateChanged -= HandleStateChanged;
+    }
+
+    private void SelectSection(AppSection section) => ActiveSection = section;
+
+    private void HandleLayerChanged(LayerVisibilityChange change) =>
+        Dashboard.SetLayerVisibility(change.Kind, change.IsVisible);
+
+    private void HandleStateChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private string FormatWipeTime() => State.Server?.WipeTimeUtc?.ToString("dd MMM yyyy") ?? "Not loaded";
+
+    private sealed record NavItem(AppSection Section, string Label, string Icon);
+
+    private enum AppSection
+    {
+        Map,
+        Team,
+        Events,
+        Vending,
+        Devices,
+        Servers,
+        Settings
+    }
+}

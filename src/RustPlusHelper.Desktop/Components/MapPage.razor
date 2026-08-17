@@ -1,0 +1,119 @@
+<section class="map-page">
+    <div class="page-heading map-heading">
+        <div>
+            <span class="eyebrow">LIVE OPERATIONS</span>
+            <h1>Server map</h1>
+        </div>
+        <div class="map-metrics">
+            <div>
+                <span>PLAYERS</span>
+                <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
+            </div>
+            <div>
+                <span>QUEUE</span>
+                <strong>@State.Server?.QueuedPlayerCount</strong>
+            </div>
+            <div>
+                <span>MAP SIZE</span>
+                <strong>@State.Server?.MapSize m</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-workspace">
+        <div class="map-stage">
+            <MapCanvas State="State" />
+
+            <div class="map-toolbar" aria-label="Map tools">
+                <button type="button" title="Fit the map" @onclick="FitMap">⌖</button>
+                <button type="button" title="Grid search arrives after live grid validation" disabled>⌕</button>
+            </div>
+
+            <div class="map-legend">
+                <span><i class="legend-dot team"></i>Team</span>
+                <span><i class="legend-dot vending"></i>Vending</span>
+                <span><i class="legend-dot event"></i>Events</span>
+                <span><i class="legend-dot monument"></i>Monuments</span>
+            </div>
+        </div>
+
+        <aside class="layer-panel">
+            <div class="panel-heading">
+                <div>
+                    <span class="eyebrow">MAP CONTROL</span>
+                    <h2>Layers</h2>
+                </div>
+                <span class="layer-count">@VisibleLayerCount ON</span>
+            </div>
+
+            <div class="layer-list">
+                @foreach (var layer in State.Layers)
+                {
+                    <label class="layer-row @(!layer.IsAvailable ? "unavailable" : null)"
+                           title="@layer.UnavailableReason">
+                        <span class="layer-symbol @MapRenderModelFactory.ToLayerKey(layer.Kind)"></span>
+                        <span class="layer-copy">
+                            <strong>@layer.DisplayName</strong>
+                            <small>@layer.SourceLabel</small>
+                        </span>
+                        <input type="checkbox"
+                               checked="@layer.IsVisible"
+                               disabled="@(!layer.IsAvailable)"
+                               @onchange="args => ChangeLayer(layer, args)" />
+                        <span class="switch-track"><span></span></span>
+                    </label>
+                }
+            </div>
+
+            <div class="source-note">
+                <strong>Truthful layers</strong>
+                <p>Unavailable data stays disabled. Nothing on this map is inferred without a source label.</p>
+            </div>
+        </aside>
+    </div>
+
+    <div class="event-strip">
+        <div class="event-title">
+            <span class="live-pulse"></span>
+            DEMO FEED
+        </div>
+        <div class="event-item">
+            <time>NOW</time>
+            <span class="event-source direct">SNAPSHOT</span>
+            <strong>@(State.Team?.Members.Count ?? 0) team members loaded</strong>
+        </div>
+        <div class="event-item">
+            <time>NOW</time>
+            <span class="event-source direct">SNAPSHOT</span>
+            <strong>@(State.Markers?.Markers.Count ?? 0) map markers loaded</strong>
+        </div>
+        <div class="event-item muted">
+            <time>PHASE 5</time>
+            <span class="event-source derived">DERIVED</span>
+            <strong>Semantic event diffing arrives later</strong>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Inject]
+    private IJSRuntime JavaScript { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    [Parameter]
+    public EventCallback<LayerVisibilityChange> OnLayerChanged { get; set; }
+
+    private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
+
+    private async Task ChangeLayer(MapLayerState layer, ChangeEventArgs args)
+    {
+        var isVisible = args.Value is bool checkedValue
+            ? checkedValue
+            : bool.TryParse(args.Value?.ToString(), out var parsed) && parsed;
+        await OnLayerChanged.InvokeAsync(new LayerVisibilityChange(layer.Kind, isVisible));
+    }
+
+    private Task FitMap() => JavaScript.InvokeVoidAsync("rustPlusMap.fitActive").AsTask();
+}

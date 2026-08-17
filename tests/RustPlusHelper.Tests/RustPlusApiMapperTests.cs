@@ -8,6 +8,25 @@ namespace RustPlusHelper.Tests;
 public sealed class RustPlusApiMapperTests
 {
     [Fact]
+    public void ApplicationPublicContractDoesNotExposeRustPlusApiTypes()
+    {
+        var leakedTypes = typeof(IRustPlusClient).Assembly
+            .ExportedTypes
+            .SelectMany(type => type.GetMembers())
+            .Select(member => member switch
+            {
+                System.Reflection.MethodInfo method => method.ReturnType,
+                System.Reflection.PropertyInfo property => property.PropertyType,
+                System.Reflection.FieldInfo field => field.FieldType,
+                _ => null
+            })
+            .Where(type => type?.Namespace?.StartsWith("RustPlusApi", StringComparison.Ordinal) == true)
+            .ToArray();
+
+        Assert.Empty(leakedTypes);
+    }
+
+    [Fact]
     public void OptionalServerFieldsRemainOptional()
     {
         var result = RustPlusApiMapper.Map(new ServerInfo());

@@ -1,0 +1,32 @@
+<section class="content-page">
+    <div class="page-heading">
+        <div>
+            <span class="eyebrow">EVENT PIPELINE PREVIEW</span>
+            <h1>Events</h1>
+            <p>Phase 1 shows source boundaries only. Snapshot differencing is scheduled for Phase 5.</p>
+        </div>
+    </div>
+
+    <div class="surface-card event-page-card">
+        <div class="timeline-row">
+            <span class="timeline-time">NOW</span>
+            <span class="event-source direct">TRANSPORT</span>
+            <div><strong>Fake Rust+ source connected</strong><p>No live network request was made.</p></div>
+        </div>
+        <div class="timeline-row">
+            <span class="timeline-time">NOW</span>
+            <span class="event-source direct">SNAPSHOT</span>
+            <div><strong>@(State.Team?.Members.Count ?? 0) team records received</strong><p>Direct fake representation of verified Rust+ fields.</p></div>
+        </div>
+        <div class="timeline-row future">
+            <span class="timeline-time">LATER</span>
+            <span class="event-source derived">DERIVED</span>
+            <div><strong>Death, respawn, online, and marker lifecycle</strong><p>These will be produced by comparing snapshots, not invented broadcasts.</p></div>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+}

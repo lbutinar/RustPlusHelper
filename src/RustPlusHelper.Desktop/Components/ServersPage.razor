@@ -1,0 +1,28 @@
+<section class="content-page">
+    <div class="page-heading">
+        <div>
+            <span class="eyebrow">SERVER REGISTRY PREVIEW</span>
+            <h1>Servers</h1>
+            <p>Persistence and protected pairing records are scheduled for Phase 2 and Phase 3.</p>
+        </div>
+    </div>
+
+    <article class="surface-card server-card">
+        <div class="server-monogram">EU</div>
+        <div>
+            <span class="eyebrow">SELECTED DEMO</span>
+            <h2>@(State.Server?.Name ?? "Fake EU Main")</h2>
+            <p>@State.Server?.MapName · @State.Server?.MapSize m</p>
+        </div>
+        <div class="server-stats">
+            <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
+            <span>PLAYERS</span>
+        </div>
+        <span class="status-pill online">DEMO READY</span>
+    </article>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+}

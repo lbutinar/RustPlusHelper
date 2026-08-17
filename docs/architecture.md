@@ -5,9 +5,9 @@
 The planned desktop product uses C#/.NET 10, a WPF host, Blazor Hybrid UI, Leaflet `CRS.Simple`,
 SQLite, and application-owned abstractions around Rust+.
 
-Phase 0 intentionally contains only the client boundary, real adapter, fake source, verification
-command, tests, and documentation. It does not contain WPF, Blazor, SQLite, pairing UI, background
-monitoring, or notifications yet.
+Phase 0 contains the client boundary, real adapter, fake source, verification command, tests, and
+documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. SQLite, pairing UI, live
+connection supervision, background monitoring, and notifications are not implemented yet.
 
 ## Dependency direction
 
@@ -34,7 +34,13 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
   and deterministic fake client.
 - `RustPlusHelper.Infrastructure.RustPlus`: the pinned RustPlusApi adapter and mapper.
 - `RustPlusHelper.Verification`: opt-in read-only protocol verification command.
+- `RustPlusHelper.Desktop`: WPF host, Blazor map-first shell, and local Leaflet assets.
 - `RustPlusHelper.Tests`: focused unit and adapter-mapping tests.
+- `RustPlusHelper.Desktop.Tests`: bUnit component and interaction tests.
+
+The desktop project references `RustPlusHelper.Application`, not `RustPlusApi` or the Rust+ adapter.
+Its current composition root injects `FakeRustPlusClient`; replacing that wiring does not change UI
+components.
 
 ## Planned services
 

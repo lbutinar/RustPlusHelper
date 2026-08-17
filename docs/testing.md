@@ -13,6 +13,18 @@
 - normalized verification reports exclude player IDs, names, chat bodies, positions, and tokens;
 - credentials are rejected as command-line options.
 
+## Current Phase 1 tests
+
+- canonical world coordinates project into top-left image pixels with the documented Y flip;
+- invalid map dimensions and margins are rejected;
+- `MapDashboardService` loads all fake snapshots only through `IRustPlusClient`;
+- render models separate monuments, team, notes, vending, events, and unknown markers;
+- unavailable CCTV/device layers cannot be enabled;
+- the actual Blazor root component opens on the map and invokes local map interop;
+- navigation switches to the Team surface;
+- toggling a layer updates application state;
+- application public contracts do not expose RustPlusApi types.
+
 ## Test layers planned
 
 ### Unit
@@ -54,6 +66,17 @@ snapshot replacement, retention, and background-writer/foreground-reader behavio
 
 Use bUnit for Blazor components and a narrow browser contract test for Leaflet interop. Add Playwright
 only for important end-to-end flows once the desktop shell exists.
+
+For a local Windows visual smoke check after a Debug build:
+
+```powershell
+.\scripts\Capture-DesktopSmoke.ps1
+```
+
+The script launches only the built Debug executable with a one-process environment flag. The app
+captures its own WebView content through WebView2, stores the PNG under ignored `artifacts/ui/`, and
+then closes. It never reads desktop pixels, so other applications and notifications cannot appear in
+the image. The capture-only hook is excluded from Release builds.
 
 ### Live
 

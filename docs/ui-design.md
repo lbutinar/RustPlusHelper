@@ -1,5 +1,20 @@
 # Map-first UI design
 
+## Phase 1 implementation status
+
+Implemented with deterministic fake data:
+
+- WPF window and Blazor Hybrid root;
+- locally vendored Leaflet 1.9.4 using `CRS.Simple`;
+- offline fake SVG map with world-to-image projected markers;
+- Map, Team, Events, Vending, Devices, Servers, and Settings navigation;
+- independent layers and disabled explanations for data Rust+ does not position;
+- responsive dark Rust-inspired styling;
+- bUnit navigation and interaction coverage.
+
+The grid-search tool remains disabled until the community grid formula is validated against the
+official Rust+ app. The desktop does not connect to a live server in this phase.
+
 The application opens to the map, not a generic dashboard.
 
 ```text
@@ -24,6 +39,9 @@ The application opens to the map, not a generic dashboard.
 - Blazor Hybrid for the complete primary UI surface;
 - Leaflet `CRS.Simple` for the Rust JPEG and overlays;
 - small JavaScript adapter receiving canonical map DTOs and batched deltas.
+
+Phase 1 currently sends normalized complete overlay snapshots to a persistent Leaflet map and clears
+individual layer groups. Fine-grained add/update/remove deltas are deferred until live polling exists.
 
 Keeping the full interactive content inside `BlazorWebView` avoids mixing native WPF overlays with the
 browser-rendered map.

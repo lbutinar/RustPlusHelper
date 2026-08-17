@@ -1,0 +1,72 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JavaScript
+
+<div id="@ElementId" class="rust-map" aria-label="Interactive demo Rust map">
+    @if (State.ConnectionState != DashboardConnectionState.Ready)
+    {
+        <div class="map-placeholder">Waiting for map data…</div>
+    }
+</div>
+
+@code {
+    private readonly string _elementId = $"rust-map-{Guid.NewGuid():N}";
+    private bool _interopCreated;
+
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private string ElementId => _elementId;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var model = MapRenderModelFactory.Create(State);
+        if (model is null)
+        {
+            return;
+        }
+
+        var interopModel = new
+        {
+            model.Width,
+            model.Height,
+            Items = model.Items.Select(item => new
+            {
+                item.Id,
+                Layer = MapRenderModelFactory.ToLayerKey(item.Layer),
+                item.Kind,
+                item.Label,
+                item.PixelX,
+                item.PixelY,
+                item.WorldX,
+                item.WorldY,
+                item.IsOnline,
+                item.IsAlive
+            }),
+            model.LayerVisibility
+        };
+
+        await JavaScript.InvokeVoidAsync(
+            "rustPlusMap.render",
+            ElementId,
+            "assets/fake-rust-map.svg",
+            interopModel);
+        _interopCreated = true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_interopCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            await JavaScript.InvokeVoidAsync("rustPlusMap.destroy", ElementId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The WebView is already gone; there is no JavaScript map left to release.
+        }
+    }
+}

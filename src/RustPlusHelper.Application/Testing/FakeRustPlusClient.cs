@@ -3,7 +3,7 @@ using RustPlusHelper.Application.RustPlus;
 namespace RustPlusHelper.Application.Testing;
 
 /// <summary>Deterministic source for UI and application development without a live Rust server.</summary>
-public sealed class FakeRustPlusClient : IRustPlusClient
+public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
 {
     private static readonly DateTimeOffset FixedUtc = new(2026, 8, 17, 12, 0, 0, TimeSpan.Zero);
 
@@ -110,6 +110,8 @@ public sealed class FakeRustPlusClient : IRustPlusClient
     {
         await DisconnectAsync().ConfigureAwait(false);
     }
+
+    public void Dispose() => IsConnected = false;
 
     private Task<RustPlusResult<T>> ConnectedResult<T>(T value, CancellationToken cancellationToken)
     {

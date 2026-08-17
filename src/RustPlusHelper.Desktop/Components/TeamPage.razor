@@ -1,0 +1,64 @@
+<section class="content-page">
+    <div class="page-heading">
+        <div>
+            <span class="eyebrow">DIRECT RUST+ SNAPSHOT</span>
+            <h1>Team</h1>
+            <p>Online, alive, and position fields come from the verified team response.</p>
+        </div>
+        <div class="summary-chip">@(State.Team?.Members.Count ?? 0) MEMBERS</div>
+    </div>
+
+    <div class="content-grid two-column">
+        <div class="surface-card">
+            <div class="panel-heading"><h2>Roster</h2><span class="demo-badge">DEMO</span></div>
+            <div class="team-list">
+                @foreach (var member in State.Team?.Members ?? [])
+                {
+                    <div class="team-row">
+                        <div class="avatar">@Initial(member.Name)</div>
+                        <div class="team-identity">
+                            <strong>@(member.Name ?? "Unknown teammate")</strong>
+                            <small>@member.SteamId</small>
+                        </div>
+                        <div class="position-copy">
+                            <strong>@member.X.ToString("0") / @member.Y.ToString("0")</strong>
+                            <small>WORLD X / Y</small>
+                        </div>
+                        <span class="status-pill @(member.IsOnline ? "online" : "offline")">
+                            @(member.IsOnline ? "ONLINE" : "OFFLINE")
+                        </span>
+                        <span class="life-pill @(member.IsAlive ? "alive" : "dead")">
+                            @(member.IsAlive ? "ALIVE" : "DEAD")
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="surface-card chat-card">
+            <div class="panel-heading"><h2>Recent team chat</h2><span class="source-pill">DIRECT</span></div>
+            <div class="chat-list">
+                @foreach (var message in State.Chat?.Messages ?? [])
+                {
+                    <article class="chat-message">
+                        <div class="avatar small">@Initial(message.Name)</div>
+                        <div>
+                            <header><strong>@message.Name</strong><time>@message.SentAtUtc.ToString("HH:mm")</time></header>
+                            <p>@message.Message</p>
+                        </div>
+                    </article>
+                }
+            </div>
+            <div class="future-input">Sending chat is intentionally deferred beyond the read-only skeleton.</div>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private static string Initial(string? name) => string.IsNullOrWhiteSpace(name)
+        ? "?"
+        : name.Trim()[..1].ToUpperInvariant();
+}

@@ -12,3 +12,4 @@
 | `testing.md` | Unit, adapter, fake-source, database, and live testing strategy |
 | `development-plan.md` | Approved sequence from Phase 0 through packaging |
 | `adr/` | Durable architecture decisions |
+| `../THIRD-PARTY-NOTICES.md` | Vendored runtime dependency licenses |
