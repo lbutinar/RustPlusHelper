@@ -1,10 +1,11 @@
 <section class="map-page">
     <div class="page-heading map-heading">
         <div>
-            <span class="eyebrow">LIVE OPERATIONS</span>
+            <span class="eyebrow">@SourceEyebrow</span>
             <h1>Server map</h1>
         </div>
-        <div class="map-metrics">
+        <div class="map-heading-actions">
+          <div class="map-metrics">
             <div>
                 <span>PLAYERS</span>
                 <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
@@ -17,6 +18,13 @@
                 <span>MAP SIZE</span>
                 <strong>@State.Server?.MapSize m</strong>
             </div>
+          </div>
+          @if (State.ServerId is not null)
+          {
+              <button data-testid="refresh-live-map" type="button" class="primary-button" @onclick="RefreshMap">
+                  Refresh live map
+              </button>
+          }
         </div>
     </div>
 
@@ -72,25 +80,30 @@
         </aside>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(State.ErrorMessage))
+    {
+        <div class="map-cache-warning" role="status">@State.ErrorMessage</div>
+    }
+
     <div class="event-strip">
         <div class="event-title">
             <span class="live-pulse"></span>
-            DEMO FEED
+            MAP SNAPSHOT
         </div>
         <div class="event-item">
             <time>NOW</time>
             <span class="event-source direct">SNAPSHOT</span>
-            <strong>@(State.Team?.Members.Count ?? 0) team members loaded</strong>
+            <strong>@(State.Map?.Monuments.Count ?? 0) monuments loaded</strong>
         </div>
         <div class="event-item">
             <time>NOW</time>
             <span class="event-source direct">SNAPSHOT</span>
-            <strong>@(State.Markers?.Markers.Count ?? 0) map markers loaded</strong>
+            <strong>@SnapshotAgeLabel</strong>
         </div>
         <div class="event-item muted">
-            <time>PHASE 5</time>
+            <time>NEXT</time>
             <span class="event-source derived">DERIVED</span>
-            <strong>Semantic event diffing arrives later</strong>
+            <strong>Team and marker polling arrive in the next phases</strong>
         </div>
     </div>
 </section>
@@ -105,7 +118,21 @@
     [Parameter]
     public EventCallback<LayerVisibilityChange> OnLayerChanged { get; set; }
 
+    [Parameter]
+    public EventCallback OnRefreshRequested { get; set; }
+
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
+
+    private string SourceEyebrow => State.DataSource switch
+    {
+        MapDashboardDataSource.Live => "LIVE RUST+ SNAPSHOT",
+        MapDashboardDataSource.Cache => "CACHED RUST+ SNAPSHOT",
+        _ => "DEVELOPMENT DATA"
+    };
+
+    private string SnapshotAgeLabel => State.MapRetrievedAtUtc is { } retrieved
+        ? $"Map retrieved {retrieved.ToLocalTime():dd MMM · HH:mm}"
+        : "Map retrieval time unavailable";
 
     private async Task ChangeLayer(MapLayerState layer, ChangeEventArgs args)
     {
@@ -116,4 +143,6 @@
     }
 
     private Task FitMap() => JavaScript.InvokeVoidAsync("rustPlusMap.fitActive").AsTask();
+
+    private Task RefreshMap() => OnRefreshRequested.InvokeAsync();
 }

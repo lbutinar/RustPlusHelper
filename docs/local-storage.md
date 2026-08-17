@@ -19,8 +19,10 @@ file-level backup while the app is open. Prefer closing the application before c
 - saved server names, companion host/port, proxy choice, effective pairing-identity snapshot, and
   timestamps;
 - purpose-labelled DPAPI ciphertext for pairing secrets.
+- latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp.
 
-Map, team, chat, history, and device data are not persisted yet.
+Team, chat, marker history, and device data are not persisted yet. A map refresh replaces the prior
+snapshot for that server; deleting a server cascades its cached map.
 
 ## Security boundary
 

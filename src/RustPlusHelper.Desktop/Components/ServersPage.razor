@@ -19,15 +19,15 @@
             <article class="surface-card server-card demo-server-card">
                 <div class="server-monogram">EU</div>
                 <div>
-                    <span class="eyebrow">CURRENT MAP DEMO</span>
+                    <span class="eyebrow">CURRENT MAP VIEW</span>
                     <h2>@(State.Server?.Name ?? "Fake EU Main")</h2>
-                    <p>@State.Server?.MapName · @State.Server?.MapSize m · not persisted</p>
+                    <p>@State.Server?.MapName · @State.Server?.MapSize m</p>
                 </div>
                 <div class="server-stats">
                     <strong>@State.Server?.PlayerCount / @State.Server?.MaxPlayerCount</strong>
                     <span>PLAYERS</span>
                 </div>
-                <span class="status-pill online">FAKE DATA</span>
+                <span class="status-pill online">@CurrentSourceLabel</span>
             </article>
 
             <div class="section-label-row">
@@ -64,7 +64,7 @@
                                 </div>
                                 <p>@profile.Host:@profile.Port</p>
                                 <span class="server-transport">
-                                    @(profile.UseFacepunchProxy ? "Facepunch secure proxy" : "Direct transport requires later explicit opt-in")
+                                    @(profile.UseFacepunchProxy ? "Facepunch secure proxy" : "Explicit direct plaintext transport")
                                 </span>
                             </div>
                             <div class="server-actions">
@@ -77,6 +77,13 @@
                                         disabled="@connection.IsInProgress"
                                         @onclick="() => TestConnection(profile.Id)">
                                     @(connection.IsInProgress ? "Testing…" : "Test connection")
+                                </button>
+                                <button data-testid="open-server-map"
+                                        type="button"
+                                        class="primary-button"
+                                        disabled="@(!hasPairing || connection.IsInProgress)"
+                                        @onclick="() => OpenMap(profile.Id)">
+                                    Open map
                                 </button>
                                 <button type="button" class="ghost-button" @onclick="() => SelectProfile(profile.Id)">Select</button>
                                 <button type="button" class="ghost-button" @onclick="() => EditProfile(profile)">Edit</button>
@@ -235,6 +242,16 @@
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
 
+    [Parameter]
+    public EventCallback<Guid> OnOpenMap { get; set; }
+
+    private string CurrentSourceLabel => State.DataSource switch
+    {
+        MapDashboardDataSource.Live => "LIVE RUST+",
+        MapDashboardDataSource.Cache => "CACHED MAP",
+        _ => "FAKE DATA"
+    };
+
     private Guid? _editingId;
     private Guid? _removeConfirmationId;
     private string _displayName = string.Empty;
@@ -352,6 +369,8 @@
             _errorMessage = "The connection test failed unexpectedly.";
         }
     }
+
+    private Task OpenMap(Guid id) => OnOpenMap.InvokeAsync(id);
 
     private void EditProfile(ServerProfile profile)
     {

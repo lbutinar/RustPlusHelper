@@ -10,6 +10,7 @@ using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
 using RustPlusHelper.Desktop;
+using RustPlusHelper.Desktop.Components;
 
 namespace RustPlusHelper.Desktop.Tests;
 
@@ -25,9 +26,6 @@ public sealed class MainComponentTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var client = new FakeRustPlusClient();
-        var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
-        _dashboard = new MapDashboardService(client, connection);
         _serverRepository = new InMemoryServerRepository();
         _secretStore = new InMemorySecretStore();
         _identityManager = new PlayerIdentityManager(
@@ -45,6 +43,16 @@ public sealed class MainComponentTests : BunitContext
             _secretStore,
             new FakeClientFactory(),
             TimeProvider.System);
+        var client = new FakeRustPlusClient();
+        var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
+        var mapCache = new InMemoryMapCacheRepository();
+        _dashboard = new MapDashboardService(
+            client,
+            connection,
+            serverManager,
+            _connections,
+            mapCache,
+            TimeProvider.System);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
         // component test independent from the Windows desktop composition root.
@@ -55,6 +63,7 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(_identityManager);
         Services.AddSingleton(serverManager);
         Services.AddSingleton(_connections);
+        Services.AddSingleton<IMapCacheRepository>(mapCache);
     }
 
     [Fact]
@@ -121,6 +130,35 @@ public sealed class MainComponentTests : BunitContext
 
         component.WaitForAssertion(() =>
             Assert.False(_dashboard.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Team).IsVisible));
+    }
+
+    [Fact]
+    public void LiveMapCanvasPassesRustPlusJpegToLeafletAsLocalData()
+    {
+        var state = new MapDashboardState(
+            DashboardConnectionState.Ready,
+            "Live map · direct",
+            MapDashboardDataSource.Live,
+            Guid.Parse("bb1b670b-3711-42df-90d8-9f0ac9b65ea9"),
+            DateTimeOffset.UtcNow,
+            new ServerInfoSnapshot(
+                "Live test", null, null, "Procedural Map", 4500, null,
+                null, null, null, null, null, null, null, null, null),
+            new ServerMapSnapshot(
+                1000, 1000, 50, "#FF102030", [], [0xFF, 0xD8, 0xFF, 0xD9]),
+            null,
+            null,
+            null,
+            MapDashboardState.CreateLiveMapLayers(),
+            null);
+
+        Render<MapCanvas>(parameters => parameters.Add(component => component.State, state));
+
+        var invocation = Assert.Single(
+            JSInterop.Invocations,
+            candidate => candidate.Identifier == "rustPlusMap.render");
+        var imageSource = Assert.IsType<string>(invocation.Arguments[1]);
+        Assert.StartsWith("data:image/jpeg;base64,", imageSource, StringComparison.Ordinal);
     }
 
     [Fact]

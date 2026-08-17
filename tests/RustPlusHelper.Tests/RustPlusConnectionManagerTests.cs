@@ -76,6 +76,38 @@ public sealed class RustPlusConnectionManagerTests
     }
 
     [Fact]
+    public async Task LoadsAuthenticatedMapThenClosesSocketAndClearsTokenBuffer()
+    {
+        var servers = CreateServers(out var profile, useFacepunchProxy: false);
+        using var secrets = new TrackingSecretStore("-193746281");
+        var map = new ServerMapSnapshot(
+            1000,
+            1000,
+            50,
+            "#FF102030",
+            [new MapMonumentSnapshot("airfield_1", 120, 240)],
+            [0xFF, 0xD8, 0xFF, 0xD9]);
+        var client = new StubRustPlusClient(
+            RustPlusResult<ServerInfoSnapshot>.Success(ServerInfo("Live map server")),
+            mapResult: RustPlusResult<ServerMapSnapshot>.Success(map));
+        using var manager = new RustPlusConnectionManager(
+            servers,
+            secrets,
+            new SingleClientFactory(client),
+            new FixedTimeProvider(FixedUtc));
+
+        var result = await manager.LoadMapAsync(profile.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(map, result.Map);
+        Assert.Equal("Live map server", result.ServerInfo?.Name);
+        Assert.False(client.IsConnected);
+        Assert.False(client.ConnectionOptions?.UseFacepunchProxy);
+        Assert.NotNull(secrets.LastRetrievedBuffer);
+        Assert.All(secrets.LastRetrievedBuffer, value => Assert.Equal(0, value));
+    }
+
+    [Fact]
     public async Task DoesNotExposeTokenWhenTransportThrowsIt()
     {
         const string token = "-2147483648";
@@ -147,7 +179,8 @@ public sealed class RustPlusConnectionManagerTests
 
     private sealed class StubRustPlusClient(
         RustPlusResult<ServerInfoSnapshot> serverInfo,
-        bool throwTokenFromConnect = false) : IRustPlusClient
+        bool throwTokenFromConnect = false,
+        RustPlusResult<ServerMapSnapshot>? mapResult = null) : IRustPlusClient
     {
         public bool IsConnected { get; private set; }
 
@@ -179,8 +212,12 @@ public sealed class RustPlusConnectionManagerTests
             return Task.FromResult(serverInfo);
         }
 
-        public Task<RustPlusResult<ServerMapSnapshot>> GetMapAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<RustPlusResult<ServerMapSnapshot>> GetMapAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(mapResult
+                ?? RustPlusResult<ServerMapSnapshot>.Failure("not_configured", "No map result configured."));
+        }
 
         public Task<RustPlusResult<TeamSnapshot>> GetTeamAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

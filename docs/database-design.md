@@ -6,18 +6,22 @@ installer and remains relational and inspectable.
 ## Current implementation
 
 The current database lives at `%LOCALAPPDATA%\RustPlusHelper\rustplushelper.db`. Versioned migrations
-currently create only:
+currently create:
 
 - `schema_migrations`;
 - `player_identity` for the one Steam64 ID used across saved servers;
 - `servers` for non-secret connection metadata;
 - `pairings` for purpose-labelled DPAPI ciphertext.
+- `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server.
 
 The player identity is the application-level source of truth. A server row retains the effective
 Steam64 ID snapshot associated with its current per-server pairing token so a future identity change
 cannot silently reuse a token issued to a different player.
 
-Creating the entire future schema now would make unverified assumptions. Session, map, team, marker,
+The map cache is deliberately a latest-snapshot cache rather than map history: metadata is stored as
+JSON and the JPEG as a BLOB behind the server foreign key. Session normalization and history wait for
+verified wipe/session behavior. Creating the entire future schema now would make unverified
+assumptions. Session, team, marker,
 market, device, camera, event, death, chat, and notification tables remain planned until their owning
 phase has real write/read behavior.
 

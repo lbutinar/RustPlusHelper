@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 2;
+    private const int LatestVersion = 3;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -48,6 +48,16 @@ internal static class SqliteMigrationRunner
         LIMIT 1;
         """;
 
+    private const string MapCacheSchema = """
+        CREATE TABLE map_cache (
+            server_id TEXT NOT NULL PRIMARY KEY,
+            retrieved_utc_ms INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL CHECK(length(metadata_json) > 0),
+            jpeg_image BLOB NOT NULL CHECK(length(jpeg_image) > 0),
+            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+        );
+        """;
+
     public static void Apply(SqliteConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -84,6 +94,7 @@ internal static class SqliteMigrationRunner
         {
             1 => ("initial server registry and protected pairings", InitialSchema),
             2 => ("application player identity", PlayerIdentitySchema),
+            3 => ("latest Rust+ map cache", MapCacheSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

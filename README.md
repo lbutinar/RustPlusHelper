@@ -4,10 +4,9 @@ RustPlusHelper is a Windows-first Rust+ companion dashboard under active develop
 feature will be an interactive Rust map with team positions, map notes, vending machines, world-event
 markers, supported smart devices, cameras, notifications, and locally recorded history.
 
-This repository currently contains the approved **Phase 0 protocol verification spike**, the
-**Phase 1 map-first desktop skeleton**, and the **Phase 2 local persistence foundation**. The map
-still uses deterministic fake data until live protocol verification and later connection phases are
-complete.
+This repository currently contains the protocol adapter, map-first desktop shell, local persistence,
+manual pairing, authenticated connection testing, and the first live-map slice. A selected paired
+server can now download its real Rust+ JPEG map and reopen the latest snapshot from SQLite.
 
 RustPlusHelper is an unofficial community project. It is not affiliated with or endorsed by
 Facepunch Studios. Rust and Rust+ names and brand assets belong to Facepunch Studios and are used
@@ -41,11 +40,17 @@ Implemented:
   status, and DPAPI-protected token persistence.
 - a read-only per-server connection test that uses the saved transport choice, validates pairing with
   server information, reports distinct failure states, and closes the test socket. Secure proxy is
-  the default; plaintext direct transport requires an explicit persisted opt-in.
+  the default; plaintext direct transport requires an explicit persisted opt-in;
+- live server-information and map download through the selected saved profile;
+- SQLite map snapshot caching, real JPEG rendering, manual refresh, and truthful live/cached/fake
+  source labels;
+- live-map layers limited to the directly returned base map and monuments until polling phases add
+  team and map markers.
 
-Still requiring a real paired server:
+Still requiring live verification or later phases:
 
-- live validation of the secure Facepunch proxy and the five read-only calls;
+- secure Facepunch proxy validation (the tested server currently returns HTTP 418 at upgrade);
+- live validation of team, chat, and marker requests;
 - capture of reviewed, sanitized raw protocol fixtures;
 - confirmation of real map/grid alignment against the official Rust+ app.
 
@@ -69,15 +74,16 @@ Run the deterministic verification without credentials:
 dotnet run --project .\src\RustPlusHelper.Verification -- --fake
 ```
 
-Launch the Phase 1 desktop shell:
+Launch the desktop app:
 
 ```powershell
 dotnet run --project .\src\RustPlusHelper.Desktop
 ```
 
-The map is intentionally marked `FAKE DATA`. The Servers page can make an explicit, read-only Rust+
-connection test when the user clicks **Test connection**; it never connects merely because a profile
-was saved or selected. Live map/team/marker data is not wired into the main dashboard yet.
+With no saved server, the app opens deterministic fake data. With a selected paired server, it opens
+the cached map when available or performs the first live map download. Use **Open map** on a server
+or **Refresh live map** on the map page for an explicit refresh. Team/chat/marker polling is not wired
+into the live dashboard yet.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 

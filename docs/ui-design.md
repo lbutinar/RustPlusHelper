@@ -1,8 +1,8 @@
 # Map-first UI design
 
-## Phase 1 implementation status
+## Current implementation status
 
-Implemented with deterministic fake data:
+Implemented:
 
 - WPF window and Blazor Hybrid root;
 - locally vendored Leaflet 1.9.4 using `CRS.Simple`;
@@ -11,16 +11,18 @@ Implemented with deterministic fake data:
 - independent layers and disabled explanations for data Rust+ does not position;
 - responsive dark Rust-inspired styling;
 - bUnit navigation and interaction coverage.
+- real Rust+ JPEG rendering for the selected paired server;
+- cache-first startup, explicit live refresh, and live/cached/fake source badges;
+- base-map and monument layers enabled for live maps while future polling layers stay disabled.
 
 The grid-search tool remains disabled until the community grid formula is validated against the
-official Rust+ app. The desktop does not connect to a live server in this phase.
+official Rust+ app.
 
-## Phase 2 server registry
+## Server registry
 
-The Servers page now uses the real local SQLite registry while the map remains fake. It provides
-add, edit, select, and two-step removal for connection profiles. The form defaults to the Facepunch
-secure proxy and deliberately has no token field; authentication enters only through the future
-pairing workflow and protected secret store.
+The Servers page uses the real local SQLite registry. It provides add, edit, select, test, open-map,
+and two-step removal actions. The form defaults to the Facepunch secure proxy, accepts a masked
+per-server player token, and persists only DPAPI-protected ciphertext.
 
 The application opens to the map, not a generic dashboard.
 

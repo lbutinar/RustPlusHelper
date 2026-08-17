@@ -80,16 +80,19 @@ Unknown marker numeric type and unsigned marker ID are deliberately preserved.
 ## Live evidence status
 
 On 2026-08-17, an explicit read-only desktop test used a locally DPAPI-protected pairing against the
-selected server. The dependency graph and credential retrieval succeeded, and the TLS endpoint at
-Facepunch was reached, but the proxy rejected the WebSocket upgrade with HTTP `418` instead of `101`.
-No protobuf request was sent, so this is transport evidence only—not authenticated protocol success.
-The test did not fall back to plaintext direct transport.
+selected server. The TLS endpoint at Facepunch was reached, but the proxy rejected the WebSocket
+upgrade with HTTP `418` instead of `101`; the test did not fall back to plaintext.
+
+The profile was then explicitly changed to direct `ws://` transport after the UI plaintext warning.
+That selected transport authenticated successfully: `GetInfoAsync` returned server information and
+`GetMapAsync` returned dimensions, ocean margin, monuments, and a non-empty JPEG. The desktop cached
+that snapshot locally. No endpoint, player identity, token, server name, map contents, or precise
+coordinates were copied into repository evidence.
 
 These items remain **pending, not confirmed live**:
 
-- a successful connection through either explicitly selected transport;
-- success of all five read-only operations for the user's current team/server state;
-- real optional-field population;
+- success of team, chat, and map-marker operations for the user's current team/server state;
+- real optional-field population outside the confirmed server/map subset;
 - image/world coordinate alignment against the official app;
 - sanitized raw binary fixture capture.
 

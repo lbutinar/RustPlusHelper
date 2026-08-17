@@ -47,6 +47,16 @@
 - transport exceptions cannot surface a numeric player token in connection state;
 - the Servers page exercises the saved-pairing **Test connection** flow through a fake client factory.
 
+## Current Phase 4 tests
+
+- a live-map operation authenticates, requests server info then map, closes the socket, and clears the
+  retrieved token buffer;
+- selected saved servers populate the map dashboard through a production-client factory;
+- a second dashboard session reopens the cached map without another Rust+ connection;
+- real temporary SQLite tests round-trip map metadata/JPEG and verify delete cascade;
+- live map state disables team, vending, and event layers until their polling phases;
+- a manual local run confirmed direct `GetInfo` + `GetMap` and wrote a non-empty JPEG cache entry.
+
 ## Test layers planned
 
 ### Unit

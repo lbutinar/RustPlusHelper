@@ -342,10 +342,36 @@ button {
 }
 
 .map-page {
+    position: relative;
     display: grid;
     grid-template-rows: 82px minmax(0, 1fr) 58px;
     width: 100%;
     height: 100%;
+}
+
+.map-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+}
+
+.map-heading-actions > .primary-button {
+    white-space: nowrap;
+}
+
+.map-cache-warning {
+    position: absolute;
+    z-index: 850;
+    top: 92px;
+    left: 18px;
+    max-width: min(620px, calc(100% - 340px));
+    border: 1px solid rgba(237, 182, 84, 0.4);
+    border-radius: 7px;
+    padding: 8px 12px;
+    background: rgba(43, 34, 18, 0.94);
+    color: #f1cc87;
+    font-size: 9px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
 }
 
 .page-heading {

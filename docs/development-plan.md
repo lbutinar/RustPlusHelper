@@ -7,9 +7,9 @@
 **Current deliverables:** application-owned client boundary, RustPlusApi adapter, fake source,
 read-only verification CLI, aggregate report, map output, tests, and protocol/security documents.
 
-**Remaining dependency:** a successful authenticated live connection. A paired server is now stored
-outside Git, but its first secure-proxy attempt returned HTTP 418 before WebSocket upgrade; direct
-plaintext transport has not been enabled without explicit user consent.
+**Remaining dependency:** live team, chat, and map-marker validation plus a reviewed fixture. The
+selected server's secure-proxy attempt returned HTTP 418 before WebSocket upgrade. The explicitly
+selected direct transport has since authenticated and returned server and map snapshots.
 
 **Done:** five live read-only calls succeed through the selected transport; map is saved; protocol
 evidence is updated; secrets are absent from output; reviewed fixture capture is resolved.
@@ -71,11 +71,16 @@ selection, no fallback, and the Servers UI state.
 
 **Goal:** Render and cache the real Rust+ map.
 
+**Status:** Core slice implemented and live-verified on 2026-08-17. The selected saved profile can
+download `GetInfo` + `GetMap`, render the JPEG, cache the latest snapshot in SQLite, reopen it without
+a network request, and refresh explicitly. Golden alignment/grid validation remains.
+
 **Modules:** map/session services, coordinate projector, grid service, map repositories.
 
 **Risks/tests:** ocean margin, custom maps, grid formula; live golden alignment with official app.
 
-**Done:** known positions align and cached map reopens offline.
+**Done:** known positions align with the official app and cached map reopens offline. Cache reopening
+is automated; live visual alignment is still pending.
 
 ## Phase 5 — Team, chat, and semantic events
 

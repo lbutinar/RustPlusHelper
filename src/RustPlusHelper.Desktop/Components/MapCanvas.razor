@@ -1,7 +1,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JavaScript
 
-<div id="@ElementId" class="rust-map" aria-label="Interactive demo Rust map">
+<div id="@ElementId" class="rust-map" aria-label="Interactive Rust server map">
     @if (State.ConnectionState != DashboardConnectionState.Ready)
     {
         <div class="map-placeholder">Waiting for map data…</div>
@@ -11,6 +11,8 @@
 @code {
     private readonly string _elementId = $"rust-map-{Guid.NewGuid():N}";
     private bool _interopCreated;
+    private byte[]? _encodedImage;
+    private string? _imageSource;
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
@@ -45,12 +47,31 @@
             model.LayerVisibility
         };
 
+        var imageSource = GetImageSource();
         await JavaScript.InvokeVoidAsync(
             "rustPlusMap.render",
             ElementId,
-            "assets/fake-rust-map.svg",
+            imageSource,
             interopModel);
         _interopCreated = true;
+    }
+
+    private string GetImageSource()
+    {
+        if (State.DataSource == MapDashboardDataSource.Fake)
+        {
+            return "assets/fake-rust-map.svg";
+        }
+
+        var image = State.Map?.JpegImage
+            ?? throw new InvalidOperationException("The ready map state has no image.");
+        if (!ReferenceEquals(image, _encodedImage))
+        {
+            _encodedImage = image;
+            _imageSource = $"data:image/jpeg;base64,{Convert.ToBase64String(image)}";
+        }
+
+        return _imageSource!;
     }
 
     public async ValueTask DisposeAsync()

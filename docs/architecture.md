@@ -10,7 +10,9 @@ documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phas
 migrations, the server registry, and DPAPI-protected secret persistence. Phase 3 now includes a
 single application-level Steam64 identity, manual per-server token entry, and an explicit read-only
 connection/authentication test. Automated pairing, persistent connection supervision, background
-monitoring, and notifications are not implemented yet.
+monitoring, and notifications are not implemented yet. Phase 4 now uses that same manager for a
+short-lived `GetInfo` + `GetMap` operation, persists the latest successful snapshot, and renders the
+real JPEG without exposing credentials to UI components.
 
 ## Dependency direction
 
@@ -45,14 +47,17 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Infrastructure.Storage.Tests`: real temporary-SQLite and current-user DPAPI tests.
 
 The desktop composition root references the application boundary plus the Rust+ and storage
-infrastructure projects. Third-party types remain contained inside the Rust+ adapter. It injects
-`FakeRustPlusClient` for the still-demonstration map and `RustPlusApiClientFactory` only for explicit
-saved-server connection tests; replacing the adapter does not change UI components.
+infrastructure projects. Third-party types remain contained inside the Rust+ adapter. It retains a
+`FakeRustPlusClient` for development/no-server mode and uses `RustPlusApiClientFactory` for saved-
+server connection tests and live map downloads; replacing the adapter does not change UI components.
 
 ## Planned services
 
-- `RustPlusConnectionManager` currently owns serialized, short-lived saved-server connection tests;
-  it will grow into per-server supervisors without moving socket lifetime into UI components.
+- `RustPlusConnectionManager` currently owns serialized, short-lived saved-server connection tests
+  and live map downloads; it will grow into per-server supervisors without moving socket lifetime
+  into UI components.
+- `MapDashboardService` selects live, cached, or fake sources and exposes one canonical map state.
+- `IMapCacheRepository` stores the latest map/server snapshot per saved server for offline reopening.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
 - `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, `DeviceManager`, and

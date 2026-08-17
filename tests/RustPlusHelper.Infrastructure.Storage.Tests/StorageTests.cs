@@ -2,10 +2,13 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using RustPlusHelper.Application.Identity;
+using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Infrastructure.Storage.Security;
 using RustPlusHelper.Infrastructure.Storage.Identity;
+using RustPlusHelper.Infrastructure.Storage.Map;
 using RustPlusHelper.Infrastructure.Storage.Servers;
 using RustPlusHelper.Infrastructure.Storage.Sqlite;
 
@@ -25,7 +28,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(2L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(3L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -93,13 +96,47 @@ public sealed class StorageTests
         using (var connection = temporary.Database.OpenConnection())
         {
             Execute(connection, "DROP TABLE player_identity;");
-            Execute(connection, "DELETE FROM schema_migrations WHERE version = 2;");
+            Execute(connection, "DROP TABLE map_cache;");
+            Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
         var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
         reopenedDatabase.Initialize();
 
         Assert.Equal(ulong.MaxValue, new SqlitePlayerIdentityRepository(reopenedDatabase).Get()?.SteamId);
+    }
+
+    [Fact]
+    public void MapCacheRoundTripsJpegAndMetadataAndCascadesWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqliteMapCacheRepository(temporary.Database);
+        var map = new CachedServerMap(
+            profile.Id,
+            FixedUtc,
+            new ServerInfoSnapshot(
+                "Cached server", null, null, "Procedural Map", 4500, FixedUtc.AddDays(-2),
+                42, 200, 3, 123, 456, null, null, null, null),
+            new ServerMapSnapshot(
+                1000, 1000, 50, "#FF112233",
+                [new MapMonumentSnapshot("launch_site_1", 100, 200)],
+                [0xFF, 0xD8, 0xFF, 0xD9]));
+
+        repository.Upsert(map);
+        var restored = repository.Get(profile.Id);
+
+        Assert.NotNull(restored);
+        Assert.Equal(map.RetrievedAtUtc, restored.RetrievedAtUtc);
+        Assert.Equal(map.Server, restored.Server);
+        Assert.Equal(map.Map.Width, restored.Map.Width);
+        Assert.Equal(map.Map.Monuments, restored.Map.Monuments);
+        Assert.Equal(map.Map.JpegImage, restored.Map.JpegImage);
+
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Null(repository.Get(profile.Id));
     }
 
     [Fact]

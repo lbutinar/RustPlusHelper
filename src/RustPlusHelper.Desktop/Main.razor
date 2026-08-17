@@ -9,15 +9,15 @@
             </div>
             <div>
                 <div class="brand-name">RustPlusHelper</div>
-                <div class="brand-subtitle">UNOFFICIAL PERSONAL COMPANION · PHASE 3</div>
+                <div class="brand-subtitle">UNOFFICIAL PERSONAL COMPANION · LIVE MAP</div>
             </div>
         </div>
 
-        <button class="server-selector" type="button" aria-label="Selected demo server">
+        <button class="server-selector" type="button" aria-label="Open saved servers" @onclick="() => SelectSection(AppSection.Servers)">
             <span class="server-dot"></span>
             <span>
-                <strong>@(State.Server?.Name ?? "Demo server")</strong>
-                <small>@(State.Server?.MapName ?? "Loading fake Rust+ data")</small>
+                <strong>@(State.Server?.Name ?? "No map loaded")</strong>
+                <small>@(State.Server?.MapName ?? DataSourceDetail)</small>
             </span>
             <span class="selector-chevron">⌄</span>
         </button>
@@ -25,7 +25,7 @@
         <div class="connection-state @ConnectionCssClass">
             <span class="pulse-dot"></span>
             <span>@State.ConnectionLabel</span>
-            <span class="demo-badge">FAKE DATA</span>
+            <span class="demo-badge">@DataSourceBadge</span>
         </div>
     </header>
 
@@ -44,9 +44,9 @@
         </nav>
 
         <div class="sidebar-footer">
-            <div class="wipe-label">DEMO WIPE</div>
+            <div class="wipe-label">MAP WIPE</div>
             <strong>@FormatWipeTime()</strong>
-            <span>Local fake session</span>
+            <span>@DataSourceDetail</span>
         </div>
     </aside>
 
@@ -55,16 +55,17 @@
         {
             <section class="loading-state">
                 <div class="loader-ring"></div>
-                <h1>Loading Rust+ demo session</h1>
-                <p>Building the map-first view through <code>IRustPlusClient</code>.</p>
+                <h1>Loading Rust+ map</h1>
+                <p>Requesting verified server and map snapshots.</p>
             </section>
         }
         else if (State.ConnectionState == DashboardConnectionState.Failed)
         {
             <section class="error-state">
-                <span class="error-code">DEMO LOAD FAILED</span>
-                <h1>The fake Rust+ source could not be loaded.</h1>
+                <span class="error-code">MAP LOAD FAILED</span>
+                <h1>The selected Rust+ map could not be loaded.</h1>
                 <p>@State.ErrorMessage</p>
+                <button type="button" class="primary-button" @onclick="() => SelectSection(AppSection.Servers)">Open servers</button>
             </section>
         }
         else
@@ -72,7 +73,9 @@
             @switch (ActiveSection)
             {
                 case AppSection.Map:
-                    <MapPage State="State" OnLayerChanged="HandleLayerChanged" />
+                    <MapPage State="State"
+                             OnLayerChanged="HandleLayerChanged"
+                             OnRefreshRequested="RefreshMap" />
                     break;
                 case AppSection.Team:
                     <TeamPage State="State" />
@@ -87,7 +90,7 @@
                     <DevicesPage />
                     break;
                 case AppSection.Servers:
-                    <ServersPage State="State" />
+                    <ServersPage State="State" OnOpenMap="OpenServerMap" />
                     break;
                 case AppSection.Settings:
                     <SettingsPage />
@@ -120,6 +123,22 @@
         _ => "loading"
     };
 
+    private string DataSourceBadge => State.DataSource switch
+    {
+        MapDashboardDataSource.Live => "LIVE RUST+",
+        MapDashboardDataSource.Cache => "CACHED",
+        MapDashboardDataSource.Fake => "FAKE DATA",
+        _ => "NO DATA"
+    };
+
+    private string DataSourceDetail => State.DataSource switch
+    {
+        MapDashboardDataSource.Live => "Rust+ live snapshot",
+        MapDashboardDataSource.Cache => "Local cached snapshot",
+        MapDashboardDataSource.Fake => "Local fake session",
+        _ => "Choose a saved server"
+    };
+
     protected override async Task OnInitializedAsync()
     {
         Dashboard.StateChanged += HandleStateChanged;
@@ -135,6 +154,14 @@
 
     private void HandleLayerChanged(LayerVisibilityChange change) =>
         Dashboard.SetLayerVisibility(change.Kind, change.IsVisible);
+
+    private async Task RefreshMap() => await Dashboard.RefreshSelectedServerAsync();
+
+    private async Task OpenServerMap(Guid serverId)
+    {
+        ActiveSection = AppSection.Map;
+        await Dashboard.LoadServerAsync(serverId);
+    }
 
     private void HandleStateChanged(object? sender, EventArgs args) =>
         _ = InvokeAsync(StateHasChanged);
