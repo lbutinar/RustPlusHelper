@@ -1,5 +1,3 @@
-using System.Buffers.Text;
-using System.Security.Cryptography;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
 
@@ -10,8 +8,7 @@ namespace RustPlusHelper.Application.RustPlus;
 /// lifetime and cleartext pairing data never cross into UI components.
 /// </summary>
 public sealed class RustPlusConnectionManager(
-    ServerManager servers,
-    ISecretStore secretStore,
+    RustPlusSavedConnectionResolver connectionResolver,
     IRustPlusClientFactory clientFactory,
     TimeProvider timeProvider) : IDisposable
 {
@@ -21,6 +18,15 @@ public sealed class RustPlusConnectionManager(
     private readonly Dictionary<Guid, RustPlusConnectionState> _states = [];
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private bool _disposed;
+
+    public RustPlusConnectionManager(
+        ServerManager servers,
+        ISecretStore secretStore,
+        IRustPlusClientFactory clientFactory,
+        TimeProvider timeProvider)
+        : this(new RustPlusSavedConnectionResolver(servers, secretStore), clientFactory, timeProvider)
+    {
+    }
 
     public event EventHandler? StateChanged;
 
@@ -130,7 +136,7 @@ public sealed class RustPlusConnectionManager(
         TimeSpan timeoutDuration,
         string authenticatedLabel,
         string authenticatedDetail,
-        Func<IRustPlusClient, ServerInfoSnapshot, ServerProfile, CancellationToken, Task<T>> operation,
+        Func<IRustPlusClient, ServerInfoSnapshot, ResolvedRustPlusConnection, CancellationToken, Task<T>> operation,
         Func<RustPlusConnectionState, T> failure,
         string timeoutLabel,
         string timeoutDetail,
@@ -141,114 +147,79 @@ public sealed class RustPlusConnectionManager(
         await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var profile = servers.Profiles.FirstOrDefault(candidate => candidate.Id == serverId);
-            if (profile is null)
+            var resolution = connectionResolver.Resolve(serverId);
+            if (!resolution.IsSuccess || resolution.Connection is not { } connection)
+            {
+                return failure(SetState(new RustPlusConnectionState(
+                    serverId,
+                    resolution.FailureStatus,
+                    resolution.FailureLabel ?? "Connection unavailable",
+                    resolution.FailureDetail,
+                    CheckedAtUtc: timeProvider.GetUtcNow())));
+            }
+
+            var profile = connection.Profile;
+            var options = connection.Options;
+            SetState(new RustPlusConnectionState(
+                serverId,
+                RustPlusConnectionStatus.Connecting,
+                "Connecting",
+                profile.UseFacepunchProxy
+                    ? "Opening the Facepunch secure-proxy WebSocket."
+                    : "Opening the explicitly enabled direct plaintext WebSocket."));
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(timeoutDuration);
+
+            try
+            {
+                await using var client = clientFactory.Create();
+                await client.ConnectAsync(options, timeout.Token).ConfigureAwait(false);
+
+                SetState(new RustPlusConnectionState(
+                    serverId,
+                    RustPlusConnectionStatus.Authenticating,
+                    authenticatedLabel,
+                    authenticatedDetail));
+
+                var serverInfo = await client.GetServerInfoAsync(timeout.Token).ConfigureAwait(false);
+                if (!serverInfo.IsSuccess || serverInfo.Data is null)
+                {
+                    return failure(SetState(ClassifyProtocolFailure(serverId, serverInfo.Error)));
+                }
+
+                return await operation(client, serverInfo.Data, connection, timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return failure(SetState(new RustPlusConnectionState(
+                    serverId,
+                    RustPlusConnectionStatus.TimedOut,
+                    timeoutLabel,
+                    timeoutDetail,
+                    CheckedAtUtc: timeProvider.GetUtcNow())));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (RustPlusConnectionException exception)
             {
                 return failure(SetState(new RustPlusConnectionState(
                     serverId,
                     RustPlusConnectionStatus.Failed,
-                    "Server not found",
-                    "The saved server profile no longer exists.",
+                    "Connection failed",
+                    exception.Message,
                     CheckedAtUtc: timeProvider.GetUtcNow())));
             }
-
-            if (profile.PlayerId is null or 0)
+            catch (Exception exception)
             {
-                return failure(PairingRequired(
+                return failure(SetState(new RustPlusConnectionState(
                     serverId,
-                    "Save your Steam64 identity before connecting to this server."));
-            }
-
-            var tokenBytes = secretStore.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
-            if (tokenBytes is null)
-            {
-                return failure(PairingRequired(
-                    serverId,
-                    "Enter the player token supplied by this server pairing."));
-            }
-
-            try
-            {
-                if (!Utf8Parser.TryParse(tokenBytes, out int playerToken, out var consumed)
-                    || consumed != tokenBytes.Length)
-                {
-                    return failure(PairingRequired(
-                        serverId,
-                        "The protected pairing token is invalid. Re-pair this server."));
-                }
-
-                var options = new RustPlusConnectionOptions(
-                    profile.Host,
-                    profile.Port,
-                    profile.PlayerId.Value,
-                    playerToken,
-                    profile.UseFacepunchProxy);
-
-                SetState(new RustPlusConnectionState(
-                    serverId,
-                    RustPlusConnectionStatus.Connecting,
-                    "Connecting",
-                    profile.UseFacepunchProxy
-                        ? "Opening the Facepunch secure-proxy WebSocket."
-                        : "Opening the explicitly enabled direct plaintext WebSocket."));
-
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(timeoutDuration);
-
-                try
-                {
-                    await using var client = clientFactory.Create();
-                    await client.ConnectAsync(options, timeout.Token).ConfigureAwait(false);
-
-                    SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Authenticating,
-                        authenticatedLabel,
-                        authenticatedDetail));
-
-                    var serverInfo = await client.GetServerInfoAsync(timeout.Token).ConfigureAwait(false);
-                    if (!serverInfo.IsSuccess || serverInfo.Data is null)
-                    {
-                        return failure(SetState(ClassifyProtocolFailure(serverId, serverInfo.Error)));
-                    }
-
-                    return await operation(client, serverInfo.Data, profile, timeout.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    return failure(SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.TimedOut,
-                        timeoutLabel,
-                        timeoutDetail,
-                        CheckedAtUtc: timeProvider.GetUtcNow())));
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (RustPlusConnectionException exception)
-                {
-                    return failure(SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Failed,
-                        "Connection failed",
-                        exception.Message,
-                        CheckedAtUtc: timeProvider.GetUtcNow())));
-                }
-                catch (Exception exception)
-                {
-                    return failure(SetState(new RustPlusConnectionState(
-                        serverId,
-                        RustPlusConnectionStatus.Failed,
-                        "Rust+ refresh failed",
-                        $"The Rust+ data could not be loaded ({exception.GetType().Name}).",
-                        CheckedAtUtc: timeProvider.GetUtcNow())));
-                }
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(tokenBytes);
+                    RustPlusConnectionStatus.Failed,
+                    "Rust+ refresh failed",
+                    $"The Rust+ data could not be loaded ({exception.GetType().Name}).",
+                    CheckedAtUtc: timeProvider.GetUtcNow())));
             }
         }
         finally
@@ -256,14 +227,6 @@ public sealed class RustPlusConnectionManager(
             _operationLock.Release();
         }
     }
-
-    private RustPlusConnectionState PairingRequired(Guid serverId, string detail) =>
-        SetState(new RustPlusConnectionState(
-            serverId,
-            RustPlusConnectionStatus.PairingRequired,
-            "Pairing required",
-            detail,
-            CheckedAtUtc: timeProvider.GetUtcNow()));
 
     private RustPlusConnectionState ClassifyProtocolFailure(Guid serverId, RustPlusError? error)
     {

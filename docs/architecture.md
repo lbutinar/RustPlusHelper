@@ -56,11 +56,12 @@ server connection tests and live map downloads; replacing the adapter does not c
 ## Planned services
 
 - `RustPlusConnectionManager` currently owns serialized, short-lived saved-server connection tests
-  and live map downloads; it will grow into per-server supervisors without moving socket lifetime
-  into UI components.
+  and full map downloads.
+- `RustPlusLiveSessionManager` owns the selected server's persistent WebSocket, all low-cost polling,
+  reconnect backoff, and bounded snapshot-diff/transport events; UI components own no timers.
 - `MapDashboardService` selects live, cached, or fake sources and exposes one canonical map state.
-- live overlays are memory-only snapshots refreshed explicitly; a future supervisor will own polling
-  and reconnection rather than UI timers.
+- live overlays and semantic events are memory-only. Polling and reconnection are centralized in the
+  supervisor rather than UI timers.
 - `IMapCacheRepository` stores the latest map/server snapshot per saved server for offline reopening.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
@@ -91,6 +92,11 @@ attempt is never retried through direct transport.
 Rust+ supplies broadcasts for some changes but requires polling for other state. Managers must not
 create independent timers. A central scheduler will account for documented request costs and use
 broadcasts plus snapshot comparison.
+
+The current selected-server schedule is team every 5 seconds, chat and markers every 10 seconds, and
+server info every 30 seconds. That averages about 0.43 request tokens/second versus the documented
+3-token/second player refill. `NoTeam` chat failures back off to one minute; other non-transport
+failures retry no faster than 30 seconds. Map data costs five tokens and is wipe/manual only.
 
 Every emitted event will state its origin:
 

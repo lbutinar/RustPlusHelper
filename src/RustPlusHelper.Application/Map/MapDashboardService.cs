@@ -5,18 +5,21 @@ using RustPlusHelper.Application.Servers;
 namespace RustPlusHelper.Application.Map;
 
 /// <summary>
-/// Owns the map-first read model. Saved servers use one short-lived authenticated refresh cycle and
-/// an offline map cache; the deterministic source remains available when no server has been saved.
+/// Owns the map-first read model. Saved servers use a persistent low-cost live session plus an
+/// offline map cache; full map downloads remain explicit, and a deterministic source is available
+/// when no server has been saved.
 /// </summary>
 public sealed class MapDashboardService(
     IRustPlusClient demoClient,
     RustPlusConnectionOptions demoConnectionOptions,
     ServerManager servers,
     RustPlusConnectionManager connections,
+    RustPlusLiveSessionManager liveSession,
     IMapCacheRepository mapCache,
     TimeProvider timeProvider) : IDisposable, IAsyncDisposable
 {
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
+    private bool _liveSessionSubscribed;
     private bool _disposed;
 
     public event EventHandler? StateChanged;
@@ -27,6 +30,7 @@ public sealed class MapDashboardService(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        EnsureLiveSessionSubscription();
         await _initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -84,15 +88,19 @@ public sealed class MapDashboardService(
             return;
         }
 
-        await _initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (liveSession.Current.ServerId == serverId
+            && liveSession.Current.Status != RustPlusLiveSessionStatus.Stopped)
         {
-            await RefreshLiveDataCoreAsync(serverId, cancellationToken).ConfigureAwait(false);
+            SetState(Current with
+            {
+                IsLiveDataRefreshing = true,
+                LiveDataStatus = "Background refresh requested"
+            });
+            liveSession.RequestRefresh();
+            return;
         }
-        finally
-        {
-            _initializationLock.Release();
-        }
+
+        await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
     }
 
     public void SetLayerVisibility(MapLayerKind kind, bool isVisible)
@@ -118,6 +126,12 @@ public sealed class MapDashboardService(
         _disposed = true;
         try
         {
+            if (_liveSessionSubscribed)
+            {
+                liveSession.StateChanged -= HandleLiveSessionStateChanged;
+            }
+
+            await liveSession.StopAsync(CancellationToken.None).ConfigureAwait(false);
             await demoClient.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
         }
         finally
@@ -156,6 +170,18 @@ public sealed class MapDashboardService(
         }
 
         var includeMap = forceMapRefresh || cached is null;
+        if (forceMapRefresh && liveSession.Current.ServerId == serverId)
+        {
+            await liveSession.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!includeMap && cached is not null)
+        {
+            SetCachedState(cached, null);
+            await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (cached is not null)
         {
             SetCachedState(cached, null);
@@ -241,6 +267,7 @@ public sealed class MapDashboardService(
                 null,
                 null,
                 null,
+                [],
                 MapDashboardState.CreateLiveMapLayers(),
                 cacheWarning);
         }
@@ -264,50 +291,7 @@ public sealed class MapDashboardService(
         }
 
         SetState(MergeLiveData(baseState, result));
-    }
-
-    private async Task RefreshLiveDataCoreAsync(Guid serverId, CancellationToken cancellationToken)
-    {
-        SetState(Current with
-        {
-            IsLiveDataRefreshing = true,
-            LiveDataStatus = "Refreshing team, chat, and markers",
-            LiveDataError = null
-        });
-
-        RustPlusDashboardLoadResult result;
-        try
-        {
-            result = await connections.LoadDashboardAsync(serverId, includeMap: false, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            SetState(Current with
-            {
-                IsLiveDataRefreshing = false,
-                LiveDataStatus = "Live refresh failed",
-                LiveDataError = SecretRedactor.Redact(exception.Message)
-            });
-            return;
-        }
-
-        if (!result.IsAuthenticated)
-        {
-            SetState(Current with
-            {
-                IsLiveDataRefreshing = false,
-                LiveDataStatus = "Live data unavailable",
-                LiveDataError = result.ConnectionState.Detail ?? result.ConnectionState.Label
-            });
-            return;
-        }
-
-        SetState(MergeLiveData(Current, result));
+        await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
     }
 
     private MapDashboardState MergeLiveData(
@@ -373,6 +357,7 @@ public sealed class MapDashboardService(
                 team,
                 chat,
                 markers,
+                [],
                 Current.Layers,
                 null));
         }
@@ -412,6 +397,7 @@ public sealed class MapDashboardService(
             team,
             chat,
             markers,
+            preserveLiveState ? Current.Events : [],
             BuildLiveLayers(Current, team is not null, markers is not null),
             warning));
     }
@@ -448,6 +434,57 @@ public sealed class MapDashboardService(
     {
         Current = state;
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task StartLiveSessionAsync(Guid serverId, CancellationToken cancellationToken)
+    {
+        EnsureLiveSessionSubscription();
+        var seed = new RustPlusLiveSessionSeed(
+            Current.Server,
+            Current.Team,
+            Current.Chat,
+            Current.Markers,
+            Current.LiveDataRetrievedAtUtc);
+        await liveSession.StartAsync(serverId, seed, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void EnsureLiveSessionSubscription()
+    {
+        if (_liveSessionSubscribed)
+        {
+            return;
+        }
+
+        liveSession.StateChanged += HandleLiveSessionStateChanged;
+        _liveSessionSubscribed = true;
+    }
+
+    private void HandleLiveSessionStateChanged(object? sender, EventArgs args)
+    {
+        var live = liveSession.Current;
+        if (_disposed || live.ServerId is null || live.ServerId != Current.ServerId)
+        {
+            return;
+        }
+
+        var team = live.Team ?? Current.Team;
+        var chat = live.Chat ?? Current.Chat;
+        var markers = live.Markers ?? Current.Markers;
+        SetState(Current with
+        {
+            ConnectionLabel = live.Label,
+            Server = live.Server ?? Current.Server,
+            Team = team,
+            Chat = chat,
+            Markers = markers,
+            LiveDataRetrievedAtUtc = live.LastRefreshUtc ?? Current.LiveDataRetrievedAtUtc,
+            IsLiveDataRefreshing = live.Status is RustPlusLiveSessionStatus.Connecting
+                or RustPlusLiveSessionStatus.Reconnecting,
+            LiveDataStatus = live.Label,
+            LiveDataError = live.Error,
+            Events = live.Events,
+            Layers = BuildLiveLayers(Current, team is not null, markers is not null)
+        });
     }
 
     private static string DescribeFailure<T>(RustPlusResult<T>? result) =>

@@ -66,6 +66,12 @@
 - a data-only refresh leaves the cached map untouched;
 - a private local capture confirmed a real team position and current marker rendered on the map, then
   the capture was deleted without entering Git.
+- deterministic supervisor tests prove one client is reused across poll intervals and the map method
+  is never called;
+- scripted snapshots derive online/offline, death/respawn, and marker appeared/disappeared events;
+- a forced disconnect proves connection-lost, backoff, reconnection, and connection-restored events;
+- a live selected-server run remained connected across scheduled intervals; its private capture was
+  deleted after review.
 
 ## Test layers planned
 

@@ -47,7 +47,9 @@ Implemented:
 - live-map layers for the base map, monuments, team positions/notes, vending machines, and known
   world markers when their owning request succeeds;
 - one-connection read-only live refreshes for team members/positions, team notes, recent chat, and
-  map markers, with partial failures kept independent and no automatic polling yet.
+  map markers, with partial failures kept independent;
+- one persistent selected-server Rust+ monitor with centralized polling, reconnect backoff, and
+  bounded in-memory connection/team/death/respawn/marker events. The map JPEG is never polled.
 
 Still requiring live verification or later phases:
 

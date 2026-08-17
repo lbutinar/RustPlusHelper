@@ -76,8 +76,9 @@ public sealed class MapDashboardServiceTests
             factory,
             TimeProvider.System);
         var cache = new InMemoryMapCacheRepository();
+        await using var liveSessionOne = CreateLiveSession(servers, secrets, factory);
 
-        await using (var liveService = CreateService(servers, connections, cache))
+        await using (var liveService = CreateService(servers, connections, liveSessionOne, cache))
         {
             await liveService.InitializeAsync();
 
@@ -89,12 +90,14 @@ public sealed class MapDashboardServiceTests
             Assert.True(liveService.Current.Layers.Single(layer => layer.Kind == MapLayerKind.Monuments).IsAvailable);
         }
 
-        await using (var cachedService = CreateService(servers, connections, cache))
+        await using var liveSessionTwo = CreateLiveSession(servers, secrets, factory);
+        await using (var cachedService = CreateService(servers, connections, liveSessionTwo, cache))
         {
             await cachedService.InitializeAsync();
+            await WaitUntilAsync(() => cachedService.Current.Team is not null);
 
             Assert.Equal(MapDashboardDataSource.Cache, cachedService.Current.DataSource);
-            Assert.Equal("Live data refreshed", cachedService.Current.ConnectionLabel);
+            Assert.Equal("Live monitoring connected", cachedService.Current.ConnectionLabel);
             Assert.Equal(2, cachedService.Current.Team?.Members.Count);
             Assert.NotNull(cachedService.Current.LiveDataRetrievedAtUtc);
 
@@ -117,28 +120,51 @@ public sealed class MapDashboardServiceTests
             secrets,
             new FakeClientFactory(),
             TimeProvider.System);
+        var liveSession = CreateLiveSession(servers, secrets, new FakeClientFactory());
         var client = new FakeRustPlusClient();
         var service = new MapDashboardService(
             client,
             new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2),
             servers,
             connections,
+            liveSession,
             new InMemoryMapCacheRepository(),
             TimeProvider.System);
-        return new DashboardFixture(service, connections, secrets);
+        return new DashboardFixture(service, connections, liveSession, secrets);
     }
 
     private static MapDashboardService CreateService(
         ServerManager servers,
         RustPlusConnectionManager connections,
+        RustPlusLiveSessionManager liveSession,
         IMapCacheRepository cache) =>
         new(
             new FakeRustPlusClient(),
             new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2),
             servers,
             connections,
+            liveSession,
             cache,
             TimeProvider.System);
+
+    private static RustPlusLiveSessionManager CreateLiveSession(
+        ServerManager servers,
+        ISecretStore secrets,
+        IRustPlusClientFactory factory) =>
+        new(
+            new RustPlusSavedConnectionResolver(servers, secrets),
+            factory,
+            TimeProvider.System,
+            RustPlusPollingOptions.Default);
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        while (!condition())
+        {
+            await Task.Delay(10, timeout.Token);
+        }
+    }
 
     private sealed class FakeClientFactory : IRustPlusClientFactory
     {
@@ -159,6 +185,7 @@ public sealed class MapDashboardServiceTests
     private sealed class DashboardFixture(
         MapDashboardService service,
         RustPlusConnectionManager connections,
+        RustPlusLiveSessionManager liveSession,
         InMemorySecretStore secrets) : IAsyncDisposable
     {
         public MapDashboardService Service { get; } = service;
@@ -166,6 +193,7 @@ public sealed class MapDashboardServiceTests
         public async ValueTask DisposeAsync()
         {
             await Service.DisposeAsync();
+            await liveSession.DisposeAsync();
             connections.Dispose();
             secrets.Dispose();
         }

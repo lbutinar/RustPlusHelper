@@ -18,6 +18,8 @@ Implemented:
 - explicit lightweight team/chat/marker refresh and full map+data refresh actions;
 - team positions, team notes, vending/world markers, and partial request errors rendered directly
   from the latest successful Rust+ snapshot.
+- live connection status plus a bounded event feed for transport, online/offline, death/respawn, and
+  marker lifecycle transitions.
 
 The grid-search tool remains disabled until the community grid formula is validated against the
 official Rust+ app.

@@ -53,6 +53,7 @@ public sealed record MapDashboardState(
     TeamSnapshot? Team,
     TeamChatSnapshot? Chat,
     MapMarkersSnapshot? Markers,
+    IReadOnlyList<CompanionEvent> Events,
     IReadOnlyList<MapLayerState> Layers,
     string? ErrorMessage)
 {
@@ -71,6 +72,7 @@ public sealed record MapDashboardState(
         null,
         null,
         null,
+        [],
         CreateDefaultLayers(),
         null);
 

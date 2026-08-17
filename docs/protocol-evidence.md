@@ -54,7 +54,10 @@ no proxy fallback.
 The rustplus.js rate-limit evidence lists a 25-token player bucket replenished at 3 tokens/second,
 with costs of 1 for info, team info, and map markers and 5 for map; team-chat reads use the default
 request cost of 1. The desktop therefore batches one explicit refresh on one connection. It does not
-reconnect on a UI timer; background polling waits for a supervised persistent connection.
+reconnect on a UI timer. The selected-server supervisor now keeps one persistent connection and polls
+team every 5 seconds, chat/markers every 10 seconds, and info every 30 seconds (about 0.43 tokens/sec).
+The five-token map is never polled. `NoTeam` backs chat off to one minute, and reconnects use bounded
+2/5/10/30-second delays.
 
 ## Source-verified fields retained by the adapter
 
@@ -99,6 +102,11 @@ team, recent team chat, and map markers. Team info returned one member with live
 and map markers returned one current marker. Team chat returned the protocol error code `NoTeam`.
 The application retained the successful team and marker snapshots and surfaced chat as unavailable;
 no live name, Steam ID, chat body, marker identity, or coordinate was retained in repository output.
+
+The same selected server was then held on one persistent connection through multiple scheduled poll
+intervals. Team and marker state continued updating, no map request was made by the supervisor, and
+the initial transport event established the diff baseline. The private UI verification capture was
+deleted after review.
 
 These items remain **pending, not confirmed live**:
 

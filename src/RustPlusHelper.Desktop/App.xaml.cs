@@ -33,7 +33,13 @@ public partial class App : System.Windows.Application
 #endif
         builder.Services.AddSingleton<IRustPlusClient, FakeRustPlusClient>();
         builder.Services.AddSingleton<IRustPlusClientFactory, RustPlusApiClientFactory>();
-        builder.Services.AddSingleton<RustPlusConnectionManager>();
+        builder.Services.AddSingleton<RustPlusSavedConnectionResolver>();
+        builder.Services.AddSingleton(serviceProvider => new RustPlusConnectionManager(
+            serviceProvider.GetRequiredService<RustPlusSavedConnectionResolver>(),
+            serviceProvider.GetRequiredService<IRustPlusClientFactory>(),
+            serviceProvider.GetRequiredService<TimeProvider>()));
+        builder.Services.AddSingleton(RustPlusPollingOptions.Default);
+        builder.Services.AddSingleton<RustPlusLiveSessionManager>();
         builder.Services.AddSingleton(new RustPlusConnectionOptions(
             "fake.invalid",
             28082,

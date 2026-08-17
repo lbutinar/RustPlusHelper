@@ -43,6 +43,11 @@ public sealed class MainComponentTests : BunitContext
             _secretStore,
             new FakeClientFactory(),
             TimeProvider.System);
+        var liveSession = new RustPlusLiveSessionManager(
+            new RustPlusSavedConnectionResolver(serverManager, _secretStore),
+            new FakeClientFactory(),
+            TimeProvider.System,
+            RustPlusPollingOptions.Default);
         var client = new FakeRustPlusClient();
         var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
         var mapCache = new InMemoryMapCacheRepository();
@@ -51,6 +56,7 @@ public sealed class MainComponentTests : BunitContext
             connection,
             serverManager,
             _connections,
+            liveSession,
             mapCache,
             TimeProvider.System);
 
@@ -63,6 +69,7 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(_identityManager);
         Services.AddSingleton(serverManager);
         Services.AddSingleton(_connections);
+        Services.AddSingleton(liveSession);
         Services.AddSingleton<IMapCacheRepository>(mapCache);
     }
 
@@ -153,6 +160,7 @@ public sealed class MainComponentTests : BunitContext
             null,
             null,
             null,
+            [],
             MapDashboardState.CreateLiveMapLayers(),
             null);
 

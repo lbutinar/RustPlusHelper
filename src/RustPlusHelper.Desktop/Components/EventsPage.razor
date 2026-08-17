@@ -3,7 +3,7 @@
         <div>
             <span class="eyebrow">LIVE SNAPSHOT STATUS</span>
             <h1>Events</h1>
-            <p>Direct Rust+ records are live; semantic events will be derived from future polling comparisons.</p>
+            <p>Transport changes and team/marker transitions are derived by the centralized background monitor.</p>
         </div>
     </div>
 
@@ -13,20 +13,42 @@
             <span class="event-source direct">TRANSPORT</span>
             <div><strong>@State.ConnectionLabel</strong><p>@(State.LiveDataStatus ?? "No live refresh has completed.")</p></div>
         </div>
-        <div class="timeline-row">
-            <span class="timeline-time">NOW</span>
-            <span class="event-source direct">SNAPSHOT</span>
-            <div><strong>@(State.Team?.Members.Count ?? 0) team records and @(State.Markers?.Markers.Count ?? 0) markers received</strong><p>Direct Rust+ snapshot data, not inferred events.</p></div>
-        </div>
-        <div class="timeline-row future">
-            <span class="timeline-time">NEXT</span>
-            <span class="event-source derived">DERIVED</span>
-            <div><strong>Death, respawn, online, and marker lifecycle</strong><p>These will be produced by comparing snapshots, not invented broadcasts.</p></div>
-        </div>
+        @if (State.Events.Count == 0)
+        {
+            <div class="timeline-row future">
+                <span class="timeline-time">WAIT</span>
+                <span class="event-source derived">SNAPSHOT DIFF</span>
+                <div><strong>No transitions detected yet</strong><p>The initial snapshot establishes a baseline and does not manufacture events.</p></div>
+            </div>
+        }
+        @foreach (var item in State.Events)
+        {
+            <div class="timeline-row">
+                <span class="timeline-time">@item.OccurredAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                <span class="event-source @(item.Source == CompanionEventSource.Transport ? "direct" : "derived")">
+                    @(item.Source == CompanionEventSource.Transport ? "TRANSPORT" : "SNAPSHOT DIFF")
+                </span>
+                <div><strong>@item.Title</strong><p>@EventDescription(item.Kind)</p></div>
+            </div>
+        }
     </div>
 </section>
 
 @code {
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private static string EventDescription(CompanionEventKind kind) => kind switch
+    {
+        CompanionEventKind.ConnectionEstablished => "Persistent Rust+ monitoring started.",
+        CompanionEventKind.ConnectionLost => "The monitor will reconnect with bounded backoff.",
+        CompanionEventKind.ConnectionRestored => "Authenticated polling resumed.",
+        CompanionEventKind.TeamMemberConnected or CompanionEventKind.TeamMemberDisconnected =>
+            "Derived from consecutive team online-state snapshots.",
+        CompanionEventKind.TeamMemberDied or CompanionEventKind.TeamMemberRespawned =>
+            "Derived from consecutive team alive-state snapshots.",
+        CompanionEventKind.MarkerAppeared or CompanionEventKind.MarkerDisappeared =>
+            "Derived from consecutive map-marker snapshots.",
+        _ => "Derived from Rust+ state."
+    };
 }

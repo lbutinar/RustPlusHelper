@@ -50,8 +50,9 @@ add/edit/select/confirm-remove operations and exposes no token input.
 **Goal:** Pair, validate, reconnect, re-pair, and remove servers.
 
 **Status:** In progress. One application-level Steam64 identity, manual per-server player-token entry,
-DPAPI persistence, and an explicit secure read-only connection/authentication test are implemented.
-Automated pairing, persistent connection supervision, and reconnection remain.
+DPAPI persistence, an explicit secure read-only connection/authentication test, selected-server
+persistent monitoring, and bounded reconnect backoff are implemented. Automated pairing and
+simultaneous multi-server supervision remain.
 
 **Modules:** pairing provider, connection manager, per-server supervisor, connection-state view.
 
@@ -86,11 +87,11 @@ is automated; live visual alignment is still pending.
 
 **Goal:** Provide the first useful live team dashboard.
 
-**Status:** Read-only snapshot slice implemented and partly live-verified on 2026-08-17. One explicit
-refresh retrieves server info, team members/positions/notes, recent chat, and map markers on a single
-connection. The tested server returned a team/position snapshot and current marker; chat returned
-`NoTeam` and remains visibly unavailable. Automatic polling, snapshot differencing, persistence, and
-semantic events remain.
+**Status:** Live monitoring slice implemented and live-verified on 2026-08-17. One persistent
+connection centrally polls server info, team members/positions/notes, recent chat, and map markers.
+The tested server returned a team/position snapshot and current marker; chat returned `NoTeam` and
+uses a one-minute failure backoff. Online/offline, death/respawn, marker lifecycle, and connection
+lost/restored events are derived in memory. Historical persistence and movement/grid events remain.
 
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 
