@@ -1477,6 +1477,55 @@ button {
     background: rgba(112, 168, 206, 0.035);
 }
 
+.automatic-pairing-card {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin-bottom: 18px;
+    border: 1px solid rgba(214, 107, 54, 0.3);
+    border-radius: 9px;
+    padding: 13px;
+    background: rgba(214, 107, 54, 0.045);
+}
+
+.automatic-pairing-card .form-section-heading {
+    margin: 0;
+    border-top: 0;
+    padding-top: 0;
+}
+
+.pairing-status {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 2px solid var(--line);
+    padding-left: 9px;
+    color: var(--muted);
+    font-size: 8px;
+    line-height: 1.45;
+}
+
+.pairing-status strong {
+    color: var(--text);
+    font-size: 9px;
+}
+
+.pairing-status.pairing-ready { border-left-color: var(--green); }
+.pairing-status.pairing-active { border-left-color: var(--orange); }
+.pairing-status.pairing-failed { border-left-color: #ec8f89; }
+
+.pairing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.pairing-help {
+    color: var(--muted-2);
+    font-size: 8px;
+    line-height: 1.45;
+}
+
 .identity-editor .form-section-heading {
     margin: 0 0 11px;
     border-top: 0;

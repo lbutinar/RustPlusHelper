@@ -28,17 +28,22 @@
 ## Current Phase 2 tests
 
 - server profiles save, select, reload, validate, and remove through `ServerManager`;
-- real temporary SQLite databases apply migration 1 idempotently;
+- real temporary SQLite databases apply all current migrations idempotently;
 - WAL and foreign keys are enabled;
 - profiles survive reopening and `ulong.MaxValue` remains canonical decimal text;
 - DPAPI `CurrentUser` data round-trips and fails with the wrong context;
 - SQLite stores a protected blob rather than the supplied cleartext;
 - deleting a server cascades its pairing ciphertext;
+- app-wide registration credentials round-trip through a protected SQLite blob and delete cleanly;
 - the actual Servers component saves through `ServerManager`;
 - the privacy-safe smoke runner can navigate to and validate the Servers page.
 
 ## Current Phase 3 tests
 
+- registration credentials are copied into protected storage and the provider-owned cleartext buffer
+  is zeroed;
+- a sanitized pairing capture saves identity, server address, secure-proxy choice, and protected token;
+- re-pairing the same host and port updates one profile, while a different Steam identity is rejected;
 - a successful connection test opens a client, validates with read-only server information, closes
   the socket, and clears the retrieved token buffer;
 - `AccessDenied` is reported as rejected pairing rather than a generic transport failure;

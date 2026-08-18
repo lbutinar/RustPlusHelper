@@ -39,11 +39,12 @@ src/RustPlusHelper.Desktop/wwwroot/vendor/leaflet/
 
 ## RustPlusApi
 
-- Version: 2.0.0-beta.7
+- Versions: core 2.0.0-beta.7; FCM and FCM Registration 2.0.0-beta.6
 - Project: https://github.com/HandyS11/RustPlusApi
 - License: MIT
 
-RustPlusApi is consumed as a pinned NuGet dependency and is not vendored into this repository.
+RustPlusApi and its FCM registration packages are consumed as pinned NuGet dependencies and are not
+vendored into this repository.
 
 ## Microsoft.Data.Sqlite
 

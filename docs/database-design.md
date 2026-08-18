@@ -12,6 +12,7 @@ currently create:
 - `player_identity` for the one Steam64 ID used across saved servers;
 - `servers` for non-secret connection metadata;
 - `pairings` for purpose-labelled DPAPI ciphertext;
+- `application_secrets` for app-wide DPAPI ciphertext such as Rust+ FCM registration credentials;
 - `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server;
 - `map_topology` for display-ready data derived from one automatically matched or manually selected
   Rust `.map` per server;
@@ -82,7 +83,8 @@ external/server data source requires one.
   SQLite's signed 64-bit range.
 - Use a local session ID because Rust+ does not provide a durable application-ready team ID.
 - Detect a new map session from server/wipe time plus map hash and size.
-- Keep secrets encrypted through `ISecretStore`; never place plaintext tokens in a normal column.
+- Keep secrets encrypted through `ISecretStore` or `IApplicationSecretStore`; never place plaintext
+  credentials or tokens in a normal column.
 - Apply bounded retention to events, chat, vending history, and optional sampled trails.
 
 Phase 2 uses `Microsoft.Data.Sqlite` synchronous APIs because its documented async methods execute

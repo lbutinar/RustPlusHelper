@@ -5,7 +5,7 @@ feature will be an interactive Rust map with team positions, map notes, vending 
 markers, supported smart devices, cameras, notifications, and locally recorded history.
 
 This repository currently contains the protocol adapter, map-first desktop shell, local persistence,
-manual pairing, authenticated connection testing, and the first live-map slice. A selected paired
+automatic and manual pairing, authenticated connection testing, and the first live-map slice. A selected paired
 server can now download its real Rust+ JPEG map and reopen the latest snapshot from SQLite.
 
 RustPlusHelper is an unofficial community project. It is not affiliated with or endorsed by
@@ -36,8 +36,10 @@ Implemented:
   data;
 - a DPAPI `CurrentUser` secret store that persists only ciphertext;
 - an add/edit/select/confirm-remove Servers interface;
+- user-initiated native Rust+ registration and a pairing listener that captures and saves the server
+  address, Steam64 ID, and per-server player token without displaying those sensitive values;
 - one application-level Steam64 identity plus masked per-server Rust+ player-token entry, pairing
-  status, and DPAPI-protected token persistence.
+  status, and DPAPI-protected token persistence;
 - a read-only per-server connection test that uses the saved transport choice, validates pairing with
   server information, reports distinct failure states, and closes the test socket. Secure proxy is
   the default; plaintext direct transport requires an explicit persisted opt-in;
@@ -69,6 +71,7 @@ Still requiring live verification or later phases:
 - live validation of team chat for a server/team state that returns chat data;
 - capture of reviewed, sanitized raw protocol fixtures;
 - confirmation of real map/grid alignment against the official Rust+ app.
+- live end-to-end validation of native browser registration and automatic pairing capture.
 
 ## Prerequisites
 
@@ -100,6 +103,10 @@ With no saved server, the app opens deterministic fake data. With a selected pai
 the cached map when available or performs the first live map download. Use **Open map** on a server
 or **Refresh everything** on the map page for an explicit refresh. Team/chat/marker polling starts
 automatically for the selected server.
+
+On the Servers page, choose **Set up automatic pairing** once and complete the Steam sign-in in the
+browser. Then choose **Listen for server pairing**, join the server in Rust, and use **Pair with
+Server**. The received server details are saved automatically. Manual entry remains available.
 
 The app automatically checks Steam's Rust map cache after obtaining current server information. It
 uses Rust's connection log when current cache filenames hide the Rust+ seed, or exact size+seed for

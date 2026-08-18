@@ -106,9 +106,28 @@ public sealed class ServerManager(
             throw new InvalidOperationException("Protected pairing storage is not available.");
         }
 
+        return SaveCapturedPairing(effectiveDraft, parsedToken);
+    }
+
+    public ServerProfile SaveCapturedPairing(ServerProfileDraft draft, int playerToken)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        var effectiveDraft = playerIdentity?.Current is { } identity
+            ? draft with { PlayerId = identity.SteamId }
+            : draft;
+        if (effectiveDraft.PlayerId is null or 0)
+        {
+            throw new ArgumentException("Steam64 ID is required for server pairing.", nameof(draft.PlayerId));
+        }
+
+        if (secretStore is null)
+        {
+            throw new InvalidOperationException("Protected pairing storage is not available.");
+        }
+
         var profile = Save(effectiveDraft);
         Span<byte> tokenBytes = stackalloc byte[11];
-        if (!Utf8Formatter.TryFormat(parsedToken, tokenBytes, out var bytesWritten))
+        if (!Utf8Formatter.TryFormat(playerToken, tokenBytes, out var bytesWritten))
         {
             throw new InvalidOperationException("The player token could not be prepared for protected storage.");
         }

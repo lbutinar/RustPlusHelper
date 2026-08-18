@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
@@ -67,12 +68,16 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<PlayerIdentityManager>();
         builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();
         builder.Services.AddSingleton<ISecretStore, SqliteSecretStore>();
+        builder.Services.AddSingleton<IApplicationSecretStore, SqliteApplicationSecretStore>();
         builder.Services.AddSingleton<ServerManager>();
+        builder.Services.AddSingleton<IRustPlusPairingProvider, RustPlusApiPairingProvider>();
+        builder.Services.AddSingleton<RustPlusPairingManager>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();
         _host.Services.GetRequiredService<PlayerIdentityManager>().Load();
         _host.Services.GetRequiredService<ServerManager>().Load();
+        _host.Services.GetRequiredService<RustPlusPairingManager>().Load();
 
         var window = new MainWindow(_host.Services);
         MainWindow = window;

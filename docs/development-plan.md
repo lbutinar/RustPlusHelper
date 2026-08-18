@@ -49,10 +49,10 @@ add/edit/select/confirm-remove operations and exposes no token input.
 
 **Goal:** Pair, validate, reconnect, re-pair, and remove servers.
 
-**Status:** In progress. One application-level Steam64 identity, manual per-server player-token entry,
-DPAPI persistence, an explicit secure read-only connection/authentication test, selected-server
-persistent monitoring, and bounded reconnect backoff are implemented. Automated pairing and
-simultaneous multi-server supervision remain.
+**Status:** In progress. One application-level Steam64 identity, automatic and manual per-server
+pairing, DPAPI persistence, an explicit secure read-only connection/authentication test,
+selected-server persistent monitoring, and bounded reconnect backoff are implemented. Live
+validation of automatic registration/pairing and simultaneous multi-server supervision remain.
 
 **Modules:** pairing provider, connection manager, per-server supervisor, connection-state view.
 
@@ -64,7 +64,8 @@ retrieved cleartext buffer, uses exactly the explicitly saved transport, and req
 `GetInfoAsync` response before reporting success. Secure proxy remains the default; direct `ws://`
 requires an explicit plaintext warning and there is no automatic fallback. Unit/component tests
 cover success, token-buffer clearing, `AccessDenied`, transport failure redaction, explicit direct
-selection, no fallback, and the Servers UI state.
+selection, no fallback, and the Servers UI state. Focused pairing-manager tests cover registration
+credential cleanup, first capture, safe same-address re-pairing, and identity mismatch rejection.
 
 **Done:** user can pair, restart, reconnect, test, re-pair, and remove credentials safely.
 

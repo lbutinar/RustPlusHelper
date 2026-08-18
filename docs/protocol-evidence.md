@@ -1,6 +1,6 @@
 # Rust+ protocol evidence
 
-Last research review: **2026-08-17**
+Last research review: **2026-08-18**
 
 ## Evidence baseline
 
@@ -9,6 +9,7 @@ Last research review: **2026-08-17**
 | Facepunch Rust+ | Current public companion pages | Official product and server-hosting behavior |
 | `liamcottle/rustplus.js` | [`75915f25`](https://github.com/liamcottle/rustplus.js/commit/75915f25fc7c1718f7c23c419953f4655840fade) | Established unofficial WebSocket, protobuf, pairing, request, and event reference |
 | `HandyS11/RustPlusApi` | [`v2.0.0-beta.7`](https://github.com/HandyS11/RustPlusApi/releases/tag/v2.0.0-beta.7), commit `3c4037ae` | Pinned C# implementation and current typed contract |
+| `RustPlusApi.Fcm` / `.Fcm.Registration` | `2.0.0-beta.6` | Pinned C# FCM registration and pairing-notification implementation |
 | RustPlusPlus | Current open-source polling/event handlers | Evidence for snapshot-derived team/marker events |
 
 Official references:
@@ -23,10 +24,32 @@ Implementation references:
 - [rustplus.js pairing flow](https://github.com/liamcottle/rustplus.js/blob/75915f25fc7c1718f7c23c419953f4655840fade/docs/PairingFlow.md)
 - [RustPlusApi protocol](https://github.com/HandyS11/RustPlusApi/blob/v2.0.0-beta.7/src/RustPlusApi/Protobuf/RustPlusContracts.proto)
 - [RustPlusApi client guide](https://handys11.github.io/RustPlusApi/articles/rustplus-client.html)
+- [RustPlusApi registration guide](https://github.com/HandyS11/RustPlusApi/blob/develop/docs/articles/credentials.md)
+- [RustPlusApi registration source](https://github.com/HandyS11/RustPlusApi/tree/develop/src/RustPlusApi.Fcm.Registration)
 
 Neither library is an official Facepunch SDK. `rustplus.js` describes its protobuf as hand-maintained;
 RustPlusApi uses update tooling derived from server assemblies. Protocol claims remain versioned and
 testable rather than permanent assumptions.
+
+## Automatic pairing evidence
+
+Facepunch documents the companion server address and its default port relationship, but not the
+consumer FCM device-registration sequence. The automatic pairing implementation is therefore an
+explicitly unofficial integration based on both reviewed libraries:
+
+- rustplus.js documents `fcm-register` followed by `fcm-listen`, and maps a server-pairing
+  notification to IP, port, server name, player ID, and player token;
+- RustPlusApi's registration package performs Android/FCM and Expo registration, opens a local
+  browser sign-in for Steam, registers the resulting device with Rust+, and exposes the same
+  server-pairing fields through `PairingListener`;
+- RustPlusHelper maps those third-party fields immediately into an application-owned capture,
+  defaults the saved profile to the secure proxy, and DPAPI-protects both the reusable registration
+  credentials and per-server player token.
+
+No authentication material, notification body, server address, or player identity is logged. The
+browser/device registration is user-initiated and has not been run as part of automated verification.
+Because the FCM, Expo, Steam, and Facepunch sequence is unofficial and externally controlled, a live
+pairing remains required before this integration can be called confirmed against current services.
 
 ## Phase 0 source-verified request surface
 
@@ -136,6 +159,7 @@ deleted after review.
 
 These items remain **pending, not confirmed live**:
 
+- end-to-end native browser registration and automatic server-pairing capture;
 - a successful team-chat response for a server/team state with available chat history;
 - real optional-field population outside the confirmed server/map subset;
 - image/world coordinate alignment against the official app;

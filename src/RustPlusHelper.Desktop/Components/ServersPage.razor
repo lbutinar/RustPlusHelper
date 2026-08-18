@@ -2,6 +2,7 @@
 @inject PlayerIdentityManager Identity
 @inject ServerManager Servers
 @inject RustPlusConnectionManager Connections
+@inject RustPlusPairingManager Pairing
 @inject ILogger<ServersPage> Logger
 
 <section class="content-page servers-page">
@@ -128,7 +129,65 @@
         <aside class="surface-card server-editor">
             <span class="eyebrow">@(_editingId is null ? "ADD PROFILE" : "EDIT PROFILE")</span>
             <h2>@(_editingId is null ? "Add a Rust+ server" : "Update saved server")</h2>
-            <p>Your Steam64 ID is shared across servers. Each server pairing still has its own encrypted player token.</p>
+            <p>Pair automatically from Rust, or enter the server details manually below.</p>
+
+            <div class="automatic-pairing-card">
+                <div class="form-section-heading">
+                    <span>AUTOMATIC RUST+ PAIRING</span>
+                    <small>The app captures the server code, IP, port, Steam ID, and player token for you.</small>
+                </div>
+                <div class="pairing-status @PairingStatusCss" role="status">
+                    <strong>@Pairing.State.Label</strong>
+                    @if (!string.IsNullOrWhiteSpace(Pairing.State.Detail))
+                    {
+                        <span>@Pairing.State.Detail</span>
+                    }
+                </div>
+                <div class="pairing-actions">
+                    @if (!Pairing.IsConfigured
+                        && Pairing.State.Status is not RustPlusPairingStatus.Registering)
+                    {
+                        <button data-testid="register-rustplus-pairing"
+                                type="button"
+                                class="primary-button"
+                                @onclick="RegisterPairing">
+                            Set up automatic pairing
+                        </button>
+                    }
+                    @if (Pairing.IsConfigured
+                        && Pairing.State.Status is not RustPlusPairingStatus.Registering
+                        && Pairing.State.Status is not RustPlusPairingStatus.Listening)
+                    {
+                        <button data-testid="listen-rustplus-pairing"
+                                type="button"
+                                class="primary-button"
+                                @onclick="ListenForPairing">
+                            Listen for server pairing
+                        </button>
+                    }
+                    @if (Pairing.State.Status is RustPlusPairingStatus.Registering or RustPlusPairingStatus.Listening)
+                    {
+                        <button data-testid="cancel-rustplus-pairing"
+                                type="button"
+                                class="ghost-button"
+                                @onclick="Pairing.Cancel">
+                            Cancel
+                        </button>
+                    }
+                    @if (Pairing.State.Status != RustPlusPairingStatus.NotConfigured
+                        && Pairing.State.Status is not RustPlusPairingStatus.Registering
+                        && Pairing.State.Status is not RustPlusPairingStatus.Listening)
+                    {
+                        <button data-testid="reset-rustplus-pairing"
+                                type="button"
+                                class="ghost-button danger-text"
+                                @onclick="Pairing.ResetCredentials">
+                            Reset registration
+                        </button>
+                    }
+                </div>
+                <small class="pairing-help">Setup opens Chrome or Edge for Steam sign-in. Registration credentials are DPAPI-protected for this Windows user.</small>
+            </div>
 
             <div class="identity-editor">
                 <div class="form-section-heading">
@@ -269,6 +328,7 @@
         Identity.Changed += HandleIdentityChanged;
         Servers.Changed += HandleServersChanged;
         Connections.StateChanged += HandleConnectionStateChanged;
+        Pairing.StateChanged += HandlePairingStateChanged;
         Identity.Load();
         Servers.Load();
         _playerId = Identity.Current?.SteamId.ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -280,6 +340,7 @@
         Identity.Changed -= HandleIdentityChanged;
         Servers.Changed -= HandleServersChanged;
         Connections.StateChanged -= HandleConnectionStateChanged;
+        Pairing.StateChanged -= HandlePairingStateChanged;
     }
 
     private void SaveIdentity()
@@ -425,6 +486,30 @@
 
     private void HandleConnectionStateChanged(object? sender, EventArgs args) =>
         _ = InvokeAsync(StateHasChanged);
+
+    private void HandlePairingStateChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private async Task RegisterPairing() => await Pairing.RegisterAsync();
+
+    private async Task ListenForPairing()
+    {
+        await Pairing.ListenAsync();
+        if (Pairing.State.SavedServerId is { } serverId)
+        {
+            Connections.Reset(serverId);
+            _playerId = Identity.Current?.SteamId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ?? string.Empty;
+        }
+    }
+
+    private string PairingStatusCss => Pairing.State.Status switch
+    {
+        RustPlusPairingStatus.Paired or RustPlusPairingStatus.Ready => "pairing-ready",
+        RustPlusPairingStatus.Registering or RustPlusPairingStatus.Listening => "pairing-active",
+        RustPlusPairingStatus.Failed => "pairing-failed",
+        _ => string.Empty
+    };
 
     private static string ConnectionResultCss(RustPlusConnectionStatus status) => status switch
     {

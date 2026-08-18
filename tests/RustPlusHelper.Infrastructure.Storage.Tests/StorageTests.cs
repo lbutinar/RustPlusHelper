@@ -29,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(5L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(6L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -100,6 +100,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE map_cache;");
             Execute(connection, "DROP TABLE map_topology;");
             Execute(connection, "DROP TABLE companion_events;");
+            Execute(connection, "DROP TABLE application_secrets;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -272,6 +273,45 @@ public sealed class StorageTests
             Assert.False(secretStore.Contains(profile.Id, SecretKind.RustPlusPlayerToken));
             using var cascadeConnection = temporary.Database.OpenConnection();
             Assert.Equal(0L, ExecuteScalar<long>(cascadeConnection, "SELECT COUNT(*) FROM pairings;"));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(cleartext);
+        }
+    }
+
+    [Fact]
+    public void ApplicationCredentialsRoundTripWithoutPersistingPlaintext()
+    {
+        using var temporary = new TemporaryDatabase();
+        var store = new SqliteApplicationSecretStore(
+            temporary.Database,
+            new WindowsDpapiSecretProtector(),
+            new FixedTimeProvider(FixedUtc));
+        var cleartext = Encoding.UTF8.GetBytes("sanitized-fcm-credential-fixture");
+        try
+        {
+            store.Store(ApplicationSecretKind.RustPlusFcmCredentials, cleartext);
+            var restored = store.Retrieve(ApplicationSecretKind.RustPlusFcmCredentials);
+            try
+            {
+                Assert.Equal(cleartext, restored);
+                using var connection = temporary.Database.OpenConnection();
+                var stored = Assert.IsType<byte[]>(ExecuteScalar<object>(
+                    connection,
+                    "SELECT protected_value FROM application_secrets;"));
+                Assert.False(cleartext.SequenceEqual(stored));
+            }
+            finally
+            {
+                if (restored is not null)
+                {
+                    CryptographicOperations.ZeroMemory(restored);
+                }
+            }
+
+            Assert.True(store.Delete(ApplicationSecretKind.RustPlusFcmCredentials));
+            Assert.False(store.Contains(ApplicationSecretKind.RustPlusFcmCredentials));
         }
         finally
         {

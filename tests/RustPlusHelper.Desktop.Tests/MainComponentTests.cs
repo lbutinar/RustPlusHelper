@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
@@ -39,6 +40,13 @@ public sealed class MainComponentTests : BunitContext
             TimeProvider.System,
             _secretStore,
             _identityManager);
+        var applicationSecrets = new InMemoryApplicationSecretStore();
+        var pairing = new RustPlusPairingManager(
+            new UnavailablePairingProvider(),
+            applicationSecrets,
+            _identityManager,
+            serverManager);
+        pairing.Load();
         _connections = new RustPlusConnectionManager(
             serverManager,
             _secretStore,
@@ -76,11 +84,23 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton<ISecretStore>(_secretStore);
         Services.AddSingleton(_identityManager);
         Services.AddSingleton(serverManager);
+        Services.AddSingleton(pairing);
         Services.AddSingleton(_connections);
         Services.AddSingleton(liveSession);
         Services.AddSingleton<IMapCacheRepository>(mapCache);
         Services.AddSingleton(mapTopology);
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
+    }
+
+    private sealed class UnavailablePairingProvider : IRustPlusPairingProvider
+    {
+        public Task<byte[]> RegisterAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Not available in component tests.");
+
+        public Task<CapturedRustPlusPairing> WaitForServerPairingAsync(
+            ReadOnlyMemory<byte> credentials,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Not available in component tests.");
     }
 
     [Fact]

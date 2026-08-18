@@ -31,6 +31,13 @@ SQLite holds ciphertext and non-secret metadata only. Additional entropy binds e
 to the application version, server ID, and secret purpose. Cross-machine export will require explicit
 password-based re-encryption; copying DPAPI ciphertext is not a portable backup.
 
+Automatic pairing uses a separate `IApplicationSecretStore` because FCM/Expo registration belongs
+to this Windows user rather than one server. The registration flow starts only after an explicit UI
+action, and the serialized credential bundle is DPAPI-protected immediately. Cleartext byte buffers
+are zeroed after registration and after each listener operation. The temporary Steam authentication
+result is neither returned to application/UI code nor stored. Pairing notifications are mapped to an
+application-owned record inside the infrastructure boundary and are never logged as raw objects.
+
 The Servers UI stores one Steam64 identity for the Windows user and accepts a separate signed player
 token through a masked field for each manual server pairing. A token is never treated as an
 account-global credential. The application validates it without logging it, converts the canonical
