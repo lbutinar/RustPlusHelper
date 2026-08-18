@@ -212,7 +212,8 @@ public sealed class MapDashboardServiceTests
             new RustPlusSavedConnectionResolver(servers, secrets),
             factory,
             TimeProvider.System,
-            RustPlusPollingOptions.Default);
+            RustPlusPollingOptions.Default,
+            new InMemoryCompanionEventRepository());
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

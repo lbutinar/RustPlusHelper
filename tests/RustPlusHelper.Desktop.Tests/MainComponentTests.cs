@@ -48,7 +48,8 @@ public sealed class MainComponentTests : BunitContext
             new RustPlusSavedConnectionResolver(serverManager, _secretStore),
             new FakeClientFactory(),
             TimeProvider.System,
-            RustPlusPollingOptions.Default);
+            RustPlusPollingOptions.Default,
+            new InMemoryCompanionEventRepository());
         var client = new FakeRustPlusClient();
         var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
         var mapCache = new InMemoryMapCacheRepository();

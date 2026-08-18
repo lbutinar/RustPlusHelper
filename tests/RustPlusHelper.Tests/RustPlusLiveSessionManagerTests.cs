@@ -69,7 +69,40 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromMilliseconds(15),
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
-                [TimeSpan.FromMilliseconds(5)]));
+                [TimeSpan.FromMilliseconds(5)]),
+            new InMemoryCompanionEventRepository());
+
+    [Fact]
+    public async Task ReloadsPersistedEventsWhenMonitoringRestarts()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var history = new InMemoryCompanionEventRepository();
+        var persisted = new CompanionEvent(
+            Guid.NewGuid(),
+            profile.Id,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompanionEventKind.MarkerAppeared,
+            CompanionEventSource.SnapshotDiff,
+            "Cargo ship appeared");
+        history.Append(persisted, 200);
+        await using var manager = new RustPlusLiveSessionManager(
+            new RustPlusSavedConnectionResolver(servers, secrets),
+            new ScriptedFactory(_ => new ScriptedClient([Team(true, true)], [Markers(1)])),
+            TimeProvider.System,
+            new RustPlusPollingOptions(
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(1),
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromSeconds(1),
+                [TimeSpan.FromMilliseconds(5)]),
+            history);
+
+        await manager.StartAsync(profile.Id);
+
+        Assert.Contains(manager.Current.Events, item => item.Id == persisted.Id);
+    }
 
     private static ServerManager CreatePairedServer(
         InMemorySecretStore secrets,

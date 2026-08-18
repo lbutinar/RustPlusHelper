@@ -8,7 +8,8 @@ public sealed class RustPlusLiveSessionManager(
     RustPlusSavedConnectionResolver connectionResolver,
     IRustPlusClientFactory clientFactory,
     TimeProvider timeProvider,
-    RustPlusPollingOptions pollingOptions) : IAsyncDisposable, IDisposable
+    RustPlusPollingOptions pollingOptions,
+    ICompanionEventRepository eventRepository) : IAsyncDisposable, IDisposable
 {
     private const int EventLimit = 200;
     private readonly Lock _stateLock = new();
@@ -40,6 +41,7 @@ public sealed class RustPlusLiveSessionManager(
 
             await StopCoreAsync().ConfigureAwait(false);
             var initial = seed ?? new RustPlusLiveSessionSeed();
+            var history = eventRepository.GetRecent(serverId, EventLimit);
             SetState(new RustPlusLiveSessionState(
                 serverId,
                 RustPlusLiveSessionStatus.Connecting,
@@ -50,7 +52,7 @@ public sealed class RustPlusLiveSessionManager(
                 initial.Markers,
                 initial.RetrievedAtUtc,
                 null,
-                []));
+                history));
             _runCancellation = new CancellationTokenSource();
             _runTask = RunAsync(serverId, _runCancellation.Token);
         }
@@ -418,6 +420,7 @@ public sealed class RustPlusLiveSessionManager(
             kind,
             source,
             title);
+        eventRepository.Append(item, EventLimit);
         lock (_stateLock)
         {
             Current = Current with { Events = [item, .. Current.Events.Take(EventLimit - 1)] };

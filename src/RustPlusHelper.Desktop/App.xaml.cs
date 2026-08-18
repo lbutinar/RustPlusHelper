@@ -14,6 +14,7 @@ using RustPlusHelper.Infrastructure.RustPlus;
 using RustPlusHelper.Infrastructure.Storage;
 using RustPlusHelper.Infrastructure.Storage.Identity;
 using RustPlusHelper.Infrastructure.Storage.Map;
+using RustPlusHelper.Infrastructure.Storage.RustPlus;
 using RustPlusHelper.Infrastructure.Storage.Security;
 using RustPlusHelper.Infrastructure.Storage.Servers;
 using RustPlusHelper.Infrastructure.Storage.Sqlite;
@@ -61,6 +62,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IServerRepository, SqliteServerRepository>();
         builder.Services.AddSingleton<IMapCacheRepository, SqliteMapCacheRepository>();
         builder.Services.AddSingleton<IMapTopologyRepository, SqliteMapTopologyRepository>();
+        builder.Services.AddSingleton<ICompanionEventRepository, SqliteCompanionEventRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
         builder.Services.AddSingleton<PlayerIdentityManager>();
         builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();

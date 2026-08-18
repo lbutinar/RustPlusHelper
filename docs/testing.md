@@ -70,6 +70,8 @@
   is never called;
 - scripted snapshots derive online/offline, death/respawn, and marker appeared/disappeared events;
 - a forced disconnect proves connection-lost, backoff, reconnection, and connection-restored events;
+- persisted events reload when monitoring restarts, retain newest-first order, remain bounded per
+  server, and cascade when that saved server is removed;
 - a live selected-server run remained connected across scheduled intervals; its private capture was
   deleted after review.
 

@@ -9,6 +9,7 @@ using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Infrastructure.Storage.Security;
 using RustPlusHelper.Infrastructure.Storage.Identity;
 using RustPlusHelper.Infrastructure.Storage.Map;
+using RustPlusHelper.Infrastructure.Storage.RustPlus;
 using RustPlusHelper.Infrastructure.Storage.Servers;
 using RustPlusHelper.Infrastructure.Storage.Sqlite;
 
@@ -28,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(4L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(5L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -98,6 +99,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE player_identity;");
             Execute(connection, "DROP TABLE map_cache;");
             Execute(connection, "DROP TABLE map_topology;");
+            Execute(connection, "DROP TABLE companion_events;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -186,6 +188,46 @@ public sealed class StorageTests
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));
+    }
+
+    [Fact]
+    public void CompanionEventsRoundTripInOrderRespectRetentionAndCascadeWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqliteCompanionEventRepository(temporary.Database);
+        var oldest = new CompanionEvent(
+            Guid.Parse("10000000-0000-0000-0000-000000000000"),
+            profile.Id,
+            FixedUtc.AddMinutes(-2),
+            CompanionEventKind.ConnectionEstablished,
+            CompanionEventSource.Transport,
+            "Monitoring connected");
+        var middle = new CompanionEvent(
+            Guid.Parse("20000000-0000-0000-0000-000000000000"),
+            profile.Id,
+            FixedUtc.AddMinutes(-1),
+            CompanionEventKind.MarkerAppeared,
+            CompanionEventSource.SnapshotDiff,
+            "Cargo ship appeared",
+            "Derived detail");
+        var newest = new CompanionEvent(
+            Guid.Parse("30000000-0000-0000-0000-000000000000"),
+            profile.Id,
+            FixedUtc,
+            CompanionEventKind.ConnectionLost,
+            CompanionEventSource.Transport,
+            "Connection lost");
+
+        repository.Append(oldest, 2);
+        repository.Append(middle, 2);
+        repository.Append(newest, 2);
+
+        Assert.Equal([newest, middle], repository.GetRecent(profile.Id, 10));
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Empty(repository.GetRecent(profile.Id, 10));
     }
 
     [Fact]

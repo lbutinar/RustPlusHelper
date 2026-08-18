@@ -116,7 +116,8 @@ source paths are not retained; source classification remains visible in the laye
 connection centrally polls server info, team members/positions/notes, recent chat, and map markers.
 The tested server returned a team/position snapshot and current marker; chat returned `NoTeam` and
 uses a one-minute failure backoff. Online/offline, death/respawn, marker lifecycle, and connection
-lost/restored events are derived in memory. Historical persistence and movement/grid events remain.
+lost/restored events are snapshot-derived, retained in a bounded per-server SQLite history, and
+reloaded after restart. Movement/grid events remain.
 
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 
