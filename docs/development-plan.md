@@ -117,7 +117,8 @@ connection centrally polls server info, team members/positions/notes, recent cha
 The tested server returned a team/position snapshot and current marker; chat returned `NoTeam` and
 uses a one-minute failure backoff. Online/offline, death/respawn, marker lifecycle, and connection
 lost/restored events are snapshot-derived, retained in a bounded per-server SQLite history, and
-reloaded after restart. Movement/grid events remain.
+reloaded after restart. Online, alive team-member grid crossings emit at most once per member per
+minute; sampled movement trails remain deferred.
 
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 

@@ -53,6 +53,7 @@ Implemented:
 - one persistent selected-server Rust+ monitor with centralized polling, reconnect backoff, and
   bounded per-server connection/team/death/respawn/marker event history that survives restart. The
   map JPEG is never polled;
+- snapshot-derived team grid-crossing events with a one-minute per-member anti-spam cooldown;
 - native import of Rust `.map` files using the documented version-10, legacy-LZ4, protobuf format;
 - automatic discovery through Steam libraries, with a server-to-world match from Rust's client log
   or an exact documented procedural size+seed filename; ambiguous same-size files are never guessed;

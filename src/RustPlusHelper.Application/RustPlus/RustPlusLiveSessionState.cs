@@ -19,6 +19,7 @@ public enum CompanionEventKind
     TeamMemberDisconnected,
     TeamMemberDied,
     TeamMemberRespawned,
+    TeamMemberChangedGrid,
     MarkerAppeared,
     MarkerDisappeared
 }

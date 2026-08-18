@@ -1,3 +1,5 @@
+using RustPlusHelper.Application.Map;
+
 namespace RustPlusHelper.Application.RustPlus;
 
 /// <summary>
@@ -12,7 +14,9 @@ public sealed class RustPlusLiveSessionManager(
     ICompanionEventRepository eventRepository) : IAsyncDisposable, IDisposable
 {
     private const int EventLimit = 200;
+    private static readonly TimeSpan MovementEventCooldown = TimeSpan.FromMinutes(1);
     private readonly Lock _stateLock = new();
+    private readonly Dictionary<ulong, DateTimeOffset> _lastMovementEventUtc = [];
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private readonly SemaphoreSlim _wakeSignal = new(0, 1);
     private CancellationTokenSource? _runCancellation;
@@ -40,6 +44,7 @@ public sealed class RustPlusLiveSessionManager(
             }
 
             await StopCoreAsync().ConfigureAwait(false);
+            _lastMovementEventUtc.Clear();
             var initial = seed ?? new RustPlusLiveSessionSeed();
             var history = eventRepository.GetRecent(serverId, EventLimit);
             SetState(new RustPlusLiveSessionState(
@@ -277,7 +282,7 @@ public sealed class RustPlusLiveSessionManager(
                 ThrowIfTransportFailure("Team", result.Error);
                 if (result.IsSuccess && result.Data is not null)
                 {
-                    AddTeamEvents(serverId, updated.Team, result.Data);
+                    AddTeamEvents(serverId, updated.Team, result.Data, updated.Server?.MapSize);
                     updated = updated with { Team = result.Data };
                 }
                 else
@@ -343,7 +348,11 @@ public sealed class RustPlusLiveSessionManager(
         throw new LiveTransportException("The Rust+ WebSocket closed.");
     }
 
-    private void AddTeamEvents(Guid serverId, TeamSnapshot? previous, TeamSnapshot current)
+    private void AddTeamEvents(
+        Guid serverId,
+        TeamSnapshot? previous,
+        TeamSnapshot current,
+        uint? mapSize)
     {
         if (previous is null)
         {
@@ -376,6 +385,37 @@ public sealed class RustPlusLiveSessionManager(
             {
                 AddEvent(serverId, CompanionEventKind.TeamMemberRespawned, CompanionEventSource.SnapshotDiff, $"{name} respawned");
             }
+
+            if (mapSize is not { } size
+                || !old.IsOnline
+                || !member.IsOnline
+                || !old.IsAlive
+                || !member.IsAlive)
+            {
+                continue;
+            }
+
+            var oldGrid = MapGrid.WorldToGrid(old.X, old.Y, size)?.Label;
+            var newGrid = MapGrid.WorldToGrid(member.X, member.Y, size)?.Label;
+            if (oldGrid is null || newGrid is null || oldGrid == newGrid)
+            {
+                continue;
+            }
+
+            var now = timeProvider.GetUtcNow();
+            if (_lastMovementEventUtc.TryGetValue(member.SteamId, out var lastEventUtc)
+                && now - lastEventUtc < MovementEventCooldown)
+            {
+                continue;
+            }
+
+            _lastMovementEventUtc[member.SteamId] = now;
+            AddEvent(
+                serverId,
+                CompanionEventKind.TeamMemberChangedGrid,
+                CompanionEventSource.SnapshotDiff,
+                $"{name} entered {newGrid}",
+                $"Moved from {oldGrid} to {newGrid}.");
         }
     }
 
@@ -411,7 +451,8 @@ public sealed class RustPlusLiveSessionManager(
         Guid serverId,
         CompanionEventKind kind,
         CompanionEventSource source,
-        string title)
+        string title,
+        string? detail = null)
     {
         var item = new CompanionEvent(
             Guid.NewGuid(),
@@ -419,7 +460,8 @@ public sealed class RustPlusLiveSessionManager(
             timeProvider.GetUtcNow(),
             kind,
             source,
-            title);
+            title,
+            detail);
         eventRepository.Append(item, EventLimit);
         lock (_stateLock)
         {

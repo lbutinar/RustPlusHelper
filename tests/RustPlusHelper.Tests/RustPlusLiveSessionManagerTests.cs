@@ -55,6 +55,32 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.Equal(RustPlusLiveSessionStatus.Connected, manager.Current.Status);
     }
 
+    [Fact]
+    public async Task EmitsGridCrossingOncePerMemberWithinCooldown()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [
+                Team(online: true, alive: true, x: 100),
+                Team(online: true, alive: true, x: 200),
+                Team(online: true, alive: true, x: 400)
+            ],
+            [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item =>
+            item.Kind == CompanionEventKind.TeamMemberChangedGrid));
+        await WaitUntilAsync(() => factory.Clients[0].TeamCallCount >= 3);
+
+        var movement = Assert.Single(
+            manager.Current.Events,
+            item => item.Kind == CompanionEventKind.TeamMemberChangedGrid);
+        Assert.Equal("Test teammate entered B28", movement.Title);
+        Assert.Equal("Moved from A28 to B28.", movement.Detail);
+    }
+
     private static RustPlusLiveSessionManager CreateManager(
         ServerManager servers,
         InMemorySecretStore secrets,
@@ -121,13 +147,13 @@ public sealed class RustPlusLiveSessionManagerTests
         return servers;
     }
 
-    private static TeamSnapshot Team(bool online, bool alive) => new(
+    private static TeamSnapshot Team(bool online, bool alive, float x = 100) => new(
         76561198000000000,
         [
             new TeamMemberSnapshot(
                 76561198000000000,
                 "Test teammate",
-                100,
+                x,
                 200,
                 online,
                 alive,
@@ -175,6 +201,8 @@ public sealed class RustPlusLiveSessionManagerTests
         public bool IsConnected { get; private set; }
 
         public int MapCallCount { get; private set; }
+
+        public int TeamCallCount => Volatile.Read(ref _teamIndex);
 
         public Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
         {

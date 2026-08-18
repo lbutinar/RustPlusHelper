@@ -47,6 +47,8 @@
             "Derived from consecutive team online-state snapshots.",
         CompanionEventKind.TeamMemberDied or CompanionEventKind.TeamMemberRespawned =>
             "Derived from consecutive team alive-state snapshots.",
+        CompanionEventKind.TeamMemberChangedGrid =>
+            "Derived from consecutive online, alive team positions; limited to one event per member per minute.",
         CompanionEventKind.MarkerAppeared or CompanionEventKind.MarkerDisappeared =>
             "Derived from consecutive map-marker snapshots.",
         _ => "Derived from Rust+ state."
