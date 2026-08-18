@@ -116,7 +116,13 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             topologyLayer is null ? null : CreateTopologyRaster(topologyLayer.Data, topologyResolution),
             topologyLayer is null ? null : CreateResourcePotentialRaster(topologyLayer.Data, topologyResolution),
             noBuildZones,
-            noBuildEvidence);
+            noBuildEvidence,
+            CreateTerrainSlopeRaster(
+                FindLayer(world, "height"),
+                FindLayer(world, "water"),
+                topologyLayer,
+                topologyResolution,
+                world.Size));
     }
 
     private static MapPathSnapshot ToSnapshot(PathData path, uint worldSize)
@@ -250,6 +256,142 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         }
 
         return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
+    }
+
+    private static MapRasterSnapshot? CreateTerrainSlopeRaster(
+        MapData? heightLayer,
+        MapData? waterLayer,
+        MapData? topologyLayer,
+        int topologyResolution,
+        uint worldSize)
+    {
+        if (heightLayer is null)
+        {
+            return null;
+        }
+
+        var heightResolution = GetInt16Resolution(heightLayer, "height");
+        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
+        var outputResolution = Math.Min(heightResolution, PreviewResolution);
+        var metresPerSample = worldSize / (double)(heightResolution - 1);
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var outputY = 0; outputY < outputResolution; outputY++)
+        {
+            var sourceY = Math.Clamp(
+                (int)((outputY + 0.5) * heightResolution / outputResolution),
+                0,
+                heightResolution - 1);
+            for (var outputX = 0; outputX < outputResolution; outputX++)
+            {
+                var sourceX = Math.Clamp(
+                    (int)((outputX + 0.5) * heightResolution / outputResolution),
+                    0,
+                    heightResolution - 1);
+                var left = HeightMetres(heightLayer.Data, heightResolution, Math.Max(0, sourceX - 1), sourceY);
+                var right = HeightMetres(heightLayer.Data, heightResolution, Math.Min(heightResolution - 1, sourceX + 1), sourceY);
+                var bottom = HeightMetres(heightLayer.Data, heightResolution, sourceX, Math.Max(0, sourceY - 1));
+                var top = HeightMetres(heightLayer.Data, heightResolution, sourceX, Math.Min(heightResolution - 1, sourceY + 1));
+                var xSpan = Math.Max(1, Math.Min(heightResolution - 1, sourceX + 1) - Math.Max(0, sourceX - 1));
+                var ySpan = Math.Max(1, Math.Min(heightResolution - 1, sourceY + 1) - Math.Max(0, sourceY - 1));
+                var dx = (right - left) / (xSpan * metresPerSample);
+                var dz = (top - bottom) / (ySpan * metresPerSample);
+                var slopeDegrees = Math.Atan(Math.Sqrt((dx * dx) + (dz * dz))) * 180d / Math.PI;
+
+                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
+                var isWater = IsWater(
+                    terrainHeight,
+                    sourceX,
+                    sourceY,
+                    heightResolution,
+                    waterLayer,
+                    waterResolution,
+                    topologyLayer,
+                    topologyResolution);
+                var color = isWater ? new Rgba(45, 126, 180, 100) : SlopeColor(slopeDegrees);
+                var outputOffset = (((outputResolution - 1 - outputY) * outputResolution) + outputX) * 4;
+                rgba[outputOffset] = color.R;
+                rgba[outputOffset + 1] = color.G;
+                rgba[outputOffset + 2] = color.B;
+                rgba[outputOffset + 3] = color.A;
+            }
+        }
+
+        return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
+    }
+
+    private static bool IsWater(
+        double terrainHeight,
+        int sourceX,
+        int sourceY,
+        int heightResolution,
+        MapData? waterLayer,
+        int waterResolution,
+        MapData? topologyLayer,
+        int topologyResolution)
+    {
+        if (waterLayer is not null)
+        {
+            var waterX = Math.Min(waterResolution - 1, sourceX * waterResolution / heightResolution);
+            var waterY = Math.Min(waterResolution - 1, sourceY * waterResolution / heightResolution);
+            if (HeightMetres(waterLayer.Data, waterResolution, waterX, waterY) > terrainHeight + 0.1)
+            {
+                return true;
+            }
+        }
+
+        if (topologyLayer is null || topologyResolution <= 0 || terrainHeight >= 0)
+        {
+            return false;
+        }
+
+        var topologyX = Math.Min(topologyResolution - 1, sourceX * topologyResolution / heightResolution);
+        var topologyY = Math.Min(topologyResolution - 1, sourceY * topologyResolution / heightResolution);
+        var offset = ((topologyY * topologyResolution) + topologyX) * 4;
+        var topology = BinaryPrimitives.ReadUInt32LittleEndian(topologyLayer.Data.AsSpan(offset, 4));
+        return HasAny(topology, 7, 8);
+    }
+
+    private static int GetInt16Resolution(MapData layer, string name)
+    {
+        if (layer.Data.Length % 2 != 0)
+        {
+            throw new InvalidDataException($"The {name} layer byte count is invalid.");
+        }
+
+        var resolution = GetSquareResolution(layer.Data.Length / 2, name);
+        if (resolution < 2)
+        {
+            throw new InvalidDataException($"The {name} layer is too small for slope analysis.");
+        }
+
+        return resolution;
+    }
+
+    private static double HeightMetres(byte[] data, int resolution, int x, int y)
+    {
+        const double shortNormalizer = 32766d;
+        const double verticalSize = 1000d;
+        const double verticalOffset = -500d;
+        var offset = ((y * resolution) + x) * 2;
+        var normalized = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(offset, 2)) / shortNormalizer;
+        return (normalized * verticalSize) + verticalOffset;
+    }
+
+    private static Rgba SlopeColor(double slopeDegrees)
+    {
+        if (slopeDegrees <= 5)
+        {
+            return new Rgba(53, 194, 111, 135);
+        }
+
+        if (slopeDegrees <= 12)
+        {
+            return new Rgba(184, 205, 74, 135);
+        }
+
+        return slopeDegrees <= 25
+            ? new Rgba(244, 153, 53, 150)
+            : new Rgba(216, 61, 50, 170);
     }
 
     private static Rgba TopologyColor(uint value)

@@ -24,6 +24,7 @@ public enum MapLayerKind
     Grid,
     Biomes,
     Topology,
+    TerrainSlope,
     ResourcePotential,
     Roads,
     Railways,
@@ -95,6 +96,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.Grid, "Map grid", true, true, "DERIVED"),
         new(MapLayerKind.Biomes, "Biomes", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Topology, "Terrain topology", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.TerrainSlope, "Terrain slope", false, false, "DERIVED FROM .MAP HEIGHTS", "Import the selected server's Rust .map file."),
         new(MapLayerKind.ResourcePotential, "Ore potential", false, false, "DERIVED FROM .MAP", "Import a .map file; this never shows live nodes."),
         new(MapLayerKind.Roads, "Road paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Railways, "Rail paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
@@ -144,6 +146,15 @@ public sealed record MapDashboardState(
             topology?.Data.TopologyRaster is not null,
             topology?.Data.TopologyRaster is not null ? "EXTERNAL .MAP" : "UNAVAILABLE",
             topology?.Data.TopologyRaster is not null ? null : "Import the selected server's Rust .map file."),
+        new(
+            MapLayerKind.TerrainSlope,
+            "Terrain slope",
+            false,
+            topology?.Data.TerrainSlopeRaster is not null,
+            topology?.Data.TerrainSlopeRaster is not null ? "DERIVED FROM .MAP HEIGHTS" : "UNAVAILABLE",
+            topology?.Data.TerrainSlopeRaster is not null
+                ? "Flat ≤ 5°, gentle ≤ 12°, moderate ≤ 25°, steep > 25°. This is a terrain-planning aid, not proof that building is allowed."
+                : "Import a .map file containing a height layer."),
         new(
             MapLayerKind.ResourcePotential,
             "Ore potential",

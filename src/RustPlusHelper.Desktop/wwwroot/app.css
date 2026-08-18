@@ -594,6 +594,49 @@ button {
 .legend-dot.event { background: var(--red); }
 .legend-dot.monument { background: var(--blue); }
 
+.terrain-slope-legend {
+    position: absolute;
+    z-index: 700;
+    left: 16px;
+    bottom: 16px;
+    display: grid;
+    grid-template-columns: repeat(5, auto);
+    align-items: center;
+    gap: 7px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 9px;
+    padding: 9px 12px;
+    background: rgba(17, 22, 20, 0.92);
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.terrain-slope-legend strong {
+    grid-column: 1 / -1;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.terrain-slope-legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.terrain-slope-legend i {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+}
+
+.slope-flat { background: rgb(53, 194, 111); }
+.slope-gentle { background: rgb(184, 205, 74); }
+.slope-moderate { background: rgb(244, 153, 53); }
+.slope-steep { background: rgb(216, 61, 50); }
+.slope-water { background: rgb(45, 126, 180); }
+
 .layer-panel {
     min-height: 0;
     overflow: auto;
@@ -653,6 +696,7 @@ button {
 .layer-symbol.grid { border-radius: 2px; border-color: #d6ddd8; }
 .layer-symbol.biomes { border-color: #5f9c5b; }
 .layer-symbol.topology { border-color: #a69581; }
+.layer-symbol.terrainSlope { border-color: #35c26f; }
 .layer-symbol.resourcePotential { border-color: #ff8b3d; }
 .layer-symbol.roads { border-radius: 2px; border-color: #d7a66b; }
 .layer-symbol.railways { border-radius: 2px; border-color: #8e9699; }

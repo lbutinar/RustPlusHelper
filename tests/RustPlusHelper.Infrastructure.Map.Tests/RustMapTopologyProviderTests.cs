@@ -20,7 +20,7 @@ public sealed class RustMapTopologyProviderTests
         Assert.Equal(4500u, result.WorldSize);
         Assert.Equal("fixture.4500.123.map", result.SourceFileName);
         Assert.Equal(64, result.Sha256.Length);
-        Assert.Equal(2, result.SourceLayers.Count);
+        Assert.Equal(3, result.SourceLayers.Count);
         Assert.Equal(3, result.PrefabCount);
 
         var road = Assert.Single(result.Paths);
@@ -35,6 +35,9 @@ public sealed class RustMapTopologyProviderTests
         Assert.NotNull(result.BiomeRaster);
         Assert.NotNull(result.ResourcePotentialRaster);
         Assert.Contains(result.ResourcePotentialRaster.Rgba, value => value != 0);
+        Assert.NotNull(result.TerrainSlopeRaster);
+        Assert.Equal(5, result.TerrainSlopeRaster.Width);
+        Assert.Equal([53, 194, 111, 135], result.TerrainSlopeRaster.Rgba[..4]);
         var noBuildZone = Assert.Single(result.NoBuildZones!);
         Assert.Equal("circle", noBuildZone.Shape);
         Assert.Equal(40, noBuildZone.Boundary.Count);
@@ -55,6 +58,43 @@ public sealed class RustMapTopologyProviderTests
         Assert.Contains("version 99", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ClassifiesAHeightDiscontinuityAsSteepTerrain()
+    {
+        short[] heights =
+        [
+            -32760, -32760, 32760, 32760, 32760,
+            -32760, -32760, 32760, 32760, 32760,
+            -32760, -32760, 32760, 32760, 32760,
+            -32760, -32760, 32760, 32760, 32760,
+            -32760, -32760, 32760, 32760, 32760
+        ];
+        using var mapFile = TestMapFile.Create(heightSamples: heights);
+        var provider = new RustMapTopologyProvider();
+
+        var result = await provider.ReadAsync(mapFile.Path);
+
+        Assert.NotNull(result.TerrainSlopeRaster);
+        Assert.True(PixelCount(result.TerrainSlopeRaster, 216, 61, 50, 170) > 0);
+    }
+
+    private static int PixelCount(MapRasterSnapshot raster, byte red, byte green, byte blue, byte alpha)
+    {
+        var count = 0;
+        for (var offset = 0; offset < raster.Rgba.Length; offset += 4)
+        {
+            if (raster.Rgba[offset] == red
+                && raster.Rgba[offset + 1] == green
+                && raster.Rgba[offset + 2] == blue
+                && raster.Rgba[offset + 3] == alpha)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private sealed class TestMapFile : IDisposable
     {
         private TestMapFile(string path)
@@ -64,7 +104,7 @@ public sealed class RustMapTopologyProviderTests
 
         public string Path { get; }
 
-        public static TestMapFile Create(int serializationVersion = 10)
+        public static TestMapFile Create(int serializationVersion = 10, short[]? heightSamples = null)
         {
             var directory = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
@@ -80,7 +120,7 @@ public sealed class RustMapTopologyProviderTests
 
             if (serializationVersion == 10)
             {
-                var world = CreateWorld();
+                var world = CreateWorld(heightSamples);
                 using var encoded = LZ4Legacy.Encode(file, leaveOpen: true);
                 Serializer.Serialize(encoded, world);
             }
@@ -90,7 +130,7 @@ public sealed class RustMapTopologyProviderTests
 
         public void Dispose() => Directory.Delete(System.IO.Path.GetDirectoryName(Path)!, recursive: true);
 
-        private static TestWorldData CreateWorld()
+        private static TestWorldData CreateWorld(short[]? heightSamples)
         {
             var topology = new byte[16];
             BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(0, 4), 1u << 5);
@@ -114,6 +154,11 @@ public sealed class RustMapTopologyProviderTests
                             0, 0, 0, 255,
                             0, 0, 0, 0
                         ]
+                    },
+                    new TestMapData
+                    {
+                        Name = "height",
+                        Data = HeightData(heightSamples ?? Enumerable.Repeat((short)16383, 25).ToArray())
                     }
                 },
                 Prefabs =
@@ -141,6 +186,17 @@ public sealed class RustMapTopologyProviderTests
                     }
                 }
             };
+        }
+
+        private static byte[] HeightData(IReadOnlyList<short> values)
+        {
+            var data = new byte[values.Count * 2];
+            for (var index = 0; index < values.Count; index++)
+            {
+                BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(index * 2, 2), values[index]);
+            }
+
+            return data;
         }
     }
 

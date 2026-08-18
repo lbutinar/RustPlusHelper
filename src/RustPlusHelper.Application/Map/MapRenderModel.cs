@@ -227,6 +227,7 @@ public static class MapRenderModelFactory
         {
             AddRaster(rasters, topology.BiomeRaster, topology.Sha256, MapLayerKind.Biomes, margin, width, height);
             AddRaster(rasters, topology.TopologyRaster, topology.Sha256, MapLayerKind.Topology, margin, width, height);
+            AddRaster(rasters, topology.TerrainSlopeRaster, topology.Sha256, MapLayerKind.TerrainSlope, margin, width, height);
             AddRaster(
                 rasters,
                 topology.ResourcePotentialRaster,
@@ -313,6 +314,7 @@ public static class MapRenderModelFactory
         MapLayerKind.Grid => "grid",
         MapLayerKind.Biomes => "biomes",
         MapLayerKind.Topology => "topology",
+        MapLayerKind.TerrainSlope => "terrainSlope",
         MapLayerKind.ResourcePotential => "resourcePotential",
         MapLayerKind.Roads => "roads",
         MapLayerKind.Railways => "railways",

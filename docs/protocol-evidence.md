@@ -121,6 +121,15 @@ secondary path. Current client cache names may append build/hash/checksum segmen
 the Rust+ seed. Rust+ exposes no map checksum, so same-size-only candidates are never auto-selected.
 The ore overlay is topology potential, not exact live node state.
 
+The terrain-slope layer is derived locally from the `.map` `height` grid. Signed 16-bit samples are
+converted to Unity world metres using the independently reviewed Rust Map Parser 0.4.0 constants,
+then central height differences and the map's metres-per-sample spacing produce a slope angle. The
+UI bands are an application convention: flat up to 5 degrees, gentle up to 12, moderate up to 25,
+and steep above 25. They are a visual planning aid, not a Rust building-placement rule; topology,
+prefab blockers, objects, and server plugins can still prevent construction on apparently flat land.
+Water is distinguished using serialized water height where available, with documented Ocean and
+Oceanside topology used only for below-sea-level ocean fallback.
+
 The no-build layer is also external, not Rust+. Facepunch documents that Road and Rail topology
 prevent player construction, but Monument topology alone does not prove a monument's blocked
 volume. The imported `.map` supplies placed prefab IDs and transforms; a compact catalogue derived

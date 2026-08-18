@@ -9,6 +9,7 @@
         "grid",
         "biomes",
         "topology",
+        "terrainSlope",
         "resourcePotential",
         "roads",
         "railways",
@@ -40,7 +41,7 @@
         "unknown": "?"
     };
 
-    const externalRasterLayerKeys = new Set(["biomes", "topology", "resourcePotential"]);
+    const externalRasterLayerKeys = new Set(["biomes", "topology", "terrainSlope", "resourcePotential"]);
     const externalPathLayerKeys = new Set(["roads", "railways", "rivers"]);
     const externalPolygonLayerKeys = new Set(["noBuildZones"]);
 

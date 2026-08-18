@@ -50,7 +50,8 @@ public sealed record ImportedMapTopology(
     MapRasterSnapshot? TopologyRaster,
     MapRasterSnapshot? ResourcePotentialRaster,
     IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
-    MapNoBuildZoneEvidence? NoBuildZoneEvidence = null);
+    MapNoBuildZoneEvidence? NoBuildZoneEvidence = null,
+    MapRasterSnapshot? TerrainSlopeRaster = null);
 
 public sealed record SavedMapTopology(
     Guid ServerId,
@@ -251,7 +252,10 @@ public sealed class MapTopologyManager(
         }
 
         var match = discovered.Match;
+        var needsSlopeUpgrade = existing?.Data.TerrainSlopeRaster is null
+            && existing?.Data.SourceLayers.Any(layer => string.Equals(layer.Name, "height", StringComparison.OrdinalIgnoreCase)) == true;
         if (existing is not null
+            && !needsSlopeUpgrade
             && string.Equals(existing.Data.SourceFileName, match.FileName, StringComparison.OrdinalIgnoreCase)
             && existing.Data.SourceTimestamp == match.SourceTimestamp)
         {

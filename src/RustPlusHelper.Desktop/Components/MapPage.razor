@@ -66,6 +66,18 @@
                 <span><i class="legend-dot event"></i>Events</span>
                 <span><i class="legend-dot monument"></i>Monuments</span>
             </div>
+
+            @if (IsTerrainSlopeVisible)
+            {
+                <div class="terrain-slope-legend" aria-label="Terrain slope colors">
+                    <strong>Terrain slope</strong>
+                    <span><i class="slope-flat"></i>Flat ≤ 5°</span>
+                    <span><i class="slope-gentle"></i>Gentle ≤ 12°</span>
+                    <span><i class="slope-moderate"></i>Moderate ≤ 25°</span>
+                    <span><i class="slope-steep"></i>Steep &gt; 25°</span>
+                    <span><i class="slope-water"></i>Water</span>
+                </div>
+            }
         </div>
 
         <aside class="layer-panel">
@@ -182,6 +194,9 @@
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 
     private bool IsGridVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.Grid)
+        is { IsVisible: true, IsAvailable: true };
+
+    private bool IsTerrainSlopeVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.TerrainSlope)
         is { IsVisible: true, IsAvailable: true };
 
     private string SourceEyebrow => State.DataSource switch

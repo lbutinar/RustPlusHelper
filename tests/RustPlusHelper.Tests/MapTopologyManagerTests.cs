@@ -98,6 +98,40 @@ public sealed class MapTopologyManagerTests
         Assert.Equal(0, provider.ReadCount);
     }
 
+    [Fact]
+    public async Task RefreshesMatchingLegacyImportWhenHeightLayerHasNoSlopeRaster()
+    {
+        var legacy = CreateImport(4500) with
+        {
+            SourceLayers =
+            [
+                new MapSourceLayerSnapshot("topology", 16),
+                new MapSourceLayerSnapshot("height", 50)
+            ]
+        };
+        var upgraded = legacy with { TerrainSlopeRaster = new MapRasterSnapshot(1, 1, [53, 194, 111, 135]) };
+        var repository = new InMemoryMapTopologyRepository();
+        repository.Upsert(new SavedMapTopology(ServerId, DateTimeOffset.UtcNow, legacy));
+        var provider = new StubProvider(upgraded);
+        var manager = new MapTopologyManager(
+            provider,
+            new StubDiscovery(MapTopologyDiscoveryResult.Matched(
+                new DiscoveredMapTopology(
+                    "matching.map",
+                    "matching.map",
+                    1,
+                    MapTopologyMatchKind.RustClientLog),
+                "matched")),
+            repository,
+            TimeProvider.System);
+
+        var result = await manager.TryAutoImportAsync(ServerId, "192.0.2.25", ServerInfo());
+
+        Assert.True(result.WasImported);
+        Assert.Equal(1, provider.ReadCount);
+        Assert.NotNull(repository.Get(ServerId)?.Data.TerrainSlopeRaster);
+    }
+
     private static ImportedMapTopology CreateImport(uint worldSize) => new(
         "matching.map",
         new string('A', 64),

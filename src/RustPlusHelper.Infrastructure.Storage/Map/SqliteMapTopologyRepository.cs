@@ -15,7 +15,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT imported_utc_ms, metadata_json, biome_rgba, topology_rgba, resource_potential_rgba
+            SELECT imported_utc_ms, metadata_json, biome_rgba, topology_rgba, resource_potential_rgba,
+                   terrain_slope_rgba
             FROM map_topology
             WHERE server_id = $serverId;
             """;
@@ -51,7 +52,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             ReadRaster(reader, 3, metadata.TopologySize),
             ReadRaster(reader, 4, metadata.ResourcePotentialSize),
             metadata.NoBuildZones,
-            metadata.NoBuildZoneEvidence);
+            metadata.NoBuildZoneEvidence,
+            ReadRaster(reader, 5, metadata.TerrainSlopeSize));
         return new SavedMapTopology(
             serverId,
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
@@ -64,6 +66,7 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         ValidateRaster(topology.Data.BiomeRaster);
         ValidateRaster(topology.Data.TopologyRaster);
         ValidateRaster(topology.Data.ResourcePotentialRaster);
+        ValidateRaster(topology.Data.TerrainSlopeRaster);
 
         var metadata = new MapTopologyMetadata(
             topology.Data.SourceFileName,
@@ -78,22 +81,26 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             SizeOf(topology.Data.TopologyRaster),
             SizeOf(topology.Data.ResourcePotentialRaster),
             topology.Data.NoBuildZones,
-            topology.Data.NoBuildZoneEvidence);
+            topology.Data.NoBuildZoneEvidence,
+            SizeOf(topology.Data.TerrainSlopeRaster));
 
         database.Initialize();
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO map_topology(
-                server_id, imported_utc_ms, metadata_json, biome_rgba, topology_rgba, resource_potential_rgba)
+                server_id, imported_utc_ms, metadata_json, biome_rgba, topology_rgba,
+                resource_potential_rgba, terrain_slope_rgba)
             VALUES (
-                $serverId, $importedUtcMs, $metadataJson, $biomeRgba, $topologyRgba, $resourcePotentialRgba)
+                $serverId, $importedUtcMs, $metadataJson, $biomeRgba, $topologyRgba,
+                $resourcePotentialRgba, $terrainSlopeRgba)
             ON CONFLICT(server_id) DO UPDATE SET
                 imported_utc_ms = excluded.imported_utc_ms,
                 metadata_json = excluded.metadata_json,
                 biome_rgba = excluded.biome_rgba,
                 topology_rgba = excluded.topology_rgba,
-                resource_potential_rgba = excluded.resource_potential_rgba;
+                resource_potential_rgba = excluded.resource_potential_rgba,
+                terrain_slope_rgba = excluded.terrain_slope_rgba;
             """;
         command.Parameters.AddWithValue("$serverId", topology.ServerId.ToString("D"));
         command.Parameters.AddWithValue("$importedUtcMs", topology.ImportedAtUtc.ToUnixTimeMilliseconds());
@@ -101,6 +108,7 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         AddBlob(command, "$biomeRgba", topology.Data.BiomeRaster?.Rgba);
         AddBlob(command, "$topologyRgba", topology.Data.TopologyRaster?.Rgba);
         AddBlob(command, "$resourcePotentialRgba", topology.Data.ResourcePotentialRaster?.Rgba);
+        AddBlob(command, "$terrainSlopeRgba", topology.Data.TerrainSlopeRaster?.Rgba);
         command.ExecuteNonQuery();
     }
 
@@ -166,5 +174,6 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         RasterSize? TopologySize,
         RasterSize? ResourcePotentialSize,
         IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
-        MapNoBuildZoneEvidence? NoBuildZoneEvidence = null);
+        MapNoBuildZoneEvidence? NoBuildZoneEvidence = null,
+        RasterSize? TerrainSlopeSize = null);
 }

@@ -63,9 +63,10 @@ Implemented:
 - native import of Rust `.map` files using the documented version-10, legacy-LZ4, protobuf format;
 - automatic discovery through Steam libraries, with a server-to-world match from Rust's client log
   or an exact documented procedural size+seed filename; ambiguous same-size files are never guessed;
-- per-server SQLite persistence and toggleable biome, topology, ore-potential, road, rail, and river
-  overlays. Raster overlays are cached into one map image and visibility-only changes avoid a full
-  Leaflet rebuild. Ore potential is topology-derived and never presented as exact live node locations.
+- per-server SQLite persistence and toggleable biome, topology, terrain-slope, ore-potential, road,
+  rail, river, and no-build overlays. The slope view derives flat/gentle/moderate/steep bands from
+  imported height samples and does not claim that flat terrain is buildable. Raster overlays are
+  cached into one map image and visibility-only changes avoid a full Leaflet rebuild.
 
 Still requiring live verification or later phases:
 

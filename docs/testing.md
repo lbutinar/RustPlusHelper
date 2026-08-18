@@ -88,13 +88,14 @@
 ## Current external-map tests
 
 - a synthetic documented container round-trips version-10 header, legacy LZ4, protobuf world data,
-  topology, biome channels, prefabs, and centered path coordinates through the production reader;
+  topology, biome channels, height-derived slope, prefabs, and centered path coordinates through the production reader;
 - unsupported serialization versions and definite world-size mismatches are rejected;
 - cache discovery tests cover current client suffixes linked through `output_log.txt`, documented
   procedural size+seed filenames, wipe-time filtering, and refusal to guess among same-size maps;
 - a real temporary SQLite database round-trips derived rasters and paths and verifies delete cascade;
 - a manual read-only smoke test parsed a current locally cached game map into 7 source layers,
-  32,112 prefab records, 144 paths, and 384-pixel biome/topology rasters;
+  32,112 prefab records, 144 paths, and 384-pixel biome/topology rasters; the same sanitized map
+  smoke produced a 384-pixel slope raster containing flat, gentle, moderate, steep, and water bands;
 - a component regression test proves a visibility-only layer change does not resend the full map
   model, and a private Debug smoke run kept topology enabled across live updates while remaining
   responsive (0.28 process CPU seconds over 5 seconds versus 0.33 with derived rasters disabled);

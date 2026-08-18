@@ -29,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(7L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(8L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -52,6 +52,26 @@ public sealed class StorageTests
         var reopened = new SqliteDatabase(temporary.Database.DatabasePath);
         var exception = Assert.Throws<InvalidOperationException>(reopened.Initialize);
         Assert.Contains("newer than supported", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VersionEightMigrationAddsTerrainSlopeStorage()
+    {
+        using var temporary = new TemporaryDatabase();
+        temporary.Database.Initialize();
+        using (var connection = temporary.Database.OpenConnection())
+        {
+            Execute(connection, "ALTER TABLE map_topology DROP COLUMN terrain_slope_rgba;");
+            Execute(connection, "DELETE FROM schema_migrations WHERE version = 8;");
+        }
+
+        var reopened = new SqliteDatabase(temporary.Database.DatabasePath);
+        reopened.Initialize();
+
+        using var migratedConnection = reopened.OpenConnection();
+        Assert.Equal(1L, ExecuteScalar<long>(
+            migratedConnection,
+            "SELECT COUNT(*) FROM pragma_table_info('map_topology') WHERE name = 'terrain_slope_rgba';"));
     }
 
     [Fact]
@@ -174,7 +194,8 @@ public sealed class StorageTests
                 new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
                 [new MapNoBuildZoneSnapshot("zone:1", "assets/test.prefab", "rectangle", [
                     new MapWorldPoint(10, 20), new MapWorldPoint(30, 20), new MapWorldPoint(30, 40)])],
-                new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning.")));
+                new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning."),
+                new MapRasterSnapshot(1, 1, [53, 194, 111, 135])));
 
         repository.Upsert(topology);
         var restored = repository.Get(profile.Id);
@@ -195,6 +216,7 @@ public sealed class StorageTests
         Assert.Equal(topology.Data.NoBuildZones[0].Shape, restoredZone.Shape);
         Assert.Equal(topology.Data.NoBuildZones[0].Boundary.ToArray(), restoredZone.Boundary.ToArray());
         Assert.Equal(topology.Data.NoBuildZoneEvidence, restored.Data.NoBuildZoneEvidence);
+        Assert.Equal(topology.Data.TerrainSlopeRaster?.Rgba, restored.Data.TerrainSlopeRaster?.Rgba);
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));
