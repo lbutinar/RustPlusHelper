@@ -663,6 +663,7 @@ button {
 .layer-symbol.vendingMachines { border-color: var(--yellow); }
 .layer-symbol.monuments { border-color: var(--blue); }
 .layer-symbol.events { border-color: var(--red); }
+.layer-symbol.deathHistory { border-color: #ff5a36; box-shadow: 0 0 7px rgba(255, 90, 54, 0.55); }
 .layer-symbol.smartDevices { border-color: #7fc8b2; }
 .layer-symbol.cameras { border-color: #ac91d8; }
 

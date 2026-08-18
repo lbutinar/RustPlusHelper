@@ -29,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(6L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(7L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -213,7 +213,8 @@ public sealed class StorageTests
             CompanionEventKind.MarkerAppeared,
             CompanionEventSource.SnapshotDiff,
             "Cargo ship appeared",
-            "Derived detail");
+            "Derived detail",
+            new MapPositionSnapshot(123.5f, 456.25f));
         var newest = new CompanionEvent(
             Guid.Parse("30000000-0000-0000-0000-000000000000"),
             profile.Id,

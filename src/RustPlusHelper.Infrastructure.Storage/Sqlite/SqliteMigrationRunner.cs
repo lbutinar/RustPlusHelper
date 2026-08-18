@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 6;
+    private const int LatestVersion = 7;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -95,6 +95,11 @@ internal static class SqliteMigrationRunner
         );
         """;
 
+    private const string CompanionEventPositionSchema = """
+        ALTER TABLE companion_events ADD COLUMN world_x REAL NULL;
+        ALTER TABLE companion_events ADD COLUMN world_y REAL NULL;
+        """;
+
     public static void Apply(SqliteConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -135,6 +140,7 @@ internal static class SqliteMigrationRunner
             4 => ("derived external map topology", MapTopologySchema),
             5 => ("bounded companion event history", CompanionEventSchema),
             6 => ("protected application credentials", ApplicationSecretSchema),
+            7 => ("companion event map positions", CompanionEventPositionSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

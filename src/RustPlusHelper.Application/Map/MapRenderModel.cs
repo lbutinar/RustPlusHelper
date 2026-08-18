@@ -34,6 +34,16 @@ public sealed record MapPolylineOverlay(
     float Width,
     IReadOnlyList<ProjectedMapPoint> Points);
 
+public sealed record MapHeatSpot(
+    string Id,
+    MapLayerKind Layer,
+    string Label,
+    string GridReference,
+    int Count,
+    double PixelX,
+    double PixelY,
+    DateTimeOffset LatestAtUtc);
+
 public sealed record MapRenderModel(
     double Width,
     double Height,
@@ -41,6 +51,7 @@ public sealed record MapRenderModel(
     IReadOnlyList<MapOverlayItem> Items,
     IReadOnlyList<MapRasterOverlay> Rasters,
     IReadOnlyList<MapPolylineOverlay> Polylines,
+    IReadOnlyList<MapHeatSpot> HeatSpots,
     IReadOnlyDictionary<string, bool> LayerVisibility);
 
 public static class MapRenderModelFactory
@@ -58,6 +69,7 @@ public static class MapRenderModelFactory
         var items = new List<MapOverlayItem>();
         var rasters = new List<MapRasterOverlay>();
         var polylines = new List<MapPolylineOverlay>();
+        var heatSpots = new List<MapHeatSpot>();
 
         foreach (var monument in state.Map.Monuments)
         {
@@ -146,6 +158,35 @@ public static class MapRenderModelFactory
                 margin));
         }
 
+        var positionedDeaths = state.Events
+            .Where(item => item.Kind == CompanionEventKind.TeamMemberDied
+                && item.Position is not null
+                && (state.Server.WipeTimeUtc is null || item.OccurredAtUtc >= state.Server.WipeTimeUtc))
+            .Select(item => new
+            {
+                Event = item,
+                Position = item.Position!,
+                Grid = MapGrid.WorldToGrid(item.Position!.X, item.Position.Y, mapSize)?.Label
+            })
+            .Where(item => item.Grid is not null)
+            .GroupBy(item => item.Grid!, StringComparer.Ordinal);
+        foreach (var gridDeaths in positionedDeaths)
+        {
+            var count = gridDeaths.Count();
+            var worldX = (float)gridDeaths.Average(item => item.Position.X);
+            var worldY = (float)gridDeaths.Average(item => item.Position.Y);
+            var projected = MapProjection.WorldToImage(worldX, worldY, mapSize, width, height, margin);
+            heatSpots.Add(new(
+                $"death-history:{gridDeaths.Key}",
+                MapLayerKind.DeathHistory,
+                $"{count} recorded team death{(count == 1 ? string.Empty : "s")}",
+                gridDeaths.Key,
+                count,
+                projected.PixelX,
+                projected.PixelY,
+                gridDeaths.Max(item => item.Event.OccurredAtUtc)));
+        }
+
         foreach (var marker in state.Markers?.Markers ?? [])
         {
             if (marker.X is not { } x || marker.Y is not { } y)
@@ -224,6 +265,7 @@ public static class MapRenderModelFactory
             items,
             rasters,
             polylines,
+            heatSpots,
             state.Layers.ToDictionary(
                 layer => ToLayerKey(layer.Kind),
                 layer => layer.IsVisible && layer.IsAvailable,
@@ -246,6 +288,7 @@ public static class MapRenderModelFactory
         MapLayerKind.VendingMachines => "vendingMachines",
         MapLayerKind.Monuments => "monuments",
         MapLayerKind.Events => "events",
+        MapLayerKind.DeathHistory => "deathHistory",
         MapLayerKind.SmartDevices => "smartDevices",
         MapLayerKind.Cameras => "cameras",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)

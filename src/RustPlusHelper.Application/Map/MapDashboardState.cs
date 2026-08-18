@@ -34,6 +34,7 @@ public enum MapLayerKind
     VendingMachines,
     Monuments,
     Events,
+    DeathHistory,
     SmartDevices,
     Cameras
 }
@@ -104,6 +105,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.VendingMachines, "Vending", true, true, "DIRECT"),
         new(MapLayerKind.Monuments, "Monuments", true, true, "DIRECT"),
         new(MapLayerKind.Events, "World events", true, true, "DIRECT + DIFF"),
+        new(MapLayerKind.DeathHistory, "Team death hotspots", false, false, "DERIVED · LOCAL HISTORY", "No team death positions have been recorded yet."),
         new(
             MapLayerKind.SmartDevices,
             "Smart devices",
@@ -123,6 +125,7 @@ public sealed record MapDashboardState(
     public static IReadOnlyList<MapLayerState> CreateLiveMapLayers(
         bool teamAvailable = false,
         bool markersAvailable = false,
+        bool deathHistoryAvailable = false,
         SavedMapTopology? topology = null) =>
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT RUST+"),
@@ -189,6 +192,13 @@ public sealed record MapDashboardState(
             markersAvailable,
             markersAvailable ? "DIRECT RUST+" : "UNAVAILABLE",
             markersAvailable ? null : "The latest Rust+ map-marker request did not return data."),
+        new(
+            MapLayerKind.DeathHistory,
+            "Team death hotspots",
+            deathHistoryAvailable,
+            deathHistoryAvailable,
+            "DERIVED · LOCAL HISTORY",
+            deathHistoryAvailable ? null : "No team death positions have been recorded on this server yet."),
         new(
             MapLayerKind.SmartDevices,
             "Smart devices",

@@ -319,6 +319,52 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void MapCanvasPassesDerivedDeathHeatSpotsToLeaflet()
+    {
+        var serverId = Guid.Parse("bb1b670b-3711-42df-90d8-9f0ac9b65ea9");
+        var state = new MapDashboardState(
+            DashboardConnectionState.Ready,
+            "Live map · direct",
+            MapDashboardDataSource.Live,
+            serverId,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            false,
+            "Live data refreshed",
+            null,
+            new ServerInfoSnapshot(
+                "Live test", null, null, "Procedural Map", 4500, null,
+                null, null, null, null, null, null, null, null, null),
+            new ServerMapSnapshot(
+                1000, 1000, 50, "#FF102030", [], [0xFF, 0xD8, 0xFF, 0xD9]),
+            null,
+            null,
+            null,
+            [new CompanionEvent(
+                Guid.NewGuid(),
+                serverId,
+                DateTimeOffset.UtcNow,
+                CompanionEventKind.TeamMemberDied,
+                CompanionEventSource.SnapshotDiff,
+                "Sanitized teammate died",
+                Position: new MapPositionSnapshot(100, 200))],
+            MapDashboardState.CreateLiveMapLayers(deathHistoryAvailable: true),
+            null);
+
+        Render<MapCanvas>(parameters => parameters.Add(component => component.State, state));
+
+        var invocation = Assert.Single(
+            JSInterop.Invocations,
+            candidate => candidate.Identifier == "rustPlusMap.render");
+        var model = Assert.IsAssignableFrom<object>(invocation.Arguments[2]);
+        var heatSpots = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
+            model.GetType().GetProperty("HeatSpots")?.GetValue(model));
+        var spot = Assert.Single(heatSpots.Cast<object>());
+        Assert.Equal(1, spot.GetType().GetProperty("Count")?.GetValue(spot));
+        Assert.Equal("deathHistory", spot.GetType().GetProperty("Layer")?.GetValue(spot));
+    }
+
+    [Fact]
     public void MapCanvasPassesTopologyRasterThroughExplicitBase64Contract()
     {
         var topology = new SavedMapTopology(

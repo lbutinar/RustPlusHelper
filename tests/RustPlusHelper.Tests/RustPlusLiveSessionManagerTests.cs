@@ -29,6 +29,9 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.Equal(0, factory.Clients.Sum(client => client.MapCallCount));
         Assert.Contains(manager.Current.Events, item => item.Kind == CompanionEventKind.TeamMemberDisconnected);
         Assert.Contains(manager.Current.Events, item => item.Kind == CompanionEventKind.TeamMemberDied);
+        var death = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.TeamMemberDied);
+        Assert.Equal(new MapPositionSnapshot(100, 200), death.Position);
+        Assert.Equal(CompanionEventSource.SnapshotDiff, death.Source);
         Assert.Contains(manager.Current.Events, item => item.Kind == CompanionEventKind.TeamMemberRespawned);
         Assert.Contains(manager.Current.Events, item => item.Kind == CompanionEventKind.MarkerAppeared);
         Assert.Contains(manager.Current.Events, item => item.Kind == CompanionEventKind.MarkerDisappeared);

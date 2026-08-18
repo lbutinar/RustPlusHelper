@@ -13,7 +13,7 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, occurred_utc_ms, kind, source, title, detail
+            SELECT id, occurred_utc_ms, kind, source, title, detail, world_x, world_y
             FROM companion_events
             WHERE server_id = $serverId
             ORDER BY occurred_utc_ms DESC, id DESC
@@ -33,7 +33,10 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
                 Enum.Parse<CompanionEventKind>(reader.GetString(2), ignoreCase: false),
                 Enum.Parse<CompanionEventSource>(reader.GetString(3), ignoreCase: false),
                 reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5)));
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) || reader.IsDBNull(7)
+                    ? null
+                    : new MapPositionSnapshot(reader.GetFloat(6), reader.GetFloat(7))));
         }
 
         return events;
@@ -50,8 +53,10 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
         {
             insert.Transaction = transaction;
             insert.CommandText = """
-                INSERT INTO companion_events(id, server_id, occurred_utc_ms, kind, source, title, detail)
-                VALUES ($id, $serverId, $occurredUtcMs, $kind, $source, $title, $detail);
+                INSERT INTO companion_events(
+                    id, server_id, occurred_utc_ms, kind, source, title, detail, world_x, world_y)
+                VALUES (
+                    $id, $serverId, $occurredUtcMs, $kind, $source, $title, $detail, $worldX, $worldY);
                 """;
             insert.Parameters.AddWithValue("$id", companionEvent.Id.ToString("D"));
             insert.Parameters.AddWithValue("$serverId", companionEvent.ServerId.ToString("D"));
@@ -60,6 +65,12 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
             insert.Parameters.AddWithValue("$source", companionEvent.Source.ToString());
             insert.Parameters.AddWithValue("$title", companionEvent.Title);
             insert.Parameters.AddWithValue("$detail", companionEvent.Detail is null ? DBNull.Value : companionEvent.Detail);
+            insert.Parameters.AddWithValue("$worldX", companionEvent.Position is null
+                ? DBNull.Value
+                : companionEvent.Position.X);
+            insert.Parameters.AddWithValue("$worldY", companionEvent.Position is null
+                ? DBNull.Value
+                : companionEvent.Position.Y);
             insert.ExecuteNonQuery();
         }
 

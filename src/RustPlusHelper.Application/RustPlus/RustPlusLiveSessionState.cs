@@ -37,7 +37,8 @@ public sealed record CompanionEvent(
     CompanionEventKind Kind,
     CompanionEventSource Source,
     string Title,
-    string? Detail = null);
+    string? Detail = null,
+    MapPositionSnapshot? Position = null);
 
 public sealed record RustPlusLiveSessionSeed(
     ServerInfoSnapshot? Server = null,

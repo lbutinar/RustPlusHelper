@@ -379,7 +379,13 @@ public sealed class RustPlusLiveSessionManager(
 
             if (old.IsAlive && !member.IsAlive)
             {
-                AddEvent(serverId, CompanionEventKind.TeamMemberDied, CompanionEventSource.SnapshotDiff, $"{name} died");
+                AddEvent(
+                    serverId,
+                    CompanionEventKind.TeamMemberDied,
+                    CompanionEventSource.SnapshotDiff,
+                    $"{name} died",
+                    "Position from the Rust+ team snapshot where death was detected.",
+                    new MapPositionSnapshot(member.X, member.Y));
             }
             else if (!old.IsAlive && member.IsAlive)
             {
@@ -452,7 +458,8 @@ public sealed class RustPlusLiveSessionManager(
         CompanionEventKind kind,
         CompanionEventSource source,
         string title,
-        string? detail = null)
+        string? detail = null,
+        MapPositionSnapshot? position = null)
     {
         var item = new CompanionEvent(
             Guid.NewGuid(),
@@ -461,7 +468,8 @@ public sealed class RustPlusLiveSessionManager(
             kind,
             source,
             title,
-            detail);
+            detail,
+            position);
         eventRepository.Append(item, EventLimit);
         lock (_stateLock)
         {

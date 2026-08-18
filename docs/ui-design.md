@@ -20,6 +20,8 @@ Implemented:
   from the latest successful Rust+ snapshot.
 - live connection status plus a bounded event feed for transport, online/offline, death/respawn, and
   marker lifecycle transitions;
+- a toggleable red team-death hotspot layer, explicitly labelled as derived local history rather
+  than live danger data;
 - automatic Steam-cache `.map` matching with a manual chooser fallback, plus disabled-by-default
   biome, terrain-topology, ore-potential, road, rail, and river layers. Exact no-build geometry
   remains disabled with its missing-source explanation.

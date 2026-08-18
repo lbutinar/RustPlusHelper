@@ -74,6 +74,9 @@
 - deterministic supervisor tests prove one client is reused across poll intervals and the map method
   is never called;
 - scripted snapshots derive online/offline, death/respawn, and marker appeared/disappeared events;
+- death transitions retain their snapshot position and persisted positions survive SQLite reload;
+- multiple deaths in one Rust grid aggregate into one count-scaled map hotspot;
+- the Blazor-to-Leaflet contract carries the derived hotspot layer separately from direct markers;
 - consecutive online/alive position snapshots emit a grid-crossing event while a per-member
   one-minute cooldown suppresses movement spam;
 - a forced disconnect proves connection-lost, backoff, reconnection, and connection-restored events;

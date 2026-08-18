@@ -18,6 +18,7 @@
     private ServerMapSnapshot? _renderedMap;
     private TeamSnapshot? _renderedTeam;
     private MapMarkersSnapshot? _renderedMarkers;
+    private IReadOnlyList<CompanionEvent>? _renderedEvents;
     private SavedMapTopology? _renderedTopology;
     private uint? _renderedMapSize;
     private IReadOnlyDictionary<string, bool>? _renderedLayerVisibility;
@@ -41,6 +42,7 @@
             || !ReferenceEquals(_renderedMap, State.Map)
             || !ReferenceEquals(_renderedTeam, State.Team)
             || !ReferenceEquals(_renderedMarkers, State.Markers)
+            || !ReferenceEquals(_renderedEvents, State.Events)
             || !ReferenceEquals(_renderedTopology, State.Topology)
             || _renderedMapSize != State.Server?.MapSize;
         if (!requiresFullRender)
@@ -109,6 +111,17 @@
                 polyline.Width,
                 polyline.Points
             }).ToArray() : null,
+            HeatSpots = model.HeatSpots.Select(spot => new
+            {
+                spot.Id,
+                Layer = MapRenderModelFactory.ToLayerKey(spot.Layer),
+                spot.Label,
+                spot.GridReference,
+                spot.Count,
+                spot.PixelX,
+                spot.PixelY,
+                spot.LatestAtUtc
+            }),
             model.LayerVisibility
         };
 
@@ -123,6 +136,7 @@
         _renderedMap = State.Map;
         _renderedTeam = State.Team;
         _renderedMarkers = State.Markers;
+        _renderedEvents = State.Events;
         _renderedTopology = State.Topology;
         _renderedMapSize = State.Server?.MapSize;
         _renderedLayerVisibility = layerVisibility;

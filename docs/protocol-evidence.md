@@ -127,6 +127,8 @@ The ore overlay is topology potential, not exact live node state.
 |---|---|
 | Team position/online/alive snapshot | Direct Rust+ response |
 | Connected/disconnected/death/respawn semantic event | Derived by comparing snapshots |
+| Team death position history | Position from the team snapshot where alive changes to dead; persisted locally |
+| Team death hotspot intensity | Derived locally by grouping retained death positions by Rust grid |
 | Current cargo/CH47/patrol-heli/crate/explosion marker | Direct Rust+ response |
 | Marker appeared/disappeared event | Derived by comparing snapshots |
 | Oil-rig activation | Community heuristic, not an explicit protocol event |
@@ -167,6 +169,14 @@ These items remain **pending, not confirmed live**:
 
 The deterministic fake verification and adapter-mapping tests are implementation checks, not live
 protocol evidence.
+
+The team-death hotspot layer does not claim that Rust+ provides danger zones. For each detected
+alive-to-dead transition, the app stores the member coordinates returned in that same team snapshot.
+It excludes records older than the server's reported wipe time when available, groups the remaining
+positions by the locally calculated Rust grid, and scales the visual hotspot by count. This can
+indicate repeated team losses, but it cannot identify the killer, weapon, cause,
+enemy activity, or current danger. Existing history created before positional storage remains valid
+event history but cannot appear on the map.
 
 RustPlusApi currently exposes typed data and raw events internally but no reviewed public raw-frame
 capture hook suitable for this repository. Do not manufacture binary data and call it captured Rust+

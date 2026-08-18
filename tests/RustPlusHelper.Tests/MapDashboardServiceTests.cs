@@ -61,6 +61,48 @@ public sealed class MapDashboardServiceTests
     }
 
     [Fact]
+    public async Task AggregatesRecordedTeamDeathsIntoGridHeatSpots()
+    {
+        await using var fixture = CreateFixture();
+        await fixture.Service.InitializeAsync();
+        var serverId = Guid.NewGuid();
+        var events = new[]
+        {
+            Death(serverId, 115, 215, DateTimeOffset.UtcNow.AddHours(-2)),
+            Death(serverId, 110, 210, DateTimeOffset.UtcNow.AddMinutes(-5)),
+            Death(serverId, 120, 220, DateTimeOffset.UtcNow)
+        };
+        var state = fixture.Service.Current with
+        {
+            Server = fixture.Service.Current.Server! with { WipeTimeUtc = DateTimeOffset.UtcNow.AddHours(-1) },
+            Events = events,
+            Layers = MapDashboardState.CreateLiveMapLayers(true, true, true)
+        };
+
+        var model = MapRenderModelFactory.Create(state);
+
+        Assert.NotNull(model);
+        var spot = Assert.Single(model.HeatSpots);
+        Assert.Equal(2, spot.Count);
+        Assert.Equal("A28", spot.GridReference);
+        Assert.Equal("2 recorded team deaths", spot.Label);
+        Assert.True(model.LayerVisibility["deathHistory"]);
+    }
+
+    private static CompanionEvent Death(
+        Guid serverId,
+        float x,
+        float y,
+        DateTimeOffset occurredAtUtc) => new(
+            Guid.NewGuid(),
+            serverId,
+            occurredAtUtc,
+            CompanionEventKind.TeamMemberDied,
+            CompanionEventSource.SnapshotDiff,
+            "Sanitized teammate died",
+            Position: new MapPositionSnapshot(x, y));
+
+    [Fact]
     public async Task ProjectsImportedTopologyRastersAndCenteredMapPathsIntoRustPlusImage()
     {
         await using var fixture = CreateFixture();
@@ -89,7 +131,7 @@ public sealed class MapDashboardServiceTests
         var state = fixture.Service.Current with
         {
             Topology = topology,
-            Layers = MapDashboardState.CreateLiveMapLayers(true, true, topology)
+            Layers = MapDashboardState.CreateLiveMapLayers(true, true, topology: topology)
         };
 
         var model = MapRenderModelFactory.Create(state);

@@ -119,7 +119,9 @@ The tested server returned a team/position snapshot and current marker; chat ret
 uses a one-minute failure backoff. Online/offline, death/respawn, marker lifecycle, and connection
 lost/restored events are snapshot-derived, retained in a bounded per-server SQLite history, and
 reloaded after restart. Online, alive team-member grid crossings emit at most once per member per
-minute; sampled movement trails remain deferred.
+minute. Alive-to-dead transitions retain the detecting snapshot's position, and the map groups those
+bounded local records by Rust grid into a derived team-death hotspot layer. It does not infer cause
+or current enemy presence. Sampled movement trails remain deferred.
 
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 

@@ -693,7 +693,11 @@ public sealed class MapDashboardService(
             LiveDataStatus = live.Label,
             LiveDataError = live.Error,
             Events = live.Events,
-            Layers = BuildLiveLayers(Current, team is not null, markers is not null, Current.Topology)
+            Layers = BuildLiveLayers(
+                Current with { Events = live.Events },
+                team is not null,
+                markers is not null,
+                Current.Topology)
         });
 
         if (live.Status == RustPlusLiveSessionStatus.Connected && live.Server is not null)
@@ -723,7 +727,16 @@ public sealed class MapDashboardService(
         bool markersAvailable,
         SavedMapTopology? topology = null)
     {
-        var layers = MapDashboardState.CreateLiveMapLayers(teamAvailable, markersAvailable, topology);
+        var deathHistoryAvailable = previous.Events.Any(item =>
+            item.Kind == CompanionEventKind.TeamMemberDied
+            && item.Position is not null
+            && (previous.Server?.WipeTimeUtc is null
+                || item.OccurredAtUtc >= previous.Server.WipeTimeUtc));
+        var layers = MapDashboardState.CreateLiveMapLayers(
+            teamAvailable,
+            markersAvailable,
+            deathHistoryAvailable,
+            topology);
         return layers.Select(layer =>
         {
             var existing = previous.Layers.FirstOrDefault(candidate => candidate.Kind == layer.Kind);

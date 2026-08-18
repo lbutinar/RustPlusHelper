@@ -19,6 +19,7 @@
         "vendingMachines",
         "monuments",
         "events",
+        "deathHistory",
         "smartDevices",
         "cameras"
     ];
@@ -256,6 +257,37 @@
         layer.addLayer(line);
     }
 
+    function renderHeatSpot(entry, spot) {
+        const layer = entry.layers[spot.layer];
+        if (!layer) {
+            return;
+        }
+
+        const count = Math.max(1, Number(spot.count) || 1);
+        const intensity = Math.min(1, 0.28 + Math.log2(count + 1) * 0.18);
+        const radius = Math.min(34, 12 + Math.log2(count + 1) * 6);
+        const circle = L.circleMarker([entry.height - spot.pixelY, spot.pixelX], {
+            radius,
+            color: "#ff6b52",
+            weight: 1.5,
+            opacity: Math.min(1, intensity + 0.2),
+            fillColor: count >= 5 ? "#ef2d2d" : count >= 3 ? "#ff5a36" : "#ff9a4a",
+            fillOpacity: intensity,
+            interactive: true,
+            className: "rust-death-hotspot"
+        });
+        const latest = spot.latestAtUtc
+            ? new Date(spot.latestAtUtc).toLocaleString()
+            : "Unknown";
+        circle.bindTooltip([
+            `<strong>${escapeHtml(spot.label)}</strong>`,
+            `<span>Grid ${escapeHtml(spot.gridReference)}</span>`,
+            `<span>Latest: ${escapeHtml(latest)}</span>`,
+            "<span>Derived from locally recorded team deaths</span>"
+        ].join(""), { className: "rust-map-tooltip" });
+        layer.addLayer(circle);
+    }
+
     function applyVisibility(entry, visibility) {
         const hasVisibleRaster = entry.rasters.some(raster => visibility[raster.layer] === true);
         for (const key of layerKeys) {
@@ -396,6 +428,11 @@
             const marker = makeMarker(item, model.height);
             layer.addLayer(marker);
             entry.markers.set(item.id, marker);
+        }
+
+
+        for (const spot of model.heatSpots ?? []) {
+            renderHeatSpot(entry, spot);
         }
 
         applyVisibility(entry, model.layerVisibility ?? {});

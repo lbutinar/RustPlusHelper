@@ -16,7 +16,8 @@ currently create:
 - `map_cache` for the latest server/map metadata and Rust+ JPEG per saved server;
 - `map_topology` for display-ready data derived from one automatically matched or manually selected
   Rust `.map` per server;
-- `companion_events` for the latest 200 transport and snapshot-derived transitions per server.
+- `companion_events` for the latest 200 transport and snapshot-derived transitions per server,
+  including optional world coordinates for death snapshots.
 
 The player identity is the application-level source of truth. A server row retains the effective
 Steam64 ID snapshot associated with its current per-server pairing token so a future identity change
@@ -29,8 +30,10 @@ Session, team, marker, market, device, camera, death, chat, and notification tab
 until their owning phase has real write/read behavior.
 
 `companion_events` stores the application-owned semantic event kind and source classification, not
-raw authenticated responses. Each append trims that server to its newest 200 rows, and deleting a
-server cascades its history.
+raw authenticated responses. Death transitions may include the position returned by the same team
+snapshot; those positions feed the derived grid hotspot layer. Each append trims that server to its
+newest 200 rows. The map ignores records older than the current reported wipe time when available,
+and deleting a server cascades its history.
 
 `map_topology` stores the source basename, SHA-256 fingerprint, serialization version, opaque source
 timestamp, world size, layer summaries, normalized paths, prefab count, and small RGBA overlays. It
