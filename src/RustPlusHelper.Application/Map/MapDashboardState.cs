@@ -166,7 +166,7 @@ public sealed record MapDashboardState(
             "Build planning",
             topology?.Data.BuildPlanningRaster,
             "DERIVED · MIXED EXTERNAL SOURCES",
-            "Combines slope, water, road/rail paths and known no-build geometry. Candidate land is not guaranteed buildable."),
+            "Green is a good flat candidate, yellow means sloped/caution, red means known blocked or steep, and blue means water. Candidate land is not guaranteed buildable."),
         RasterLayer(
             MapLayerKind.Elevation,
             "Elevation + contours",

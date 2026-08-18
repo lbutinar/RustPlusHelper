@@ -97,7 +97,9 @@ flat, gentle, moderate, steep, and water samples. Its angle bands are a planning
 not imply build permission or account for rocks, trees, deployables, or server-side restrictions.
 
 Build planning, elevation/contours, and water depth each have their own on-map legend. Multiple
-legends stack when several analysis layers are enabled. River paths add a width-scaled polygon from
+legends stack when several analysis layers are enabled. Build planning deliberately uses only green
+for good flat candidates, yellow for sloped/caution terrain, red for known blocked or steep terrain,
+and blue for water. River paths add a width-scaled polygon from
 the serialized channel width and outer padding beneath the centerline; the water-depth raster remains
 the better source for the actual wet footprint.
 

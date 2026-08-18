@@ -128,7 +128,8 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
                 world,
                 noBuildZones),
             CreateElevationRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
-            CreateWaterDepthRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size));
+            CreateWaterDepthRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
+            MapTopologyDerivationVersions.BuildPlanning);
     }
 
     private static MapPathSnapshot ToSnapshot(PathData path, uint worldSize)
@@ -378,11 +379,9 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
                     ? new Rgba(45, 126, 180, 115)
                     : knownBlocked || slope > 25
                         ? new Rgba(216, 61, 50, 175)
-                        : slope > 12
-                            ? new Rgba(244, 153, 53, 155)
-                            : slope > 5
-                                ? new Rgba(214, 197, 68, 140)
-                                : new Rgba(53, 194, 111, 135);
+                        : slope > 5
+                            ? new Rgba(214, 197, 68, 140)
+                            : new Rgba(53, 194, 111, 135);
                 WritePixel(rgba, outputResolution, outputX, displayY, color);
             }
         }

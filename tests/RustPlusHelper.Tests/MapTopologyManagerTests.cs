@@ -114,7 +114,8 @@ public sealed class MapTopologyManagerTests
             TerrainSlopeRaster = new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
             BuildPlanningRaster = new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
             ElevationRaster = new MapRasterSnapshot(1, 1, [63, 145, 82, 65]),
-            WaterDepthRaster = new MapRasterSnapshot(1, 1, [48, 158, 204, 140])
+            WaterDepthRaster = new MapRasterSnapshot(1, 1, [48, 158, 204, 140]),
+            BuildPlanningVersion = MapTopologyDerivationVersions.BuildPlanning
         };
         var repository = new InMemoryMapTopologyRepository();
         repository.Upsert(new SavedMapTopology(ServerId, DateTimeOffset.UtcNow, legacy));
@@ -137,6 +138,40 @@ public sealed class MapTopologyManagerTests
         Assert.Equal(1, provider.ReadCount);
         Assert.NotNull(repository.Get(ServerId)?.Data.TerrainSlopeRaster);
         Assert.NotNull(repository.Get(ServerId)?.Data.BuildPlanningRaster);
+        Assert.Equal(MapTopologyDerivationVersions.BuildPlanning, repository.Get(ServerId)?.Data.BuildPlanningVersion);
+    }
+
+    [Fact]
+    public async Task RefreshesMatchingImportWhenBuildPlanningDerivationIsOutdated()
+    {
+        var current = CreateImport(4500) with
+        {
+            SourceLayers = [new MapSourceLayerSnapshot("height", 50)],
+            BuildPlanningRaster = new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+            TerrainSlopeRaster = new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+            ElevationRaster = new MapRasterSnapshot(1, 1, [63, 145, 82, 65]),
+            WaterDepthRaster = new MapRasterSnapshot(1, 1, [48, 158, 204, 140]),
+            BuildPlanningVersion = MapTopologyDerivationVersions.BuildPlanning
+        };
+        var repository = new InMemoryMapTopologyRepository();
+        repository.Upsert(new SavedMapTopology(
+            ServerId,
+            DateTimeOffset.UtcNow,
+            current with { BuildPlanningVersion = 0 }));
+        var provider = new StubProvider(current);
+        var manager = new MapTopologyManager(
+            provider,
+            new StubDiscovery(MapTopologyDiscoveryResult.Matched(
+                new DiscoveredMapTopology("matching.map", "matching.map", 1, MapTopologyMatchKind.RustClientLog),
+                "matched")),
+            repository,
+            TimeProvider.System);
+
+        var result = await manager.TryAutoImportAsync(ServerId, "192.0.2.25", ServerInfo());
+
+        Assert.True(result.WasImported);
+        Assert.Equal(1, provider.ReadCount);
+        Assert.Equal(MapTopologyDerivationVersions.BuildPlanning, result.Topology?.Data.BuildPlanningVersion);
     }
 
     private static ImportedMapTopology CreateImport(uint worldSize) => new(

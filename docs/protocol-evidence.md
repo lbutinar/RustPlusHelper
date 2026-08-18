@@ -142,7 +142,9 @@ Three additional display products use the same external `.map` evidence:
 The build-planning layer is explicitly derived and conservative. It combines the slope bands,
 derived water mask, Road and Building topology, serialized road/rail corridor widths, and known
 external no-build polygons. Red means a known blocker or terrain steeper than 25 degrees; green
-means only that none of those tested conditions rejected a flat sample. It does not evaluate live
+means only that none of those tested conditions rejected a sample at or below 5 degrees. Yellow
+groups all remaining slopes from above 5 through 25 degrees into one caution state, and blue means
+serialized or derived water. It does not evaluate live
 trees, rocks, deployables, player construction, stability, terrain holes, monument child colliders,
 server plugins, or all build-version-specific colliders, so it must never be presented as a build
 permission check.

@@ -202,7 +202,8 @@ public sealed class StorageTests
                 new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
                 new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
                 new MapRasterSnapshot(1, 1, [63, 145, 82, 65]),
-                new MapRasterSnapshot(1, 1, [48, 158, 204, 140])));
+                new MapRasterSnapshot(1, 1, [48, 158, 204, 140]),
+                MapTopologyDerivationVersions.BuildPlanning));
 
         repository.Upsert(topology);
         var restored = repository.Get(profile.Id);
@@ -228,6 +229,7 @@ public sealed class StorageTests
         Assert.Equal(topology.Data.BuildPlanningRaster?.Rgba, restored.Data.BuildPlanningRaster?.Rgba);
         Assert.Equal(topology.Data.ElevationRaster?.Rgba, restored.Data.ElevationRaster?.Rgba);
         Assert.Equal(topology.Data.WaterDepthRaster?.Rgba, restored.Data.WaterDepthRaster?.Rgba);
+        Assert.Equal(MapTopologyDerivationVersions.BuildPlanning, restored.Data.BuildPlanningVersion);
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));

@@ -56,7 +56,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             ReadRaster(reader, 5, metadata.TerrainSlopeSize),
             ReadRaster(reader, 6, metadata.BuildPlanningSize),
             ReadRaster(reader, 7, metadata.ElevationSize),
-            ReadRaster(reader, 8, metadata.WaterDepthSize));
+            ReadRaster(reader, 8, metadata.WaterDepthSize),
+            metadata.BuildPlanningVersion);
         return new SavedMapTopology(
             serverId,
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
@@ -91,7 +92,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             SizeOf(topology.Data.TerrainSlopeRaster),
             SizeOf(topology.Data.BuildPlanningRaster),
             SizeOf(topology.Data.ElevationRaster),
-            SizeOf(topology.Data.WaterDepthRaster));
+            SizeOf(topology.Data.WaterDepthRaster),
+            topology.Data.BuildPlanningVersion);
 
         database.Initialize();
         using var connection = database.OpenConnection();
@@ -195,5 +197,6 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         RasterSize? TerrainSlopeSize = null,
         RasterSize? BuildPlanningSize = null,
         RasterSize? ElevationSize = null,
-        RasterSize? WaterDepthSize = null);
+        RasterSize? WaterDepthSize = null,
+        int BuildPlanningVersion = 0);
 }

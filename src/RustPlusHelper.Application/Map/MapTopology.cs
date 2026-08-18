@@ -41,6 +41,11 @@ public sealed record MapNoBuildZoneEvidence(
     string SourceLabel,
     string? Warning);
 
+public static class MapTopologyDerivationVersions
+{
+    public const int BuildPlanning = 1;
+}
+
 public sealed record ImportedMapTopology(
     string SourceFileName,
     string Sha256,
@@ -58,7 +63,8 @@ public sealed record ImportedMapTopology(
     MapRasterSnapshot? TerrainSlopeRaster = null,
     MapRasterSnapshot? BuildPlanningRaster = null,
     MapRasterSnapshot? ElevationRaster = null,
-    MapRasterSnapshot? WaterDepthRaster = null);
+    MapRasterSnapshot? WaterDepthRaster = null,
+    int BuildPlanningVersion = 0);
 
 public sealed record SavedMapTopology(
     Guid ServerId,
@@ -264,6 +270,7 @@ public sealed class MapTopologyManager(
         var needsTerrainUpgrade = hasHeightLayer
             && (existing?.Data.TerrainSlopeRaster is null
                 || existing.Data.BuildPlanningRaster is null
+                || existing.Data.BuildPlanningVersion < MapTopologyDerivationVersions.BuildPlanning
                 || existing.Data.ElevationRaster is null
                 || existing.Data.WaterDepthRaster is null);
         if (existing is not null

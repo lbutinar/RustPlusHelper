@@ -42,6 +42,7 @@ public sealed class RustMapTopologyProviderTests
         Assert.NotNull(result.BuildPlanningRaster);
         Assert.True(PixelCount(result.BuildPlanningRaster, 53, 194, 111, 135) > 0);
         Assert.True(PixelCount(result.BuildPlanningRaster, 216, 61, 50, 175) > 0);
+        Assert.Equal(0, PixelCount(result.BuildPlanningRaster, 244, 153, 53, 155));
         Assert.NotNull(result.ElevationRaster);
         Assert.True(PixelCount(result.ElevationRaster, 63, 145, 82, 65) > 0);
         Assert.NotNull(result.WaterDepthRaster);
