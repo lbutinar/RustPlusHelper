@@ -121,6 +121,19 @@ secondary path. Current client cache names may append build/hash/checksum segmen
 the Rust+ seed. Rust+ exposes no map checksum, so same-size-only candidates are never auto-selected.
 The ore overlay is topology potential, not exact live node state.
 
+The no-build layer is also external, not Rust+. Facepunch documents that Road and Rail topology
+prevent player construction, but Monument topology alone does not prove a monument's blocked
+volume. The imported `.map` supplies placed prefab IDs and transforms; a compact catalogue derived
+from [Rust Map Parser 0.4.0](https://github.com/Cooperkit/Rustmap-Parser) supplies the named/tagged
+prevent-building circle and box colliders published for Rust build `24181174`. The app transforms
+those shapes into map coordinates and labels the result `EXTERNAL RUST BUILD 24181174`.
+
+This is exact snapshot geometry only when the server content matches that build. The `.map` format
+contains no Rust build ID, so the UI always presents the mismatch warning. Unrecognized prefabs,
+unsupported collider shapes, server plugins, and custom server restrictions are omitted rather than
+guessed. The bundled catalogue contains no live server data, authenticated traffic, game meshes, or
+textures.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
@@ -194,3 +207,4 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | `NoTeam` from chat while team info succeeds | Observed live on the selected server; requests are independent | Re-test while in a multi-member team with chat history |
 | Killer, weapon, and cause of death | Not present in verified team structures | Requires server/plugin evidence before modelling |
 | Same-size `.map` wipe identity | Rust+ exposes no map checksum | User confirmation or a future authoritative external fingerprint source |
+| No-build catalogue/server build match | `.map` files contain no Rust build ID; bundled geometry is from build 24181174 | Build-identifying map metadata or a matching locally installed Rust build |

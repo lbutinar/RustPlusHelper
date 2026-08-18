@@ -111,6 +111,13 @@
                 polyline.Width,
                 polyline.Points
             }).ToArray() : null,
+            Polygons = includeExternalMapData ? model.Polygons.Select(polygon => new
+            {
+                polygon.Id,
+                Layer = MapRenderModelFactory.ToLayerKey(polygon.Layer),
+                polygon.Label,
+                polygon.Points
+            }).ToArray() : null,
             HeatSpots = model.HeatSpots.Select(spot => new
             {
                 spot.Id,

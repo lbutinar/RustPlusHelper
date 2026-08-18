@@ -42,6 +42,7 @@
 
     const externalRasterLayerKeys = new Set(["biomes", "topology", "resourcePotential"]);
     const externalPathLayerKeys = new Set(["roads", "railways", "rivers"]);
+    const externalPolygonLayerKeys = new Set(["noBuildZones"]);
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -257,6 +258,25 @@
         layer.addLayer(line);
     }
 
+    function renderPolygon(entry, polygon) {
+        const layer = entry.layers[polygon.layer];
+        if (!layer || !polygon.points || polygon.points.length < 3) {
+            return;
+        }
+
+        const points = polygon.points.map(point => [entry.height - point.pixelY, point.pixelX]);
+        const shape = L.polygon(points, {
+            color: "#ff5b4d",
+            weight: 1.5,
+            opacity: 0.9,
+            fillColor: "#e83d32",
+            fillOpacity: 0.2,
+            interactive: true
+        });
+        shape.bindTooltip(escapeHtml(polygon.label), { className: "rust-map-tooltip" });
+        layer.addLayer(shape);
+    }
+
     function renderHeatSpot(entry, spot) {
         const layer = entry.layers[spot.layer];
         if (!layer) {
@@ -400,6 +420,9 @@
                 if (model.polylines == null && externalPathLayerKeys.has(key)) {
                     continue;
                 }
+                if (model.polygons == null && externalPolygonLayerKeys.has(key)) {
+                    continue;
+                }
                 entry.layers[key].clearLayers();
             }
         }
@@ -420,6 +443,13 @@
         if (model.polylines != null) {
             for (const polyline of model.polylines) {
                 renderPolyline(entry, polyline);
+            }
+        }
+
+
+        if (model.polygons != null) {
+            for (const polygon of model.polygons) {
+                renderPolygon(entry, polygon);
             }
         }
 

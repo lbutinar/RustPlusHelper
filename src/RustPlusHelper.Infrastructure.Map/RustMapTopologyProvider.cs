@@ -101,6 +101,7 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         var topologyLayer = FindLayer(world, "topology");
         var topologyResolution = topologyLayer is null ? 0 : GetSquareResolution(topologyLayer.Data.Length / 4, "topology");
         var paths = world.Paths.Select(path => ToSnapshot(path, world.Size)).ToArray();
+        var noBuildZones = NoBuildZoneCatalog.CreateZones(world, out var noBuildEvidence);
 
         return new ImportedMapTopology(
             sourceFileName,
@@ -113,7 +114,9 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             paths,
             CreateBiomeRaster(FindLayer(world, "biome"), topologyResolution),
             topologyLayer is null ? null : CreateTopologyRaster(topologyLayer.Data, topologyResolution),
-            topologyLayer is null ? null : CreateResourcePotentialRaster(topologyLayer.Data, topologyResolution));
+            topologyLayer is null ? null : CreateResourcePotentialRaster(topologyLayer.Data, topologyResolution),
+            noBuildZones,
+            noBuildEvidence);
     }
 
     private static MapPathSnapshot ToSnapshot(PathData path, uint worldSize)

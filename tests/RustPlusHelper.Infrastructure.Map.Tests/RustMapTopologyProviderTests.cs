@@ -35,6 +35,13 @@ public sealed class RustMapTopologyProviderTests
         Assert.NotNull(result.BiomeRaster);
         Assert.NotNull(result.ResourcePotentialRaster);
         Assert.Contains(result.ResourcePotentialRaster.Rgba, value => value != 0);
+        var noBuildZone = Assert.Single(result.NoBuildZones!);
+        Assert.Equal("circle", noBuildZone.Shape);
+        Assert.Equal(40, noBuildZone.Boundary.Count);
+        Assert.Equal(2390f, noBuildZone.Boundary.Max(point => point.X), 2);
+        Assert.Equal(2250f, noBuildZone.Boundary.Average(point => point.Y), 2);
+        Assert.Equal("24181174", result.NoBuildZoneEvidence?.CatalogRustBuildId);
+        Assert.Equal(1, result.NoBuildZoneEvidence?.ResolvedPrefabCount);
     }
 
     [Fact]
@@ -109,7 +116,17 @@ public sealed class RustMapTopologyProviderTests
                         ]
                     }
                 },
-                Prefabs = { new(), new(), new() },
+                Prefabs =
+                {
+                    new()
+                    {
+                        Id = 3968358155,
+                        Position = new TestVectorData(),
+                        Scale = new TestVectorData { X = 1, Y = 1, Z = 1 }
+                    },
+                    new(),
+                    new()
+                },
                 Paths =
                 {
                     new TestPathData
@@ -144,7 +161,14 @@ public sealed class RustMapTopologyProviderTests
     }
 
     [ProtoContract]
-    private sealed class TestPrefabData;
+    private sealed class TestPrefabData
+    {
+        [ProtoMember(1)] public string Category { get; set; } = string.Empty;
+        [ProtoMember(2)] public uint Id { get; set; }
+        [ProtoMember(3)] public TestVectorData? Position { get; set; }
+        [ProtoMember(4)] public TestVectorData? Rotation { get; set; }
+        [ProtoMember(5)] public TestVectorData? Scale { get; set; }
+    }
 
     [ProtoContract]
     private sealed class TestVectorData

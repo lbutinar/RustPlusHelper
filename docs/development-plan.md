@@ -103,8 +103,9 @@ raster/polyline rendering, Windows fallback file picker.
 **Risks/tests:** Rust+ exposes no map checksum, and client log/cache formats can drift. Automatic
 matching therefore never uses recency or size alone. Format drift and large/corrupt files are bounded
 and tested with synthetic containers/cache layouts plus a manual read-only current-game cache smoke
-test. Exact node locations remain impossible without server access. Exact prefab no-build zones and
-higher-fidelity biome/splat spawn-rule evaluation remain.
+test. Exact node locations remain impossible without server access. Build-snapshot prefab no-build
+zones are rendered with explicit source/mismatch warnings; higher-fidelity biome/splat spawn-rule
+evaluation remains.
 
 **Done for this slice:** a definite size mismatch stores nothing; successful imports survive restart;
 source paths are not retained; source classification remains visible in the layer panel.

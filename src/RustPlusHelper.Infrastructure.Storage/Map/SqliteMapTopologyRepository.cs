@@ -49,7 +49,9 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             metadata.Paths,
             ReadRaster(reader, 2, metadata.BiomeSize),
             ReadRaster(reader, 3, metadata.TopologySize),
-            ReadRaster(reader, 4, metadata.ResourcePotentialSize));
+            ReadRaster(reader, 4, metadata.ResourcePotentialSize),
+            metadata.NoBuildZones,
+            metadata.NoBuildZoneEvidence);
         return new SavedMapTopology(
             serverId,
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
@@ -74,7 +76,9 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             topology.Data.Paths,
             SizeOf(topology.Data.BiomeRaster),
             SizeOf(topology.Data.TopologyRaster),
-            SizeOf(topology.Data.ResourcePotentialRaster));
+            SizeOf(topology.Data.ResourcePotentialRaster),
+            topology.Data.NoBuildZones,
+            topology.Data.NoBuildZoneEvidence);
 
         database.Initialize();
         using var connection = database.OpenConnection();
@@ -160,5 +164,7 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         IReadOnlyList<MapPathSnapshot> Paths,
         RasterSize? BiomeSize,
         RasterSize? TopologySize,
-        RasterSize? ResourcePotentialSize);
+        RasterSize? ResourcePotentialSize,
+        IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
+        MapNoBuildZoneEvidence? NoBuildZoneEvidence = null);
 }

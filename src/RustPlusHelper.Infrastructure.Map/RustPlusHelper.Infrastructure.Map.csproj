@@ -7,4 +7,7 @@
     <PackageReference Include="K4os.Compression.LZ4.Legacy" />
     <PackageReference Include="protobuf-net" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/no-build-catalog.json.gz" />
+  </ItemGroup>
 </Project>

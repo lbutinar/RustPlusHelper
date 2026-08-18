@@ -23,8 +23,8 @@ Implemented:
 - a toggleable red team-death hotspot layer, explicitly labelled as derived local history rather
   than live danger data;
 - automatic Steam-cache `.map` matching with a manual chooser fallback, plus disabled-by-default
-  biome, terrain-topology, ore-potential, road, rail, and river layers. Exact no-build geometry
-  remains disabled with its missing-source explanation.
+  biome, terrain-topology, ore-potential, road, rail, river, and externally sourced no-build layers.
+  No-build geometry remains off by default and carries its build-snapshot warning.
 
 The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Grid
 references also appear in marker tooltips and the team roster. A future search box may navigate to a

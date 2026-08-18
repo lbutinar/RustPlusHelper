@@ -127,7 +127,13 @@ public sealed class MapDashboardServiceTests
                 ],
                 new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
                 new MapRasterSnapshot(1, 1, [5, 6, 7, 8]),
-                new MapRasterSnapshot(1, 1, [9, 10, 11, 12])));
+                new MapRasterSnapshot(1, 1, [9, 10, 11, 12]),
+                [new MapNoBuildZoneSnapshot(
+                    "zone:1",
+                    "assets/bundled/test_monument.prefab",
+                    "rectangle",
+                    [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 0), new MapWorldPoint(4500, 4500)])],
+                new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning.")));
         var state = fixture.Service.Current with
         {
             Topology = topology,
@@ -142,6 +148,12 @@ public sealed class MapDashboardServiceTests
         Assert.Equal(MapLayerKind.Roads, road.Layer);
         Assert.Equal(new ProjectedMapPoint(50, 950), road.Points[0]);
         Assert.Equal(new ProjectedMapPoint(950, 50), road.Points[1]);
+        var noBuildZone = Assert.Single(model.Polygons);
+        Assert.Equal(MapLayerKind.NoBuildZones, noBuildZone.Layer);
+        Assert.Equal(new ProjectedMapPoint(50, 950), noBuildZone.Points[0]);
+        var noBuildLayer = Assert.Single(state.Layers, layer => layer.Kind == MapLayerKind.NoBuildZones);
+        Assert.True(noBuildLayer.IsAvailable);
+        Assert.Equal("EXTERNAL RUST BUILD 24181174", noBuildLayer.SourceLabel);
     }
 
     [Fact]

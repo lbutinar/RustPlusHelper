@@ -66,15 +66,17 @@ The package decodes the documented legacy LZ4 stream in imported Rust `.map` fil
 - Project: https://github.com/protobuf-net/protobuf-net
 - License: Apache-2.0
 
-## Rust Map Parser research reference
+## Rust Map Parser research reference and derived no-build catalogue
 
 - Project: https://github.com/Cooperkit/Rustmap-Parser
 - Reviewed version: PyPI 0.4.0 / repository state on 2026-08-17
 - License: MIT
 
-Rust Map Parser is not bundled or executed by RustPlusHelper. Its current parser and orientation
-behavior were used as an independent implementation reference alongside Facepunch's map-data
-documentation.
+Rust Map Parser is not executed by RustPlusHelper. Its parser and orientation behavior were used as
+an independent implementation reference alongside Facepunch's map-data documentation. A compact,
+sanitized catalogue derived from its 0.4.0 published no-build metadata is embedded for Rust build
+24181174. It contains prefab IDs, paths, and circle/rectangle collider geometry only; it does not
+contain original game meshes or textures. The upstream MIT license is retained beside that data.
 
 ## SQLitePCLRaw and bundled SQLite
 

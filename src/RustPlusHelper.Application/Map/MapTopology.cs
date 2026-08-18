@@ -23,6 +23,20 @@ public sealed record MapRasterSnapshot(int Width, int Height, byte[] Rgba)
 
 public sealed record MapSourceLayerSnapshot(string Name, int ByteCount);
 
+public sealed record MapNoBuildZoneSnapshot(
+    string Id,
+    string PrefabPath,
+    string Shape,
+    IReadOnlyList<MapWorldPoint> Boundary);
+
+public sealed record MapNoBuildZoneEvidence(
+    string CatalogRustBuildId,
+    int CandidatePrefabCount,
+    int ResolvedPrefabCount,
+    int ZoneCount,
+    string SourceLabel,
+    string? Warning);
+
 public sealed record ImportedMapTopology(
     string SourceFileName,
     string Sha256,
@@ -34,7 +48,9 @@ public sealed record ImportedMapTopology(
     IReadOnlyList<MapPathSnapshot> Paths,
     MapRasterSnapshot? BiomeRaster,
     MapRasterSnapshot? TopologyRaster,
-    MapRasterSnapshot? ResourcePotentialRaster);
+    MapRasterSnapshot? ResourcePotentialRaster,
+    IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
+    MapNoBuildZoneEvidence? NoBuildZoneEvidence = null);
 
 public sealed record SavedMapTopology(
     Guid ServerId,

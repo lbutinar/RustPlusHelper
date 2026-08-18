@@ -99,7 +99,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.Roads, "Road paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Railways, "Rail paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Rivers, "River paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
-        new(MapLayerKind.NoBuildZones, "No-build zones", false, false, "EXTERNAL BUILD DATA", "Exact prefab no-build volumes need build-matched metadata and are not implemented yet."),
+        new(MapLayerKind.NoBuildZones, "No-build zones", false, false, "EXTERNAL BUILD SNAPSHOT", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Team, "Team", true, true, "DIRECT"),
         new(MapLayerKind.TeamNotes, "Team notes", true, true, "DIRECT"),
         new(MapLayerKind.VendingMachines, "Vending", true, true, "DIRECT"),
@@ -160,9 +160,11 @@ public sealed record MapDashboardState(
             MapLayerKind.NoBuildZones,
             "No-build zones",
             false,
-            false,
-            "EXTERNAL BUILD DATA",
-            "Exact prefab no-build volumes need build-matched metadata and are not implemented yet."),
+            topology?.Data.NoBuildZones?.Count > 0,
+            topology?.Data.NoBuildZoneEvidence?.SourceLabel ?? "UNAVAILABLE",
+            topology?.Data.NoBuildZones?.Count > 0
+                ? topology.Data.NoBuildZoneEvidence?.Warning
+                : "Import a .map file containing prefabs recognized by the bundled Rust-build snapshot."),
         new(
             MapLayerKind.Team,
             "Team",

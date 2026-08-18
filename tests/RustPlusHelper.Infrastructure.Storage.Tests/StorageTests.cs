@@ -171,7 +171,10 @@ public sealed class StorageTests
                 ],
                 null,
                 new MapRasterSnapshot(2, 2, Enumerable.Range(0, 16).Select(value => (byte)value).ToArray()),
-                new MapRasterSnapshot(1, 1, [1, 2, 3, 4])));
+                new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
+                [new MapNoBuildZoneSnapshot("zone:1", "assets/test.prefab", "rectangle", [
+                    new MapWorldPoint(10, 20), new MapWorldPoint(30, 20), new MapWorldPoint(30, 40)])],
+                new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning.")));
 
         repository.Upsert(topology);
         var restored = repository.Get(profile.Id);
@@ -186,6 +189,12 @@ public sealed class StorageTests
         Assert.Equal(topology.Data.Paths[0].Nodes.ToArray(), restoredPath.Nodes.ToArray());
         Assert.Equal(topology.Data.TopologyRaster?.Rgba, restored.Data.TopologyRaster?.Rgba);
         Assert.Equal(topology.Data.ResourcePotentialRaster?.Rgba, restored.Data.ResourcePotentialRaster?.Rgba);
+        var restoredZone = Assert.Single(restored.Data.NoBuildZones!);
+        Assert.Equal(topology.Data.NoBuildZones![0].Id, restoredZone.Id);
+        Assert.Equal(topology.Data.NoBuildZones[0].PrefabPath, restoredZone.PrefabPath);
+        Assert.Equal(topology.Data.NoBuildZones[0].Shape, restoredZone.Shape);
+        Assert.Equal(topology.Data.NoBuildZones[0].Boundary.ToArray(), restoredZone.Boundary.ToArray());
+        Assert.Equal(topology.Data.NoBuildZoneEvidence, restored.Data.NoBuildZoneEvidence);
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));

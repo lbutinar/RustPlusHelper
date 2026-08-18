@@ -34,6 +34,12 @@ public sealed record MapPolylineOverlay(
     float Width,
     IReadOnlyList<ProjectedMapPoint> Points);
 
+public sealed record MapPolygonOverlay(
+    string Id,
+    MapLayerKind Layer,
+    string Label,
+    IReadOnlyList<ProjectedMapPoint> Points);
+
 public sealed record MapHeatSpot(
     string Id,
     MapLayerKind Layer,
@@ -51,6 +57,7 @@ public sealed record MapRenderModel(
     IReadOnlyList<MapOverlayItem> Items,
     IReadOnlyList<MapRasterOverlay> Rasters,
     IReadOnlyList<MapPolylineOverlay> Polylines,
+    IReadOnlyList<MapPolygonOverlay> Polygons,
     IReadOnlyList<MapHeatSpot> HeatSpots,
     IReadOnlyDictionary<string, bool> LayerVisibility);
 
@@ -69,6 +76,7 @@ public static class MapRenderModelFactory
         var items = new List<MapOverlayItem>();
         var rasters = new List<MapRasterOverlay>();
         var polylines = new List<MapPolylineOverlay>();
+        var polygons = new List<MapPolygonOverlay>();
         var heatSpots = new List<MapHeatSpot>();
 
         foreach (var monument in state.Map.Monuments)
@@ -256,6 +264,26 @@ public static class MapRenderModelFactory
                         height,
                         margin)).ToArray()));
             }
+
+            foreach (var zone in topology.NoBuildZones ?? [])
+            {
+                if (zone.Boundary.Count < 3)
+                {
+                    continue;
+                }
+
+                polygons.Add(new MapPolygonOverlay(
+                    zone.Id,
+                    MapLayerKind.NoBuildZones,
+                    $"No-build zone · {FriendlyPrefabName(zone.PrefabPath)}",
+                    zone.Boundary.Select(point => MapProjection.WorldToImage(
+                        point.X,
+                        point.Y,
+                        mapSize,
+                        width,
+                        height,
+                        margin)).ToArray()));
+            }
         }
 
         return new MapRenderModel(
@@ -265,11 +293,18 @@ public static class MapRenderModelFactory
             items,
             rasters,
             polylines,
+            polygons,
             heatSpots,
             state.Layers.ToDictionary(
                 layer => ToLayerKey(layer.Kind),
                 layer => layer.IsVisible && layer.IsAvailable,
                 StringComparer.Ordinal));
+    }
+
+    private static string FriendlyPrefabName(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path).Replace('_', ' ');
+        return string.IsNullOrWhiteSpace(name) ? "Rust prefab" : name;
     }
 
     public static string ToLayerKey(MapLayerKind kind) => kind switch
