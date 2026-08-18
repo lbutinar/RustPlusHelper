@@ -202,16 +202,18 @@
                 lineOptions(index)));
         }
 
-        for (let index = 0; index < grid.cellCount; index++) {
-            const centerX = grid.left + (width * (index + 0.5) / grid.cellCount);
-            const centerY = grid.top + (height * (index + 0.5) / grid.cellCount);
-            const labelInset = height * (grid.cellCount > 2 ? 1.5 : 0.5) / grid.cellCount;
-            const rowLabelX = grid.left >= 18 ? grid.left - 10 : grid.left + 10;
-            layer.addLayer(gridLabel(entry, grid.columnLabels[index], centerX, grid.top + labelInset));
-            if (grid.cellCount > 3) {
-                layer.addLayer(gridLabel(entry, grid.columnLabels[index], centerX, grid.bottom - labelInset));
+        if (!Array.isArray(grid.cellLabels)
+            || grid.cellLabels.length !== grid.cellCount * grid.cellCount) {
+            return;
+        }
+
+        for (let row = 0; row < grid.cellCount; row++) {
+            const centerY = grid.top + (height * (row + 0.5) / grid.cellCount);
+            for (let column = 0; column < grid.cellCount; column++) {
+                const centerX = grid.left + (width * (column + 0.5) / grid.cellCount);
+                const label = grid.cellLabels[(row * grid.cellCount) + column];
+                layer.addLayer(gridLabel(entry, label, centerX, centerY));
             }
-            layer.addLayer(gridLabel(entry, grid.rowLabels[index], rowLabelX, centerY));
         }
     }
 

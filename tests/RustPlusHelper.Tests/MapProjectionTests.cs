@@ -57,6 +57,11 @@ public sealed class MapProjectionTests
         Assert.Equal("Z", grid.ColumnLabels[25]);
         Assert.Equal("AA", grid.ColumnLabels[26]);
         Assert.Equal("AD", grid.ColumnLabels[29]);
+        Assert.Equal(900, grid.CellLabels.Count);
+        Assert.Equal("A0", grid.CellLabels[0]);
+        Assert.Equal("AD0", grid.CellLabels[29]);
+        Assert.Equal("A1", grid.CellLabels[30]);
+        Assert.Equal("AD29", grid.CellLabels[^1]);
     }
 
     [Theory]

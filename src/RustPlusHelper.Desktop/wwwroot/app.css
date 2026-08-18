@@ -1783,9 +1783,9 @@ button {
     height: 15px;
     place-items: center;
     border-radius: 3px;
-    background: rgba(12, 15, 14, 0.58);
-    color: rgba(239, 242, 239, 0.88);
-    font-size: 8px;
+    background: rgba(12, 15, 14, 0.42);
+    color: rgba(239, 242, 239, 0.82);
+    font-size: 7px;
     font-weight: 900;
     line-height: 1;
     text-shadow: 0 1px 2px #000;

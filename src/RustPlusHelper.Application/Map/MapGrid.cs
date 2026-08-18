@@ -10,7 +10,8 @@ public sealed record MapGridDefinition(
     double Right,
     double Bottom,
     IReadOnlyList<string> ColumnLabels,
-    IReadOnlyList<string> RowLabels);
+    IReadOnlyList<string> RowLabels,
+    IReadOnlyList<string> CellLabels);
 
 /// <summary>
 /// Projects Rust world coordinates into the current centered in-game grid. Facepunch defines the
@@ -71,6 +72,14 @@ public static class MapGrid
             oceanMargin);
         var count = GetCellCount(mapSize);
 
+        var columnLabels = Enumerable.Range(0, count).Select(ColumnName).ToArray();
+        var rowLabels = Enumerable.Range(0, count)
+            .Select(row => row.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .ToArray();
+        var cellLabels = rowLabels
+            .SelectMany(row => columnLabels.Select(column => $"{column}{row}"))
+            .ToArray();
+
         return new MapGridDefinition(
             count,
             mapSize / count,
@@ -78,8 +87,9 @@ public static class MapGrid
             northEast.PixelY,
             northEast.PixelX,
             southWest.PixelY,
-            Enumerable.Range(0, count).Select(ColumnName).ToArray(),
-            Enumerable.Range(0, count).Select(row => row.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray());
+            columnLabels,
+            rowLabels,
+            cellLabels);
     }
 
     public static string ColumnName(int column)

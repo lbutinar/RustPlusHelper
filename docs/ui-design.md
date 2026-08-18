@@ -26,9 +26,10 @@ Implemented:
   biome, terrain-topology, ore-potential, road, rail, river, and externally sourced no-build layers.
   No-build geometry remains off by default and carries its build-snapshot warning.
 
-The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Grid
-references also appear in marker tooltips and the team roster. A future search box may navigate to a
-typed grid without changing the projection.
+The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Every
+square carries its complete player-facing reference such as `A0` or `T14`; the same references appear
+in marker tooltips and the team roster. A future search box may navigate to a typed grid without
+changing the projection.
 
 ## Server registry
 
