@@ -9,6 +9,8 @@ Classifications describe the primary verified source.
 | Server metadata, time, population, queue | **AVAILABLE DIRECTLY THROUGH RUST+** | Typed requests |
 | Base map JPEG, dimensions, margin | **AVAILABLE DIRECTLY THROUGH RUST+** | Map request |
 | Terrain, biome, topology masks | **REQUIRES ADDITIONAL DATA SOURCE** | Imported Rust `.map`; not in Rust+ map response |
+| Static build-planning candidates | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from `.map` terrain/path data plus a build-versioned no-build catalogue; not a build permission check |
+| Elevation contours and water depth | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from imported terrain and water heights |
 | Roads, rails, rivers | **REQUIRES ADDITIONAL DATA SOURCE** | Imported Rust `.map` path data |
 | Monument token/name and position | **AVAILABLE DIRECTLY THROUGH RUST+** | Friendly naming may need local mapping |
 | Team roster, position, online/alive state | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |

@@ -228,6 +228,9 @@ public static class MapRenderModelFactory
             AddRaster(rasters, topology.BiomeRaster, topology.Sha256, MapLayerKind.Biomes, margin, width, height);
             AddRaster(rasters, topology.TopologyRaster, topology.Sha256, MapLayerKind.Topology, margin, width, height);
             AddRaster(rasters, topology.TerrainSlopeRaster, topology.Sha256, MapLayerKind.TerrainSlope, margin, width, height);
+            AddRaster(rasters, topology.BuildPlanningRaster, topology.Sha256, MapLayerKind.BuildPlanning, margin, width, height);
+            AddRaster(rasters, topology.ElevationRaster, topology.Sha256, MapLayerKind.Elevation, margin, width, height);
+            AddRaster(rasters, topology.WaterDepthRaster, topology.Sha256, MapLayerKind.WaterDepth, margin, width, height);
             AddRaster(
                 rasters,
                 topology.ResourcePotentialRaster,
@@ -252,18 +255,37 @@ public static class MapRenderModelFactory
                     continue;
                 }
 
+                var projectedNodes = path.Nodes.Select(node => MapProjection.WorldToImage(
+                    node.X,
+                    node.Y,
+                    mapSize,
+                    width,
+                    height,
+                    margin)).ToArray();
                 polylines.Add(new MapPolylineOverlay(
-                    $"path:{pathIndex++}",
+                    $"path:{pathIndex}",
                     layer.Value,
                     path.Name,
                     path.Width,
-                    path.Nodes.Select(node => MapProjection.WorldToImage(
-                        node.X,
-                        node.Y,
-                        mapSize,
-                        width,
-                        height,
-                        margin)).ToArray()));
+                    projectedNodes));
+
+                if (path.Kind == MapPathKind.River)
+                {
+                    var metresToPixels = (width - (2d * margin)) / mapSize;
+                    var corridor = CreatePathCorridor(
+                        projectedNodes,
+                        Math.Max(1, ((path.Width / 2d) + path.OuterPadding) * metresToPixels));
+                    if (corridor.Count >= 3)
+                    {
+                        polygons.Add(new MapPolygonOverlay(
+                            $"river-corridor:{pathIndex}",
+                            MapLayerKind.Rivers,
+                            $"{path.Name} · {path.Width:0.#} m channel",
+                            corridor));
+                    }
+                }
+
+                pathIndex++;
             }
 
             foreach (var zone in topology.NoBuildZones ?? [])
@@ -308,6 +330,41 @@ public static class MapRenderModelFactory
         return string.IsNullOrWhiteSpace(name) ? "Rust prefab" : name;
     }
 
+    private static IReadOnlyList<ProjectedMapPoint> CreatePathCorridor(
+        IReadOnlyList<ProjectedMapPoint> points,
+        double halfWidth)
+    {
+        if (points.Count < 2)
+        {
+            return [];
+        }
+
+        var left = new List<ProjectedMapPoint>(points.Count);
+        var right = new List<ProjectedMapPoint>(points.Count);
+        for (var index = 0; index < points.Count; index++)
+        {
+            var previous = points[Math.Max(0, index - 1)];
+            var next = points[Math.Min(points.Count - 1, index + 1)];
+            var dx = next.PixelX - previous.PixelX;
+            var dy = next.PixelY - previous.PixelY;
+            var length = Math.Sqrt((dx * dx) + (dy * dy));
+            if (length < 0.001)
+            {
+                left.Add(points[index]);
+                right.Add(points[index]);
+                continue;
+            }
+
+            var normalX = -dy / length;
+            var normalY = dx / length;
+            left.Add(new(points[index].PixelX + (normalX * halfWidth), points[index].PixelY + (normalY * halfWidth)));
+            right.Add(new(points[index].PixelX - (normalX * halfWidth), points[index].PixelY - (normalY * halfWidth)));
+        }
+
+        right.Reverse();
+        return [.. left, .. right];
+    }
+
     public static string ToLayerKey(MapLayerKind kind) => kind switch
     {
         MapLayerKind.BaseMap => "baseMap",
@@ -315,6 +372,9 @@ public static class MapRenderModelFactory
         MapLayerKind.Biomes => "biomes",
         MapLayerKind.Topology => "topology",
         MapLayerKind.TerrainSlope => "terrainSlope",
+        MapLayerKind.BuildPlanning => "buildPlanning",
+        MapLayerKind.Elevation => "elevation",
+        MapLayerKind.WaterDepth => "waterDepth",
         MapLayerKind.ResourcePotential => "resourcePotential",
         MapLayerKind.Roads => "roads",
         MapLayerKind.Railways => "railways",

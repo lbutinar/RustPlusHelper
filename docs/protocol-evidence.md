@@ -130,6 +130,23 @@ prefab blockers, objects, and server plugins can still prevent construction on a
 Water is distinguished using serialized water height where available, with documented Ocean and
 Oceanside topology used only for below-sea-level ocean fallback.
 
+Three additional display products use the same external `.map` evidence:
+
+- elevation tint uses world-space terrain metres, with locally chosen 25 m contour intervals and
+  stronger 100 m major contours;
+- water depth is `effective water height - terrain height`; serialized water is authoritative where
+  present, while negative ocean water is raised to sea level only under Ocean/Oceanside topology;
+- river corridors use each serialized river path's centerline, width, and outer padding. They are
+  path corridors, not a claim that every rendered edge is an exact wet shoreline.
+
+The build-planning layer is explicitly derived and conservative. It combines the slope bands,
+derived water mask, Road and Building topology, serialized road/rail corridor widths, and known
+external no-build polygons. Red means a known blocker or terrain steeper than 25 degrees; green
+means only that none of those tested conditions rejected a flat sample. It does not evaluate live
+trees, rocks, deployables, player construction, stability, terrain holes, monument child colliders,
+server plugins, or all build-version-specific colliders, so it must never be presented as a build
+permission check.
+
 The no-build layer is also external, not Rust+. Facepunch documents that Road and Rail topology
 prevent player construction, but Monument topology alone does not prove a monument's blocked
 volume. The imported `.map` supplies placed prefab IDs and transforms; a compact catalogue derived

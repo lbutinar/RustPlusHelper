@@ -16,7 +16,7 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT imported_utc_ms, metadata_json, biome_rgba, topology_rgba, resource_potential_rgba,
-                   terrain_slope_rgba
+                   terrain_slope_rgba, build_planning_rgba, elevation_rgba, water_depth_rgba
             FROM map_topology
             WHERE server_id = $serverId;
             """;
@@ -53,7 +53,10 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             ReadRaster(reader, 4, metadata.ResourcePotentialSize),
             metadata.NoBuildZones,
             metadata.NoBuildZoneEvidence,
-            ReadRaster(reader, 5, metadata.TerrainSlopeSize));
+            ReadRaster(reader, 5, metadata.TerrainSlopeSize),
+            ReadRaster(reader, 6, metadata.BuildPlanningSize),
+            ReadRaster(reader, 7, metadata.ElevationSize),
+            ReadRaster(reader, 8, metadata.WaterDepthSize));
         return new SavedMapTopology(
             serverId,
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
@@ -67,6 +70,9 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         ValidateRaster(topology.Data.TopologyRaster);
         ValidateRaster(topology.Data.ResourcePotentialRaster);
         ValidateRaster(topology.Data.TerrainSlopeRaster);
+        ValidateRaster(topology.Data.BuildPlanningRaster);
+        ValidateRaster(topology.Data.ElevationRaster);
+        ValidateRaster(topology.Data.WaterDepthRaster);
 
         var metadata = new MapTopologyMetadata(
             topology.Data.SourceFileName,
@@ -82,7 +88,10 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             SizeOf(topology.Data.ResourcePotentialRaster),
             topology.Data.NoBuildZones,
             topology.Data.NoBuildZoneEvidence,
-            SizeOf(topology.Data.TerrainSlopeRaster));
+            SizeOf(topology.Data.TerrainSlopeRaster),
+            SizeOf(topology.Data.BuildPlanningRaster),
+            SizeOf(topology.Data.ElevationRaster),
+            SizeOf(topology.Data.WaterDepthRaster));
 
         database.Initialize();
         using var connection = database.OpenConnection();
@@ -90,17 +99,22 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         command.CommandText = """
             INSERT INTO map_topology(
                 server_id, imported_utc_ms, metadata_json, biome_rgba, topology_rgba,
-                resource_potential_rgba, terrain_slope_rgba)
+                resource_potential_rgba, terrain_slope_rgba, build_planning_rgba,
+                elevation_rgba, water_depth_rgba)
             VALUES (
                 $serverId, $importedUtcMs, $metadataJson, $biomeRgba, $topologyRgba,
-                $resourcePotentialRgba, $terrainSlopeRgba)
+                $resourcePotentialRgba, $terrainSlopeRgba, $buildPlanningRgba,
+                $elevationRgba, $waterDepthRgba)
             ON CONFLICT(server_id) DO UPDATE SET
                 imported_utc_ms = excluded.imported_utc_ms,
                 metadata_json = excluded.metadata_json,
                 biome_rgba = excluded.biome_rgba,
                 topology_rgba = excluded.topology_rgba,
                 resource_potential_rgba = excluded.resource_potential_rgba,
-                terrain_slope_rgba = excluded.terrain_slope_rgba;
+                terrain_slope_rgba = excluded.terrain_slope_rgba,
+                build_planning_rgba = excluded.build_planning_rgba,
+                elevation_rgba = excluded.elevation_rgba,
+                water_depth_rgba = excluded.water_depth_rgba;
             """;
         command.Parameters.AddWithValue("$serverId", topology.ServerId.ToString("D"));
         command.Parameters.AddWithValue("$importedUtcMs", topology.ImportedAtUtc.ToUnixTimeMilliseconds());
@@ -109,6 +123,9 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         AddBlob(command, "$topologyRgba", topology.Data.TopologyRaster?.Rgba);
         AddBlob(command, "$resourcePotentialRgba", topology.Data.ResourcePotentialRaster?.Rgba);
         AddBlob(command, "$terrainSlopeRgba", topology.Data.TerrainSlopeRaster?.Rgba);
+        AddBlob(command, "$buildPlanningRgba", topology.Data.BuildPlanningRaster?.Rgba);
+        AddBlob(command, "$elevationRgba", topology.Data.ElevationRaster?.Rgba);
+        AddBlob(command, "$waterDepthRgba", topology.Data.WaterDepthRaster?.Rgba);
         command.ExecuteNonQuery();
     }
 
@@ -175,5 +192,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
         RasterSize? ResourcePotentialSize,
         IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
         MapNoBuildZoneEvidence? NoBuildZoneEvidence = null,
-        RasterSize? TerrainSlopeSize = null);
+        RasterSize? TerrainSlopeSize = null,
+        RasterSize? BuildPlanningSize = null,
+        RasterSize? ElevationSize = null,
+        RasterSize? WaterDepthSize = null);
 }

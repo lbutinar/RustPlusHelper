@@ -14,7 +14,11 @@ public sealed record MapPathSnapshot(
     string Name,
     MapPathKind Kind,
     float Width,
-    IReadOnlyList<MapWorldPoint> Nodes);
+    IReadOnlyList<MapWorldPoint> Nodes,
+    float InnerPadding = 0,
+    float OuterPadding = 0,
+    float InnerFade = 0,
+    float OuterFade = 0);
 
 public sealed record MapRasterSnapshot(int Width, int Height, byte[] Rgba)
 {
@@ -51,7 +55,10 @@ public sealed record ImportedMapTopology(
     MapRasterSnapshot? ResourcePotentialRaster,
     IReadOnlyList<MapNoBuildZoneSnapshot>? NoBuildZones = null,
     MapNoBuildZoneEvidence? NoBuildZoneEvidence = null,
-    MapRasterSnapshot? TerrainSlopeRaster = null);
+    MapRasterSnapshot? TerrainSlopeRaster = null,
+    MapRasterSnapshot? BuildPlanningRaster = null,
+    MapRasterSnapshot? ElevationRaster = null,
+    MapRasterSnapshot? WaterDepthRaster = null);
 
 public sealed record SavedMapTopology(
     Guid ServerId,
@@ -252,10 +259,15 @@ public sealed class MapTopologyManager(
         }
 
         var match = discovered.Match;
-        var needsSlopeUpgrade = existing?.Data.TerrainSlopeRaster is null
-            && existing?.Data.SourceLayers.Any(layer => string.Equals(layer.Name, "height", StringComparison.OrdinalIgnoreCase)) == true;
+        var hasHeightLayer = existing?.Data.SourceLayers.Any(
+            layer => string.Equals(layer.Name, "height", StringComparison.OrdinalIgnoreCase)) == true;
+        var needsTerrainUpgrade = hasHeightLayer
+            && (existing?.Data.TerrainSlopeRaster is null
+                || existing.Data.BuildPlanningRaster is null
+                || existing.Data.ElevationRaster is null
+                || existing.Data.WaterDepthRaster is null);
         if (existing is not null
-            && !needsSlopeUpgrade
+            && !needsTerrainUpgrade
             && string.Equals(existing.Data.SourceFileName, match.FileName, StringComparison.OrdinalIgnoreCase)
             && existing.Data.SourceTimestamp == match.SourceTimestamp)
         {

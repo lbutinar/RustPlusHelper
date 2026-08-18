@@ -102,6 +102,8 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         var topologyResolution = topologyLayer is null ? 0 : GetSquareResolution(topologyLayer.Data.Length / 4, "topology");
         var paths = world.Paths.Select(path => ToSnapshot(path, world.Size)).ToArray();
         var noBuildZones = NoBuildZoneCatalog.CreateZones(world, out var noBuildEvidence);
+        var heightLayer = FindLayer(world, "height");
+        var waterLayer = FindLayer(world, "water");
 
         return new ImportedMapTopology(
             sourceFileName,
@@ -117,12 +119,16 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             topologyLayer is null ? null : CreateResourcePotentialRaster(topologyLayer.Data, topologyResolution),
             noBuildZones,
             noBuildEvidence,
-            CreateTerrainSlopeRaster(
-                FindLayer(world, "height"),
-                FindLayer(world, "water"),
+            CreateTerrainSlopeRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
+            CreateBuildPlanningRaster(
+                heightLayer,
+                waterLayer,
                 topologyLayer,
                 topologyResolution,
-                world.Size));
+                world,
+                noBuildZones),
+            CreateElevationRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
+            CreateWaterDepthRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size));
     }
 
     private static MapPathSnapshot ToSnapshot(PathData path, uint worldSize)
@@ -132,7 +138,11 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             path.Name,
             ClassifyPath(path.Name),
             path.Width,
-            path.Nodes.Select(node => new MapWorldPoint(node.X + halfSize, node.Z + halfSize)).ToArray());
+            path.Nodes.Select(node => new MapWorldPoint(node.X + halfSize, node.Z + halfSize)).ToArray(),
+            path.InnerPadding,
+            path.OuterPadding,
+            path.InnerFade,
+            path.OuterFade);
     }
 
     private static MapPathKind ClassifyPath(string name)
@@ -319,6 +329,316 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
     }
 
+    private static MapRasterSnapshot? CreateBuildPlanningRaster(
+        MapData? heightLayer,
+        MapData? waterLayer,
+        MapData? topologyLayer,
+        int topologyResolution,
+        WorldData world,
+        IReadOnlyList<MapNoBuildZoneSnapshot> noBuildZones)
+    {
+        if (heightLayer is null)
+        {
+            return null;
+        }
+
+        var heightResolution = GetInt16Resolution(heightLayer, "height");
+        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
+        var outputResolution = Math.Min(heightResolution, PreviewResolution);
+        var metresPerSample = world.Size / (double)(heightResolution - 1);
+        var blocked = CreateKnownBlockedMask(world, noBuildZones, outputResolution);
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var outputY = 0; outputY < outputResolution; outputY++)
+        {
+            var sourceY = SampleCoordinate(outputY, outputResolution, heightResolution);
+            var displayY = outputResolution - 1 - outputY;
+            for (var outputX = 0; outputX < outputResolution; outputX++)
+            {
+                var sourceX = SampleCoordinate(outputX, outputResolution, heightResolution);
+                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
+                var depth = WaterDepthMetres(
+                    terrainHeight,
+                    sourceX,
+                    sourceY,
+                    heightResolution,
+                    waterLayer,
+                    waterResolution,
+                    topologyLayer,
+                    topologyResolution);
+                var slope = SlopeDegrees(heightLayer.Data, heightResolution, sourceX, sourceY, metresPerSample);
+                var topology = TopologyAt(
+                    sourceX,
+                    sourceY,
+                    heightResolution,
+                    topologyLayer,
+                    topologyResolution);
+                var knownBlocked = blocked[(displayY * outputResolution) + outputX]
+                    || HasAny(topology, 11, 21);
+                var color = depth > 0.1
+                    ? new Rgba(45, 126, 180, 115)
+                    : knownBlocked || slope > 25
+                        ? new Rgba(216, 61, 50, 175)
+                        : slope > 12
+                            ? new Rgba(244, 153, 53, 155)
+                            : slope > 5
+                                ? new Rgba(214, 197, 68, 140)
+                                : new Rgba(53, 194, 111, 135);
+                WritePixel(rgba, outputResolution, outputX, displayY, color);
+            }
+        }
+
+        return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
+    }
+
+    private static MapRasterSnapshot? CreateElevationRaster(
+        MapData? heightLayer,
+        MapData? waterLayer,
+        MapData? topologyLayer,
+        int topologyResolution,
+        uint worldSize)
+    {
+        if (heightLayer is null)
+        {
+            return null;
+        }
+
+        var heightResolution = GetInt16Resolution(heightLayer, "height");
+        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
+        var outputResolution = Math.Min(heightResolution, PreviewResolution);
+        var samples = new double[outputResolution, outputResolution];
+        var wet = new bool[outputResolution, outputResolution];
+        for (var y = 0; y < outputResolution; y++)
+        {
+            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
+            for (var x = 0; x < outputResolution; x++)
+            {
+                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
+                var height = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
+                samples[y, x] = height;
+                wet[y, x] = WaterDepthMetres(
+                    height,
+                    sourceX,
+                    sourceY,
+                    heightResolution,
+                    waterLayer,
+                    waterResolution,
+                    topologyLayer,
+                    topologyResolution) > 0.1;
+            }
+        }
+
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var y = 0; y < outputResolution; y++)
+        {
+            var displayY = outputResolution - 1 - y;
+            for (var x = 0; x < outputResolution; x++)
+            {
+                if (wet[y, x])
+                {
+                    continue;
+                }
+
+                var height = samples[y, x];
+                var minorContour = (x > 0 && ContourBand(samples[y, x - 1], 25) != ContourBand(height, 25))
+                    || (y > 0 && ContourBand(samples[y - 1, x], 25) != ContourBand(height, 25));
+                var majorContour = (x > 0 && ContourBand(samples[y, x - 1], 100) != ContourBand(height, 100))
+                    || (y > 0 && ContourBand(samples[y - 1, x], 100) != ContourBand(height, 100));
+                var color = majorContour
+                    ? new Rgba(245, 244, 232, 220)
+                    : minorContour
+                        ? new Rgba(232, 225, 205, 155)
+                        : ElevationColor(height);
+                WritePixel(rgba, outputResolution, x, displayY, color);
+            }
+        }
+
+        return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
+    }
+
+    private static MapRasterSnapshot? CreateWaterDepthRaster(
+        MapData? heightLayer,
+        MapData? waterLayer,
+        MapData? topologyLayer,
+        int topologyResolution,
+        uint worldSize)
+    {
+        if (heightLayer is null)
+        {
+            return null;
+        }
+
+        var heightResolution = GetInt16Resolution(heightLayer, "height");
+        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
+        var outputResolution = Math.Min(heightResolution, PreviewResolution);
+        var depths = new double[outputResolution, outputResolution];
+        for (var y = 0; y < outputResolution; y++)
+        {
+            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
+            for (var x = 0; x < outputResolution; x++)
+            {
+                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
+                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
+                depths[y, x] = WaterDepthMetres(
+                    terrainHeight,
+                    sourceX,
+                    sourceY,
+                    heightResolution,
+                    waterLayer,
+                    waterResolution,
+                    topologyLayer,
+                    topologyResolution);
+            }
+        }
+
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var y = 0; y < outputResolution; y++)
+        {
+            var displayY = outputResolution - 1 - y;
+            for (var x = 0; x < outputResolution; x++)
+            {
+                var depth = depths[y, x];
+                if (depth <= 0.1)
+                {
+                    continue;
+                }
+
+                var shoreline = (x > 0 && depths[y, x - 1] <= 0.1)
+                    || (x + 1 < outputResolution && depths[y, x + 1] <= 0.1)
+                    || (y > 0 && depths[y - 1, x] <= 0.1)
+                    || (y + 1 < outputResolution && depths[y + 1, x] <= 0.1);
+                var color = shoreline
+                    ? new Rgba(198, 244, 255, 220)
+                    : depth <= 1
+                        ? new Rgba(107, 211, 232, 120)
+                        : depth <= 5
+                            ? new Rgba(48, 158, 204, 140)
+                            : depth <= 20
+                                ? new Rgba(34, 104, 174, 160)
+                                : new Rgba(25, 55, 118, 185);
+                WritePixel(rgba, outputResolution, x, displayY, color);
+            }
+        }
+
+        return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
+    }
+
+    private static bool[] CreateKnownBlockedMask(
+        WorldData world,
+        IReadOnlyList<MapNoBuildZoneSnapshot> noBuildZones,
+        int resolution)
+    {
+        var blocked = new bool[checked(resolution * resolution)];
+        foreach (var zone in noBuildZones.Where(zone => zone.Boundary.Count >= 3))
+        {
+            FillPolygon(blocked, resolution, world.Size, zone.Boundary);
+        }
+
+        foreach (var path in world.Paths.Where(path => ClassifyPath(path.Name) is MapPathKind.Road or MapPathKind.Railway))
+        {
+            var radius = Math.Max(1, (path.Width / 2d) + path.OuterPadding);
+            for (var index = 1; index < path.Nodes.Count; index++)
+            {
+                FillSegment(blocked, resolution, world.Size, path.Nodes[index - 1], path.Nodes[index], radius);
+            }
+        }
+
+        return blocked;
+    }
+
+    private static void FillPolygon(
+        bool[] target,
+        int resolution,
+        uint worldSize,
+        IReadOnlyList<MapWorldPoint> boundary)
+    {
+        var minX = Math.Max(0, (int)Math.Floor(boundary.Min(point => point.X) * resolution / worldSize));
+        var maxX = Math.Min(resolution - 1, (int)Math.Ceiling(boundary.Max(point => point.X) * resolution / worldSize));
+        var minY = Math.Max(0, (int)Math.Floor((worldSize - boundary.Max(point => point.Y)) * resolution / worldSize));
+        var maxY = Math.Min(resolution - 1, (int)Math.Ceiling((worldSize - boundary.Min(point => point.Y)) * resolution / worldSize));
+        for (var y = minY; y <= maxY; y++)
+        {
+            var worldY = worldSize - ((y + 0.5) * worldSize / resolution);
+            for (var x = minX; x <= maxX; x++)
+            {
+                var worldX = (x + 0.5) * worldSize / resolution;
+                if (PointInPolygon(worldX, worldY, boundary))
+                {
+                    target[(y * resolution) + x] = true;
+                }
+            }
+        }
+    }
+
+    private static bool PointInPolygon(double x, double y, IReadOnlyList<MapWorldPoint> boundary)
+    {
+        var inside = false;
+        for (int current = 0, previous = boundary.Count - 1; current < boundary.Count; previous = current++)
+        {
+            var a = boundary[current];
+            var b = boundary[previous];
+            if ((a.Y > y) != (b.Y > y)
+                && x < ((b.X - a.X) * (y - a.Y) / (b.Y - a.Y)) + a.X)
+            {
+                inside = !inside;
+            }
+        }
+
+        return inside;
+    }
+
+    private static void FillSegment(
+        bool[] target,
+        int resolution,
+        uint worldSize,
+        VectorData start,
+        VectorData end,
+        double radius)
+    {
+        var half = worldSize / 2d;
+        var startX = start.X + half;
+        var startY = start.Z + half;
+        var endX = end.X + half;
+        var endY = end.Z + half;
+        var minX = Math.Max(0, (int)Math.Floor((Math.Min(startX, endX) - radius) * resolution / worldSize));
+        var maxX = Math.Min(resolution - 1, (int)Math.Ceiling((Math.Max(startX, endX) + radius) * resolution / worldSize));
+        var minY = Math.Max(0, (int)Math.Floor((worldSize - Math.Max(startY, endY) - radius) * resolution / worldSize));
+        var maxY = Math.Min(resolution - 1, (int)Math.Ceiling((worldSize - Math.Min(startY, endY) + radius) * resolution / worldSize));
+        for (var y = minY; y <= maxY; y++)
+        {
+            var worldY = worldSize - ((y + 0.5) * worldSize / resolution);
+            for (var x = minX; x <= maxX; x++)
+            {
+                var worldX = (x + 0.5) * worldSize / resolution;
+                if (DistanceToSegment(worldX, worldY, startX, startY, endX, endY) <= radius)
+                {
+                    target[(y * resolution) + x] = true;
+                }
+            }
+        }
+    }
+
+    private static double DistanceToSegment(
+        double x,
+        double y,
+        double startX,
+        double startY,
+        double endX,
+        double endY)
+    {
+        var dx = endX - startX;
+        var dy = endY - startY;
+        var lengthSquared = (dx * dx) + (dy * dy);
+        if (lengthSquared <= double.Epsilon)
+        {
+            return Math.Sqrt(((x - startX) * (x - startX)) + ((y - startY) * (y - startY)));
+        }
+
+        var t = Math.Clamp((((x - startX) * dx) + ((y - startY) * dy)) / lengthSquared, 0, 1);
+        var nearestX = startX + (t * dx);
+        var nearestY = startY + (t * dy);
+        return Math.Sqrt(((x - nearestX) * (x - nearestX)) + ((y - nearestY) * (y - nearestY)));
+    }
+
     private static bool IsWater(
         double terrainHeight,
         int sourceX,
@@ -349,6 +669,105 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         var offset = ((topologyY * topologyResolution) + topologyX) * 4;
         var topology = BinaryPrimitives.ReadUInt32LittleEndian(topologyLayer.Data.AsSpan(offset, 4));
         return HasAny(topology, 7, 8);
+    }
+
+    private static double WaterDepthMetres(
+        double terrainHeight,
+        int sourceX,
+        int sourceY,
+        int heightResolution,
+        MapData? waterLayer,
+        int waterResolution,
+        MapData? topologyLayer,
+        int topologyResolution)
+    {
+        var waterHeight = -500d;
+        if (waterLayer is not null)
+        {
+            var waterX = Math.Min(waterResolution - 1, sourceX * waterResolution / heightResolution);
+            var waterY = Math.Min(waterResolution - 1, sourceY * waterResolution / heightResolution);
+            waterHeight = HeightMetres(waterLayer.Data, waterResolution, waterX, waterY);
+        }
+
+        var topology = TopologyAt(
+            sourceX,
+            sourceY,
+            heightResolution,
+            topologyLayer,
+            topologyResolution);
+        if (HasAny(topology, 7, 8) && waterHeight < 0)
+        {
+            waterHeight = 0;
+        }
+
+        return Math.Max(0, waterHeight - terrainHeight);
+    }
+
+    private static uint TopologyAt(
+        int sourceX,
+        int sourceY,
+        int sourceResolution,
+        MapData? topologyLayer,
+        int topologyResolution)
+    {
+        if (topologyLayer is null || topologyResolution <= 0)
+        {
+            return 0;
+        }
+
+        var topologyX = Math.Min(topologyResolution - 1, sourceX * topologyResolution / sourceResolution);
+        var topologyY = Math.Min(topologyResolution - 1, sourceY * topologyResolution / sourceResolution);
+        var offset = ((topologyY * topologyResolution) + topologyX) * 4;
+        return BinaryPrimitives.ReadUInt32LittleEndian(topologyLayer.Data.AsSpan(offset, 4));
+    }
+
+    private static double SlopeDegrees(
+        byte[] heightData,
+        int resolution,
+        int x,
+        int y,
+        double metresPerSample)
+    {
+        var minX = Math.Max(0, x - 1);
+        var maxX = Math.Min(resolution - 1, x + 1);
+        var minY = Math.Max(0, y - 1);
+        var maxY = Math.Min(resolution - 1, y + 1);
+        var dx = (HeightMetres(heightData, resolution, maxX, y) - HeightMetres(heightData, resolution, minX, y))
+            / (Math.Max(1, maxX - minX) * metresPerSample);
+        var dz = (HeightMetres(heightData, resolution, x, maxY) - HeightMetres(heightData, resolution, x, minY))
+            / (Math.Max(1, maxY - minY) * metresPerSample);
+        return Math.Atan(Math.Sqrt((dx * dx) + (dz * dz))) * 180d / Math.PI;
+    }
+
+    private static int SampleCoordinate(int output, int outputResolution, int sourceResolution) =>
+        Math.Clamp((int)((output + 0.5) * sourceResolution / outputResolution), 0, sourceResolution - 1);
+
+    private static long ContourBand(double height, int interval) => (long)Math.Floor(height / interval);
+
+    private static Rgba ElevationColor(double height)
+    {
+        if (height <= 25)
+        {
+            return new Rgba(63, 145, 82, 65);
+        }
+
+        if (height <= 100)
+        {
+            return new Rgba(166, 166, 78, 70);
+        }
+
+        return height <= 200
+            ? new Rgba(180, 111, 69, 80)
+            : new Rgba(137, 93, 157, 95);
+    }
+
+    private static void WritePixel(byte[] rgba, int resolution, int x, int y, Rgba color)
+    {
+        var offset = ((y * resolution) + x) * 4;
+        rgba[offset] = color.R;
+        rgba[offset + 1] = color.G;
+        rgba[offset + 2] = color.B;
+        rgba[offset + 3] = color.A;
     }
 
     private static int GetInt16Resolution(MapData layer, string name)

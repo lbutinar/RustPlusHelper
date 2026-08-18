@@ -29,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(8L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(9L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -55,23 +55,26 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void VersionEightMigrationAddsTerrainSlopeStorage()
+    public void TerrainRasterMigrationsAddAllDerivedStorageColumns()
     {
         using var temporary = new TemporaryDatabase();
         temporary.Database.Initialize();
         using (var connection = temporary.Database.OpenConnection())
         {
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN terrain_slope_rgba;");
-            Execute(connection, "DELETE FROM schema_migrations WHERE version = 8;");
+            Execute(connection, "ALTER TABLE map_topology DROP COLUMN build_planning_rgba;");
+            Execute(connection, "ALTER TABLE map_topology DROP COLUMN elevation_rgba;");
+            Execute(connection, "ALTER TABLE map_topology DROP COLUMN water_depth_rgba;");
+            Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
         var reopened = new SqliteDatabase(temporary.Database.DatabasePath);
         reopened.Initialize();
 
         using var migratedConnection = reopened.OpenConnection();
-        Assert.Equal(1L, ExecuteScalar<long>(
+        Assert.Equal(4L, ExecuteScalar<long>(
             migratedConnection,
-            "SELECT COUNT(*) FROM pragma_table_info('map_topology') WHERE name = 'terrain_slope_rgba';"));
+            "SELECT COUNT(*) FROM pragma_table_info('map_topology') WHERE name IN ('terrain_slope_rgba', 'build_planning_rgba', 'elevation_rgba', 'water_depth_rgba');"));
     }
 
     [Fact]
@@ -187,7 +190,8 @@ public sealed class StorageTests
                         "Road 0",
                         MapPathKind.Road,
                         12,
-                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)])
+                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)],
+                        OuterPadding: 4)
                 ],
                 null,
                 new MapRasterSnapshot(2, 2, Enumerable.Range(0, 16).Select(value => (byte)value).ToArray()),
@@ -195,7 +199,10 @@ public sealed class StorageTests
                 [new MapNoBuildZoneSnapshot("zone:1", "assets/test.prefab", "rectangle", [
                     new MapWorldPoint(10, 20), new MapWorldPoint(30, 20), new MapWorldPoint(30, 40)])],
                 new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning."),
-                new MapRasterSnapshot(1, 1, [53, 194, 111, 135])));
+                new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+                new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+                new MapRasterSnapshot(1, 1, [63, 145, 82, 65]),
+                new MapRasterSnapshot(1, 1, [48, 158, 204, 140])));
 
         repository.Upsert(topology);
         var restored = repository.Get(profile.Id);
@@ -207,6 +214,7 @@ public sealed class StorageTests
         Assert.Equal("Road 0", restoredPath.Name);
         Assert.Equal(MapPathKind.Road, restoredPath.Kind);
         Assert.Equal(12, restoredPath.Width);
+        Assert.Equal(4, restoredPath.OuterPadding);
         Assert.Equal(topology.Data.Paths[0].Nodes.ToArray(), restoredPath.Nodes.ToArray());
         Assert.Equal(topology.Data.TopologyRaster?.Rgba, restored.Data.TopologyRaster?.Rgba);
         Assert.Equal(topology.Data.ResourcePotentialRaster?.Rgba, restored.Data.ResourcePotentialRaster?.Rgba);
@@ -217,6 +225,9 @@ public sealed class StorageTests
         Assert.Equal(topology.Data.NoBuildZones[0].Boundary.ToArray(), restoredZone.Boundary.ToArray());
         Assert.Equal(topology.Data.NoBuildZoneEvidence, restored.Data.NoBuildZoneEvidence);
         Assert.Equal(topology.Data.TerrainSlopeRaster?.Rgba, restored.Data.TerrainSlopeRaster?.Rgba);
+        Assert.Equal(topology.Data.BuildPlanningRaster?.Rgba, restored.Data.BuildPlanningRaster?.Rgba);
+        Assert.Equal(topology.Data.ElevationRaster?.Rgba, restored.Data.ElevationRaster?.Rgba);
+        Assert.Equal(topology.Data.WaterDepthRaster?.Rgba, restored.Data.WaterDepthRaster?.Rgba);
 
         Assert.True(servers.Remove(profile.Id));
         Assert.Null(repository.Get(profile.Id));

@@ -10,6 +10,9 @@
         "biomes",
         "topology",
         "terrainSlope",
+        "buildPlanning",
+        "elevation",
+        "waterDepth",
         "resourcePotential",
         "roads",
         "railways",
@@ -41,9 +44,11 @@
         "unknown": "?"
     };
 
-    const externalRasterLayerKeys = new Set(["biomes", "topology", "terrainSlope", "resourcePotential"]);
+    const externalRasterLayerKeys = new Set([
+        "biomes", "topology", "terrainSlope", "buildPlanning", "elevation", "waterDepth", "resourcePotential"
+    ]);
     const externalPathLayerKeys = new Set(["roads", "railways", "rivers"]);
-    const externalPolygonLayerKeys = new Set(["noBuildZones"]);
+    const externalPolygonLayerKeys = new Set(["noBuildZones", "rivers"]);
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -266,12 +271,11 @@
         }
 
         const points = polygon.points.map(point => [entry.height - point.pixelY, point.pixelX]);
+        const styles = polygon.layer === "rivers"
+            ? { color: "#7ed8f4", weight: 1, opacity: 0.8, fillColor: "#2197c5", fillOpacity: 0.24 }
+            : { color: "#ff5b4d", weight: 1.5, opacity: 0.9, fillColor: "#e83d32", fillOpacity: 0.2 };
         const shape = L.polygon(points, {
-            color: "#ff5b4d",
-            weight: 1.5,
-            opacity: 0.9,
-            fillColor: "#e83d32",
-            fillOpacity: 0.2,
+            ...styles,
             interactive: true
         });
         shape.bindTooltip(escapeHtml(polygon.label), { className: "rust-map-tooltip" });

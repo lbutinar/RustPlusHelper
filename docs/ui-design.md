@@ -63,7 +63,8 @@ The application opens to the map, not a generic dashboard.
 
 The UI sends normalized overlay snapshots to a persistent Leaflet map when source data changes.
 Visibility-only changes use a small interop call and do not rebuild markers, paths, or the grid.
-Biome, terrain-topology, terrain-slope, and ore-potential rasters are flattened into one cached, opaque map image so
+Biome, terrain-topology, terrain-slope, build-planning, elevation, water-depth, and ore-potential
+rasters are flattened into one cached, opaque map image so
 WebView2 does not continuously composite multiple full-map transparent layers. Fine-grained
 add/update/remove deltas for moving markers remain deferred.
 
@@ -94,6 +95,11 @@ ore node is presently spawned at a pixel.
 The terrain-slope layer is labelled `DERIVED FROM .MAP HEIGHTS` and provides an on-map color key for
 flat, gentle, moderate, steep, and water samples. Its angle bands are a planning convention and do
 not imply build permission or account for rocks, trees, deployables, or server-side restrictions.
+
+Build planning, elevation/contours, and water depth each have their own on-map legend. Multiple
+legends stack when several analysis layers are enabled. River paths add a width-scaled polygon from
+the serialized channel width and outer padding beneath the centerline; the water-depth raster remains
+the better source for the actual wet footprint.
 
 World `x/y` is canonical. Pixel and grid values are projections. Marker updates should be sent to
 Leaflet as deltas rather than serializing the whole map for every team movement.

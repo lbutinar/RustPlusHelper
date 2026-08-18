@@ -594,11 +594,17 @@ button {
 .legend-dot.event { background: var(--red); }
 .legend-dot.monument { background: var(--blue); }
 
-.terrain-slope-legend {
+.terrain-analysis-legends {
     position: absolute;
     z-index: 700;
     left: 16px;
     bottom: 16px;
+    display: grid;
+    gap: 7px;
+    max-width: calc(100% - 32px);
+}
+
+.terrain-analysis-legend {
     display: grid;
     grid-template-columns: repeat(5, auto);
     align-items: center;
@@ -612,20 +618,20 @@ button {
     font-weight: 700;
 }
 
-.terrain-slope-legend strong {
+.terrain-analysis-legend strong {
     grid-column: 1 / -1;
     color: var(--text);
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
 
-.terrain-slope-legend span {
+.terrain-analysis-legend span {
     display: flex;
     align-items: center;
     gap: 5px;
 }
 
-.terrain-slope-legend i {
+.terrain-analysis-legend i {
     width: 9px;
     height: 9px;
     border-radius: 2px;
@@ -636,6 +642,19 @@ button {
 .slope-moderate { background: rgb(244, 153, 53); }
 .slope-steep { background: rgb(216, 61, 50); }
 .slope-water { background: rgb(45, 126, 180); }
+.plan-candidate { background: rgb(53, 194, 111); }
+.plan-gentle { background: rgb(214, 197, 68); }
+.plan-difficult { background: rgb(244, 153, 53); }
+.plan-excluded { background: rgb(216, 61, 50); }
+.plan-water { background: rgb(45, 126, 180); }
+.elevation-low { background: rgb(63, 145, 82); }
+.elevation-mid { background: rgb(166, 166, 78); }
+.elevation-high { background: rgb(180, 111, 69); }
+.elevation-summit { background: rgb(137, 93, 157); }
+.water-shore { background: rgb(198, 244, 255); }
+.water-shallow { background: rgb(48, 158, 204); }
+.water-medium { background: rgb(34, 104, 174); }
+.water-deep { background: rgb(25, 55, 118); }
 
 .layer-panel {
     min-height: 0;
@@ -697,6 +716,9 @@ button {
 .layer-symbol.biomes { border-color: #5f9c5b; }
 .layer-symbol.topology { border-color: #a69581; }
 .layer-symbol.terrainSlope { border-color: #35c26f; }
+.layer-symbol.buildPlanning { border-color: #58d68d; box-shadow: 0 0 7px rgba(88, 214, 141, 0.4); }
+.layer-symbol.elevation { border-color: #c89bd8; }
+.layer-symbol.waterDepth { border-color: #2f90c8; }
 .layer-symbol.resourcePotential { border-color: #ff8b3d; }
 .layer-symbol.roads { border-radius: 2px; border-color: #d7a66b; }
 .layer-symbol.railways { border-radius: 2px; border-color: #8e9699; }

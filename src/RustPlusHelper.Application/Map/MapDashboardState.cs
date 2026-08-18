@@ -25,6 +25,9 @@ public enum MapLayerKind
     Biomes,
     Topology,
     TerrainSlope,
+    BuildPlanning,
+    Elevation,
+    WaterDepth,
     ResourcePotential,
     Roads,
     Railways,
@@ -97,10 +100,13 @@ public sealed record MapDashboardState(
         new(MapLayerKind.Biomes, "Biomes", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Topology, "Terrain topology", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.TerrainSlope, "Terrain slope", false, false, "DERIVED FROM .MAP HEIGHTS", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.BuildPlanning, "Build planning", false, false, "DERIVED · MIXED EXTERNAL SOURCES", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.Elevation, "Elevation + contours", false, false, "DERIVED FROM .MAP HEIGHTS", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.WaterDepth, "Water depth + shoreline", false, false, "DERIVED FROM .MAP TERRAIN/WATER", "Import the selected server's Rust .map file."),
         new(MapLayerKind.ResourcePotential, "Ore potential", false, false, "DERIVED FROM .MAP", "Import a .map file; this never shows live nodes."),
         new(MapLayerKind.Roads, "Road paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Railways, "Rail paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
-        new(MapLayerKind.Rivers, "River paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
+        new(MapLayerKind.Rivers, "River channels", false, false, "EXTERNAL .MAP WIDTHS", "Import the selected server's Rust .map file."),
         new(MapLayerKind.NoBuildZones, "No-build zones", false, false, "EXTERNAL BUILD SNAPSHOT", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Team, "Team", true, true, "DIRECT"),
         new(MapLayerKind.TeamNotes, "Team notes", true, true, "DIRECT"),
@@ -155,6 +161,24 @@ public sealed record MapDashboardState(
             topology?.Data.TerrainSlopeRaster is not null
                 ? "Flat ≤ 5°, gentle ≤ 12°, moderate ≤ 25°, steep > 25°. This is a terrain-planning aid, not proof that building is allowed."
                 : "Import a .map file containing a height layer."),
+        RasterLayer(
+            MapLayerKind.BuildPlanning,
+            "Build planning",
+            topology?.Data.BuildPlanningRaster,
+            "DERIVED · MIXED EXTERNAL SOURCES",
+            "Combines slope, water, road/rail paths and known no-build geometry. Candidate land is not guaranteed buildable."),
+        RasterLayer(
+            MapLayerKind.Elevation,
+            "Elevation + contours",
+            topology?.Data.ElevationRaster,
+            "DERIVED FROM .MAP HEIGHTS",
+            "Elevation bands use world metres; contour lines are spaced every 25 m with 100 m major lines."),
+        RasterLayer(
+            MapLayerKind.WaterDepth,
+            "Water depth + shoreline",
+            topology?.Data.WaterDepthRaster,
+            "DERIVED FROM .MAP TERRAIN/WATER",
+            "Depth is serialized water height minus terrain height; local water-culling volumes are not represented."),
         new(
             MapLayerKind.ResourcePotential,
             "Ore potential",
@@ -166,7 +190,7 @@ public sealed record MapDashboardState(
                 : "Import a .map file; this never shows live nodes."),
         PathLayer(MapLayerKind.Roads, "Road paths", MapPathKind.Road, topology),
         PathLayer(MapLayerKind.Railways, "Rail paths", MapPathKind.Railway, topology),
-        PathLayer(MapLayerKind.Rivers, "River paths", MapPathKind.River, topology),
+        PathLayer(MapLayerKind.Rivers, "River channels", MapPathKind.River, topology, "EXTERNAL .MAP WIDTHS"),
         new(
             MapLayerKind.NoBuildZones,
             "No-build zones",
@@ -232,7 +256,8 @@ public sealed record MapDashboardState(
         MapLayerKind layer,
         string name,
         MapPathKind pathKind,
-        SavedMapTopology? topology)
+        SavedMapTopology? topology,
+        string sourceLabel = "EXTERNAL .MAP")
     {
         var available = topology?.Data.Paths.Any(path => path.Kind == pathKind) == true;
         return new MapLayerState(
@@ -240,7 +265,20 @@ public sealed record MapDashboardState(
             name,
             false,
             available,
-            available ? "EXTERNAL .MAP" : "UNAVAILABLE",
+            available ? sourceLabel : "UNAVAILABLE",
             available ? null : "The imported .map file does not contain this path type.");
     }
+
+    private static MapLayerState RasterLayer(
+        MapLayerKind layer,
+        string name,
+        MapRasterSnapshot? raster,
+        string source,
+        string explanation) => new(
+            layer,
+            name,
+            false,
+            raster is not null,
+            raster is null ? "UNAVAILABLE" : source,
+            raster is null ? "Import a .map file containing the required terrain layers." : explanation);
 }

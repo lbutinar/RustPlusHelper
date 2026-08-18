@@ -67,15 +67,51 @@
                 <span><i class="legend-dot monument"></i>Monuments</span>
             </div>
 
-            @if (IsTerrainSlopeVisible)
+            @if (IsAnyTerrainAnalysisVisible)
             {
-                <div class="terrain-slope-legend" aria-label="Terrain slope colors">
-                    <strong>Terrain slope</strong>
-                    <span><i class="slope-flat"></i>Flat ≤ 5°</span>
-                    <span><i class="slope-gentle"></i>Gentle ≤ 12°</span>
-                    <span><i class="slope-moderate"></i>Moderate ≤ 25°</span>
-                    <span><i class="slope-steep"></i>Steep &gt; 25°</span>
-                    <span><i class="slope-water"></i>Water</span>
+                <div class="terrain-analysis-legends">
+                    @if (IsLayerVisible(MapLayerKind.TerrainSlope))
+                    {
+                        <div class="terrain-analysis-legend" aria-label="Terrain slope colors">
+                            <strong>Terrain slope</strong>
+                            <span><i class="slope-flat"></i>Flat ≤ 5°</span>
+                            <span><i class="slope-gentle"></i>Gentle ≤ 12°</span>
+                            <span><i class="slope-moderate"></i>Moderate ≤ 25°</span>
+                            <span><i class="slope-steep"></i>Steep &gt; 25°</span>
+                            <span><i class="slope-water"></i>Water</span>
+                        </div>
+                    }
+                    @if (IsLayerVisible(MapLayerKind.BuildPlanning))
+                    {
+                        <div class="terrain-analysis-legend" aria-label="Build planning colors">
+                            <strong>Build planning · candidates only</strong>
+                            <span><i class="plan-candidate"></i>Candidate</span>
+                            <span><i class="plan-gentle"></i>Gentle</span>
+                            <span><i class="plan-difficult"></i>Difficult</span>
+                            <span><i class="plan-excluded"></i>Known blocked/steep</span>
+                            <span><i class="plan-water"></i>Water</span>
+                        </div>
+                    }
+                    @if (IsLayerVisible(MapLayerKind.Elevation))
+                    {
+                        <div class="terrain-analysis-legend" aria-label="Elevation colors">
+                            <strong>Elevation · 25 m contours / bold 100 m</strong>
+                            <span><i class="elevation-low"></i>≤ 25 m</span>
+                            <span><i class="elevation-mid"></i>25–100 m</span>
+                            <span><i class="elevation-high"></i>100–200 m</span>
+                            <span><i class="elevation-summit"></i>&gt; 200 m</span>
+                        </div>
+                    }
+                    @if (IsLayerVisible(MapLayerKind.WaterDepth))
+                    {
+                        <div class="terrain-analysis-legend" aria-label="Water depth colors">
+                            <strong>Water depth + shoreline</strong>
+                            <span><i class="water-shore"></i>Shore</span>
+                            <span><i class="water-shallow"></i>≤ 5 m</span>
+                            <span><i class="water-medium"></i>5–20 m</span>
+                            <span><i class="water-deep"></i>&gt; 20 m</span>
+                        </div>
+                    }
                 </div>
             }
         </div>
@@ -196,7 +232,12 @@
     private bool IsGridVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.Grid)
         is { IsVisible: true, IsAvailable: true };
 
-    private bool IsTerrainSlopeVisible => State.Layers.FirstOrDefault(layer => layer.Kind == MapLayerKind.TerrainSlope)
+    private bool IsAnyTerrainAnalysisVisible => IsLayerVisible(MapLayerKind.TerrainSlope)
+        || IsLayerVisible(MapLayerKind.BuildPlanning)
+        || IsLayerVisible(MapLayerKind.Elevation)
+        || IsLayerVisible(MapLayerKind.WaterDepth);
+
+    private bool IsLayerVisible(MapLayerKind kind) => State.Layers.FirstOrDefault(layer => layer.Kind == kind)
         is { IsVisible: true, IsAvailable: true };
 
     private string SourceEyebrow => State.DataSource switch

@@ -108,7 +108,9 @@ zones are rendered with explicit source/mismatch warnings; higher-fidelity biome
 evaluation remains.
 
 **Done for this slice:** a definite size mismatch stores nothing; successful imports survive restart;
-source paths are not retained; source classification remains visible in the layer panel.
+source paths are not retained; source classification remains visible in the layer panel; derived
+build-planning, elevation/contour, water-depth, and width-aware river displays remain separately
+toggleable and carry their limitations in the UI.
 
 ## Phase 5 — Team, chat, and semantic events
 

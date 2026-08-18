@@ -69,6 +69,7 @@
         var imageSource = GetImageSource();
         var topologyFingerprint = State.Topology?.Data.Sha256;
         var includeExternalMapData = !_interopCreated
+            || !ReferenceEquals(_renderedTopology, State.Topology)
             || !string.Equals(_renderedImageSource, imageSource, StringComparison.Ordinal)
             || !string.Equals(_renderedTopologyFingerprint, topologyFingerprint, StringComparison.Ordinal);
         var interopModel = new

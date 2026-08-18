@@ -27,6 +27,7 @@ public sealed class RustMapTopologyProviderTests
         Assert.Equal(MapPathKind.Road, road.Kind);
         Assert.Equal(new MapWorldPoint(0, 0), road.Nodes[0]);
         Assert.Equal(new MapWorldPoint(4500, 4500), road.Nodes[1]);
+        Assert.Equal(4, road.OuterPadding);
 
         Assert.NotNull(result.TopologyRaster);
         Assert.Equal(2, result.TopologyRaster.Width);
@@ -38,6 +39,13 @@ public sealed class RustMapTopologyProviderTests
         Assert.NotNull(result.TerrainSlopeRaster);
         Assert.Equal(5, result.TerrainSlopeRaster.Width);
         Assert.Equal([53, 194, 111, 135], result.TerrainSlopeRaster.Rgba[..4]);
+        Assert.NotNull(result.BuildPlanningRaster);
+        Assert.True(PixelCount(result.BuildPlanningRaster, 53, 194, 111, 135) > 0);
+        Assert.True(PixelCount(result.BuildPlanningRaster, 216, 61, 50, 175) > 0);
+        Assert.NotNull(result.ElevationRaster);
+        Assert.True(PixelCount(result.ElevationRaster, 63, 145, 82, 65) > 0);
+        Assert.NotNull(result.WaterDepthRaster);
+        Assert.All(result.WaterDepthRaster.Rgba, value => Assert.Equal(0, value));
         var noBuildZone = Assert.Single(result.NoBuildZones!);
         Assert.Equal("circle", noBuildZone.Shape);
         Assert.Equal(40, noBuildZone.Boundary.Count);
@@ -76,6 +84,23 @@ public sealed class RustMapTopologyProviderTests
 
         Assert.NotNull(result.TerrainSlopeRaster);
         Assert.True(PixelCount(result.TerrainSlopeRaster, 216, 61, 50, 170) > 0);
+        Assert.NotNull(result.ElevationRaster);
+        Assert.True(PixelCount(result.ElevationRaster, 245, 244, 232, 220) > 0);
+    }
+
+    [Fact]
+    public async Task UsesSerializedWaterSurfaceForDepthAndBuildPlanning()
+    {
+        using var mapFile = TestMapFile.Create(
+            waterSamples: Enumerable.Repeat((short)16400, 25).ToArray());
+        var provider = new RustMapTopologyProvider();
+
+        var result = await provider.ReadAsync(mapFile.Path);
+
+        Assert.NotNull(result.WaterDepthRaster);
+        Assert.True(PixelCount(result.WaterDepthRaster, 107, 211, 232, 120) > 0);
+        Assert.NotNull(result.BuildPlanningRaster);
+        Assert.True(PixelCount(result.BuildPlanningRaster, 45, 126, 180, 115) > 0);
     }
 
     private static int PixelCount(MapRasterSnapshot raster, byte red, byte green, byte blue, byte alpha)
@@ -104,7 +129,10 @@ public sealed class RustMapTopologyProviderTests
 
         public string Path { get; }
 
-        public static TestMapFile Create(int serializationVersion = 10, short[]? heightSamples = null)
+        public static TestMapFile Create(
+            int serializationVersion = 10,
+            short[]? heightSamples = null,
+            short[]? waterSamples = null)
         {
             var directory = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
@@ -120,7 +148,7 @@ public sealed class RustMapTopologyProviderTests
 
             if (serializationVersion == 10)
             {
-                var world = CreateWorld(heightSamples);
+                var world = CreateWorld(heightSamples, waterSamples);
                 using var encoded = LZ4Legacy.Encode(file, leaveOpen: true);
                 Serializer.Serialize(encoded, world);
             }
@@ -130,14 +158,14 @@ public sealed class RustMapTopologyProviderTests
 
         public void Dispose() => Directory.Delete(System.IO.Path.GetDirectoryName(Path)!, recursive: true);
 
-        private static TestWorldData CreateWorld(short[]? heightSamples)
+        private static TestWorldData CreateWorld(short[]? heightSamples, short[]? waterSamples)
         {
             var topology = new byte[16];
             BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(0, 4), 1u << 5);
             BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(4, 4), 1u << 14);
             BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(8, 4), 1u << 22);
             BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(12, 4), 1u << 21);
-            return new TestWorldData
+            var world = new TestWorldData
             {
                 Size = 4500,
                 Maps =
@@ -178,6 +206,7 @@ public sealed class RustMapTopologyProviderTests
                     {
                         Name = "Road 0",
                         Width = 12,
+                        OuterPadding = 4,
                         Nodes =
                         {
                             new TestVectorData { X = -2250, Z = -2250 },
@@ -186,6 +215,12 @@ public sealed class RustMapTopologyProviderTests
                     }
                 }
             };
+            if (waterSamples is not null)
+            {
+                world.Maps.Add(new TestMapData { Name = "water", Data = HeightData(waterSamples) });
+            }
+
+            return world;
         }
 
         private static byte[] HeightData(IReadOnlyList<short> values)
@@ -239,6 +274,7 @@ public sealed class RustMapTopologyProviderTests
     {
         [ProtoMember(1)] public string Name { get; set; } = string.Empty;
         [ProtoMember(5)] public float Width { get; set; }
+        [ProtoMember(7)] public float OuterPadding { get; set; }
         [ProtoMember(15)] public List<TestVectorData> Nodes { get; } = [];
     }
 }

@@ -123,7 +123,13 @@ public sealed class MapDashboardServiceTests
                         "Road 0",
                         MapPathKind.Road,
                         12,
-                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)])
+                        [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 4500)]),
+                    new MapPathSnapshot(
+                        "River 0",
+                        MapPathKind.River,
+                        20,
+                        [new MapWorldPoint(0, 2250), new MapWorldPoint(4500, 2250)],
+                        OuterPadding: 5)
                 ],
                 new MapRasterSnapshot(1, 1, [1, 2, 3, 4]),
                 new MapRasterSnapshot(1, 1, [5, 6, 7, 8]),
@@ -134,7 +140,10 @@ public sealed class MapDashboardServiceTests
                     "rectangle",
                     [new MapWorldPoint(0, 0), new MapWorldPoint(4500, 0), new MapWorldPoint(4500, 4500)])],
                 new MapNoBuildZoneEvidence("24181174", 1, 1, 1, "EXTERNAL RUST BUILD 24181174", "Snapshot warning."),
-                new MapRasterSnapshot(1, 1, [53, 194, 111, 135])));
+                new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+                new MapRasterSnapshot(1, 1, [53, 194, 111, 135]),
+                new MapRasterSnapshot(1, 1, [63, 145, 82, 65]),
+                new MapRasterSnapshot(1, 1, [48, 158, 204, 140])));
         var state = fixture.Service.Current with
         {
             Topology = topology,
@@ -144,12 +153,12 @@ public sealed class MapDashboardServiceTests
         var model = MapRenderModelFactory.Create(state);
 
         Assert.NotNull(model);
-        Assert.Equal(4, model.Rasters.Count);
-        var road = Assert.Single(model.Polylines);
+        Assert.Equal(7, model.Rasters.Count);
+        var road = Assert.Single(model.Polylines, path => path.Layer == MapLayerKind.Roads);
         Assert.Equal(MapLayerKind.Roads, road.Layer);
         Assert.Equal(new ProjectedMapPoint(50, 950), road.Points[0]);
         Assert.Equal(new ProjectedMapPoint(950, 50), road.Points[1]);
-        var noBuildZone = Assert.Single(model.Polygons);
+        var noBuildZone = Assert.Single(model.Polygons, polygon => polygon.Layer == MapLayerKind.NoBuildZones);
         Assert.Equal(MapLayerKind.NoBuildZones, noBuildZone.Layer);
         Assert.Equal(new ProjectedMapPoint(50, 950), noBuildZone.Points[0]);
         var noBuildLayer = Assert.Single(state.Layers, layer => layer.Kind == MapLayerKind.NoBuildZones);
@@ -158,6 +167,11 @@ public sealed class MapDashboardServiceTests
         var slopeLayer = Assert.Single(state.Layers, layer => layer.Kind == MapLayerKind.TerrainSlope);
         Assert.True(slopeLayer.IsAvailable);
         Assert.Contains(model.Rasters, raster => raster.Layer == MapLayerKind.TerrainSlope);
+        Assert.Contains(model.Rasters, raster => raster.Layer == MapLayerKind.BuildPlanning);
+        Assert.Contains(model.Rasters, raster => raster.Layer == MapLayerKind.Elevation);
+        Assert.Contains(model.Rasters, raster => raster.Layer == MapLayerKind.WaterDepth);
+        var riverCorridor = Assert.Single(model.Polygons, polygon => polygon.Layer == MapLayerKind.Rivers);
+        Assert.Equal(4, riverCorridor.Points.Count);
     }
 
     [Fact]

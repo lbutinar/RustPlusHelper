@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 8;
+    private const int LatestVersion = 9;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -104,6 +104,12 @@ internal static class SqliteMigrationRunner
         ALTER TABLE map_topology ADD COLUMN terrain_slope_rgba BLOB NULL;
         """;
 
+    private const string TerrainPlanningSchema = """
+        ALTER TABLE map_topology ADD COLUMN build_planning_rgba BLOB NULL;
+        ALTER TABLE map_topology ADD COLUMN elevation_rgba BLOB NULL;
+        ALTER TABLE map_topology ADD COLUMN water_depth_rgba BLOB NULL;
+        """;
+
     public static void Apply(SqliteConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -146,6 +152,7 @@ internal static class SqliteMigrationRunner
             6 => ("protected application credentials", ApplicationSecretSchema),
             7 => ("companion event map positions", CompanionEventPositionSchema),
             8 => ("derived terrain slope raster", TerrainSlopeSchema),
+            9 => ("derived terrain planning rasters", TerrainPlanningSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

@@ -37,7 +37,8 @@ and deleting a server cascades its history.
 
 `map_topology` stores the source basename, SHA-256 fingerprint, serialization version, opaque source
 timestamp, world size, layer summaries, normalized paths, prefab count, and small RGBA overlays,
-including the derived terrain-slope preview added by migration 8. It
+including the derived terrain-slope preview added by migration 8 and the build-planning, elevation,
+and water-depth previews added by migration 9. It
 does not store the original `.map`, its full local path, or extracted Facepunch assets. Deleting a
 server cascades its map cache, topology data, and companion-event history.
 
