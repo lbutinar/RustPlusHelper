@@ -97,7 +97,9 @@
 - machine names and direct numeric item/currency IDs filter the marketplace without inventing item
   names;
 - grid references and nearest-online-teammate distances are derived from direct marker/team
-  coordinates while offers remain unchanged.
+  coordinates while offers remain unchanged;
+- locating a vending result returns to the map, ensures the vending layer is visible, and focuses the
+  matching verified marker through the Leaflet interop contract.
 
 ## Test layers planned
 

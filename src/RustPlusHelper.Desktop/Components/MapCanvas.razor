@@ -21,9 +21,13 @@
     private SavedMapTopology? _renderedTopology;
     private uint? _renderedMapSize;
     private IReadOnlyDictionary<string, bool>? _renderedLayerVisibility;
+    private long _handledFocusSequence;
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    [Parameter]
+    public MapFocusRequest? FocusRequest { get; set; }
 
     private string ElementId => _elementId;
 
@@ -50,6 +54,7 @@
                 _renderedLayerVisibility = layerVisibility;
             }
 
+            await FocusRequestedItemAsync();
             return;
         }
 
@@ -121,6 +126,20 @@
         _renderedTopology = State.Topology;
         _renderedMapSize = State.Server?.MapSize;
         _renderedLayerVisibility = layerVisibility;
+        await FocusRequestedItemAsync();
+    }
+
+    private async Task FocusRequestedItemAsync()
+    {
+        if (!_interopCreated
+            || FocusRequest is not { } request
+            || request.Sequence == _handledFocusSequence)
+        {
+            return;
+        }
+
+        await JavaScript.InvokeVoidAsync("rustPlusMap.focusItem", ElementId, request.ItemId);
+        _handledFocusSequence = request.Sequence;
     }
 
     private static bool LayerVisibilityEquals(

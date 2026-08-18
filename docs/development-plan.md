@@ -143,7 +143,7 @@ minute; sampled movement trails remain deferred.
 **Status:** First direct-data slice implemented. Machine names and numeric Rust+ item/currency IDs
 are searchable, each result shows direct price/stock, its derived grid, and distance from the nearest
 online teammate. Friendly item names still require a reviewed versioned external catalogue; map
-focus/navigation and offer-change history remain.
+focus/navigation is implemented, while offer-change history remains.
 
 **Modules:** market manager, versioned item catalogue, vending differ/repositories.
 

@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject MapDashboardService Dashboard
 @inject RustPlusHelper.Desktop.Services.IMapFilePicker MapFilePicker
+@using RustPlusHelper.Application.Vending
 
 <div class="app-shell">
     <header class="topbar">
@@ -75,6 +76,7 @@
             {
                 case AppSection.Map:
                     <MapPage State="State"
+                             FocusRequest="_mapFocusRequest"
                              OnLayerChanged="HandleLayerChanged"
                              OnRefreshRequested="RefreshMap"
                              OnLiveDataRefreshRequested="RefreshLiveData"
@@ -87,7 +89,7 @@
                     <EventsPage State="State" />
                     break;
                 case AppSection.Vending:
-                    <VendingPage State="State" />
+                    <VendingPage State="State" OnLocate="LocateVending" />
                     break;
                 case AppSection.Devices:
                     <DevicesPage />
@@ -118,6 +120,8 @@
     private MapDashboardState State => Dashboard.Current;
 
     private AppSection ActiveSection { get; set; } = AppSection.Map;
+    private MapFocusRequest? _mapFocusRequest;
+    private long _mapFocusSequence;
 
     private string ConnectionCssClass => State.IsLiveDataRefreshing
         ? "loading"
@@ -180,6 +184,20 @@
     {
         ActiveSection = AppSection.Map;
         await Dashboard.LoadServerAsync(serverId);
+    }
+
+    private void LocateVending(VendingMachineListing listing)
+    {
+        if (listing.MarkerId is not { } markerId)
+        {
+            return;
+        }
+
+        Dashboard.SetLayerVisibility(MapLayerKind.VendingMachines, true);
+        _mapFocusRequest = new MapFocusRequest(
+            $"marker:{markerId.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            ++_mapFocusSequence);
+        ActiveSection = AppSection.Map;
     }
 
     private void HandleStateChanged(object? sender, EventArgs args) =>

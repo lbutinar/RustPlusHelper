@@ -84,7 +84,8 @@
             imagePromises: new Map(),
             compositeUrls: new Map(),
             compositeGeneration: 0,
-            activeCompositeKey: "base|"
+            activeCompositeKey: "base|",
+            markers: new Map()
         };
         entries.set(elementId, entry);
         activeElementId = elementId;
@@ -358,6 +359,7 @@
         }
 
         const entry = ensureEntry(elementId, imageUrl, model);
+        entry.markers.clear();
         for (const key of layerKeys) {
             if (key !== "baseMap") {
                 if (model.rasters == null && externalRasterLayerKeys.has(key)) {
@@ -391,7 +393,9 @@
 
         for (const item of model.items ?? []) {
             const layer = entry.layers[item.layer] ?? entry.layers.events;
-            layer.addLayer(makeMarker(item, model.height));
+            const marker = makeMarker(item, model.height);
+            layer.addLayer(marker);
+            entry.markers.set(item.id, marker);
         }
 
         applyVisibility(entry, model.layerVisibility ?? {});
@@ -408,9 +412,21 @@
         entry?.map.fitBounds(entry.bounds, { animate: true, padding: [18, 18] });
     }
 
+    function focusItem(elementId, itemId) {
+        const entry = entries.get(elementId);
+        const marker = entry?.markers.get(itemId);
+        if (!entry || !marker) {
+            return;
+        }
+
+        entry.map.setView(marker.getLatLng(), Math.max(entry.map.getZoom(), 1.5), { animate: true });
+        marker.openTooltip();
+    }
+
     window.rustPlusMap = {
         render,
         setLayerVisibility,
+        focusItem,
         destroy: destroyEntry,
         fitActive
     };

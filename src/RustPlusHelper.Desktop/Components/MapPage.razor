@@ -49,7 +49,7 @@
 
     <div class="map-workspace">
         <div class="map-stage">
-            <MapCanvas State="State" />
+            <MapCanvas State="State" FocusRequest="FocusRequest" />
 
             <div class="map-toolbar" aria-label="Map tools">
                 <button type="button" title="Fit the map" @onclick="FitMap">⌖</button>
@@ -163,6 +163,9 @@
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    [Parameter]
+    public MapFocusRequest? FocusRequest { get; set; }
 
     [Parameter]
     public EventCallback<LayerVisibilityChange> OnLayerChanged { get; set; }

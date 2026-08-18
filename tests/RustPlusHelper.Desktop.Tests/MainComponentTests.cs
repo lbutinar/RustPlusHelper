@@ -177,6 +177,26 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void VendingLocateReturnsToMapAndFocusesVerifiedMarker()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Vending", StringComparison.Ordinal))
+            .Click();
+        component.WaitForElement("[data-testid='locate-vending']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.NotNull(component.Find(".map-page"));
+            var focus = Assert.Single(
+                JSInterop.Invocations,
+                invocation => invocation.Identifier == "rustPlusMap.focusItem");
+            Assert.Equal("marker:2", focus.Arguments[1]);
+        });
+    }
+
+    [Fact]
     public void LayerToggleUpdatesApplicationState()
     {
         var component = Render<Main>();

@@ -62,6 +62,16 @@
                         <strong>@distance.ToString("0") world units from @listing.NearestOnlineTeamMember</strong>
                     </div>
                 }
+                @if (listing.MarkerId is not null && listing.X is not null && listing.Y is not null)
+                {
+                    <button type="button"
+                            class="ghost-button vending-locate"
+                            data-testid="locate-vending"
+                            @onclick="() => OnLocate.InvokeAsync(listing)">
+                        <span class="material-icons" aria-hidden="true">my_location</span>
+                        Locate on map
+                    </button>
+                }
                 @foreach (var order in listing.Offers)
                 {
                     <div class="vending-order">
@@ -78,6 +88,9 @@
 @code {
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    [Parameter]
+    public EventCallback<VendingMachineListing> OnLocate { get; set; }
 
     private string _query = string.Empty;
 
