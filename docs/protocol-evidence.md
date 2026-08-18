@@ -108,6 +108,7 @@ The ore overlay is topology potential, not exact live node state.
 | Marker appeared/disappeared event | Derived by comparing snapshots |
 | Oil-rig activation | Community heuristic, not an explicit protocol event |
 | Vending offer/stock change | Derived by comparing marker sell orders |
+| Vending grid/distance | Derived locally from direct marker/team coordinates and map size |
 | WebSocket lost/restored | Transport event; restored requires a successful authenticated check |
 
 ## Live evidence status

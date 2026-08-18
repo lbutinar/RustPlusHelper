@@ -92,6 +92,13 @@
   responsive (0.28 process CPU seconds over 5 seconds versus 0.33 with derived rasters disabled);
 - the repository contains no live `.map` fixture or source path.
 
+## Current vending tests
+
+- machine names and direct numeric item/currency IDs filter the marketplace without inventing item
+  names;
+- grid references and nearest-online-teammate distances are derived from direct marker/team
+  coordinates while offers remain unchanged.
+
 ## Test layers planned
 
 ### Unit

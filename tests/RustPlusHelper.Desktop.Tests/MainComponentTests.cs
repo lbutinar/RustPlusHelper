@@ -138,6 +138,45 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void VendingSearchFiltersDirectNumericOfferIds()
+    {
+        var state = MapDashboardState.NotStarted with
+        {
+            Server = new ServerInfoSnapshot(
+                "Fake", null, null, "Procedural Map", 4500, null,
+                null, null, null, null, null, null, null, null, null),
+            Markers = new MapMarkersSnapshot([
+                new MapMarkerSnapshot(
+                    1,
+                    MapMarkerKind.VendingMachine,
+                    150,
+                    300,
+                    Name: "Weapons",
+                    VendingOrders: [
+                        new VendingOrderSnapshot(-904863145, 1, -932201673, 85, 3, false, false, 1, 1, null, null)
+                    ]),
+                new MapMarkerSnapshot(
+                    2,
+                    MapMarkerKind.VendingMachine,
+                    300,
+                    300,
+                    Name: "Resources",
+                    VendingOrders: [
+                        new VendingOrderSnapshot(-151838493, 5, -932201673, 20, 7, false, false, 1, 1, null, null)
+                    ])
+            ])
+        };
+        var component = Render<VendingPage>(parameters =>
+            parameters.Add(page => page.State, state));
+
+        component.Find("[data-testid='vending-search']").Input("-151838493");
+
+        Assert.DoesNotContain("Weapons", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("Resources", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("GRID C28", component.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void LayerToggleUpdatesApplicationState()
     {
         var component = Render<Main>();

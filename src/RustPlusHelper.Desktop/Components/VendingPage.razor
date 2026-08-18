@@ -1,3 +1,5 @@
+@using RustPlusHelper.Application.Vending
+
 <section class="content-page">
     <div class="page-heading">
         <div>
@@ -5,29 +7,62 @@
             <h1>Vending</h1>
             <p>Rust+ currently exposes numeric item IDs; item names require a versioned catalogue.</p>
         </div>
-        <div class="summary-chip">@VendingMarkers.Count MACHINES</div>
+        <div class="summary-chip">@Listings.Count MACHINES</div>
     </div>
+
+    <label class="vending-search">
+        <span>SEARCH DIRECT DATA</span>
+        <input data-testid="vending-search"
+               placeholder="Machine name, item ID, or currency ID"
+               autocomplete="off"
+               @bind="_query"
+               @bind:event="oninput" />
+    </label>
 
     <div class="card-grid">
         @if (State.Markers is null)
         {
             <article class="surface-card empty-inline-state">Map markers were not returned by the latest Rust+ refresh.</article>
         }
-        else if (VendingMarkers.Count == 0)
+        else if (Listings.Count == 0)
         {
-            <article class="surface-card empty-inline-state">No vending-machine markers are currently visible in Rust+.</article>
+            <article class="surface-card empty-inline-state">
+                @(string.IsNullOrWhiteSpace(_query)
+                    ? "No vending-machine markers are currently visible in Rust+."
+                    : "No vending offers match this direct name or numeric ID.")
+            </article>
         }
-        @foreach (var marker in VendingMarkers)
+        @foreach (var listing in Listings)
         {
             <article class="surface-card vending-card">
                 <header>
-                    <div><span class="eyebrow">VENDING MARKER</span><h2>@(marker.Name ?? "Unnamed machine")</h2></div>
-                    <span class="status-pill @(marker.IsOutOfStock == true ? "offline" : "online")">
-                        @(marker.IsOutOfStock == true ? "OUT" : "IN STOCK")
+                    <div><span class="eyebrow">VENDING MARKER · DIRECT</span><h2>@listing.Name</h2></div>
+                    <span class="status-pill @(listing.IsOutOfStock == true ? "offline" : "online")">
+                        @(listing.IsOutOfStock == true ? "OUT" : "IN STOCK")
                     </span>
                 </header>
-                <div class="coordinates">X @marker.X?.ToString("0") · Y @marker.Y?.ToString("0")</div>
-                @foreach (var order in marker.VendingOrders ?? [])
+                @if (listing.X is { } x && listing.Y is { } y)
+                {
+                    <div class="coordinates">
+                        X @x.ToString("0") · Y @y.ToString("0")
+                        @if (listing.GridReference is not null)
+                        {
+                            <span> · GRID @listing.GridReference</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="coordinates">POSITION UNAVAILABLE</div>
+                }
+                @if (listing.NearestOnlineTeamDistance is { } distance)
+                {
+                    <div class="vending-distance">
+                        <span>DERIVED DISTANCE</span>
+                        <strong>@distance.ToString("0") world units from @listing.NearestOnlineTeamMember</strong>
+                    </div>
+                }
+                @foreach (var order in listing.Offers)
                 {
                     <div class="vending-order">
                         <div><span>ITEM ID</span><strong>@order.ItemId × @order.Quantity</strong></div>
@@ -44,7 +79,11 @@
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
 
-    private IReadOnlyList<MapMarkerSnapshot> VendingMarkers => State.Markers?.Markers
-        .Where(marker => marker.Kind == MapMarkerKind.VendingMachine)
-        .ToArray() ?? [];
+    private string _query = string.Empty;
+
+    private IReadOnlyList<VendingMachineListing> Listings => VendingMarketplace.Search(
+        State.Markers,
+        State.Team,
+        State.Server?.MapSize,
+        _query);
 }

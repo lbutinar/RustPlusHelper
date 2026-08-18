@@ -1023,6 +1023,29 @@ button {
     padding: 18px;
 }
 
+.vending-search {
+    display: grid;
+    gap: 7px;
+    margin-bottom: 16px;
+}
+
+.vending-search span,
+.vending-distance span {
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.vending-search input {
+    width: min(520px, 100%);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 11px 13px;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text);
+}
+
 .vending-card > header {
     display: flex;
     justify-content: space-between;
@@ -1037,6 +1060,21 @@ button {
     margin: 14px 0;
     color: var(--muted);
     font-family: ui-monospace, monospace;
+    font-size: 9px;
+}
+
+.vending-distance {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: -4px 0 14px;
+    color: var(--muted);
+    font-size: 9px;
+}
+
+.vending-distance strong {
+    color: var(--text);
     font-size: 9px;
 }
 

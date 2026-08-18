@@ -140,6 +140,11 @@ minute; sampled movement trails remain deferred.
 
 **Goal:** Search offers and locate machines.
 
+**Status:** First direct-data slice implemented. Machine names and numeric Rust+ item/currency IDs
+are searchable, each result shows direct price/stock, its derived grid, and distance from the nearest
+online teammate. Friendly item names still require a reviewed versioned external catalogue; map
+focus/navigation and offer-change history remain.
+
 **Modules:** market manager, versioned item catalogue, vending differ/repositories.
 
 **Risks/tests:** item definition drift and multiplier semantics; known offer fixtures.
