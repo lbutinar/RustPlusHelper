@@ -11,9 +11,16 @@ public sealed record VendingMachineListing(
     float? Y,
     string? GridReference,
     bool? IsOutOfStock,
-    IReadOnlyList<VendingOrderSnapshot> Offers,
+    IReadOnlyList<VendingOfferDisplay> Offers,
     string? NearestOnlineTeamMember,
     double? NearestOnlineTeamDistance);
+
+/// <summary>
+/// Decorates a direct Rust+ offer with a catalogue-derived friendly name. <see cref="Offer"/> stays
+/// exactly the untouched direct snapshot; <see cref="ItemName"/>/<see cref="CurrencyName"/> are
+/// external, versioned reference data and are null for anything not yet in the catalogue.
+/// </summary>
+public sealed record VendingOfferDisplay(VendingOrderSnapshot Offer, string? ItemName, string? CurrencyName);
 
 public static class VendingMarketplace
 {
@@ -44,7 +51,17 @@ public static class VendingMarketplace
         return marker.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) == true
             || (marker.VendingOrders ?? []).Any(order =>
                 order.ItemId.ToString(CultureInfo.InvariantCulture).Contains(query, StringComparison.Ordinal)
-                || order.CurrencyId.ToString(CultureInfo.InvariantCulture).Contains(query, StringComparison.Ordinal));
+                || order.CurrencyId.ToString(CultureInfo.InvariantCulture).Contains(query, StringComparison.Ordinal)
+                || MatchesCatalogueName(order.ItemId, query)
+                || MatchesCatalogueName(order.CurrencyId, query));
+    }
+
+    private static bool MatchesCatalogueName(int itemId, string query)
+    {
+        var item = ItemCatalog.TryResolve(itemId);
+        return item is not null
+            && (item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || item.ShortName.Contains(query, StringComparison.OrdinalIgnoreCase));
     }
 
     private static VendingMachineListing CreateListing(
@@ -73,6 +90,13 @@ public static class VendingMarketplace
             ? MapGrid.WorldToGrid(x, y, size)?.Label
             : null;
 
+        var offers = (marker.VendingOrders ?? [])
+            .Select(order => new VendingOfferDisplay(
+                order,
+                ItemCatalog.TryResolve(order.ItemId)?.Name,
+                ItemCatalog.TryResolve(order.CurrencyId)?.Name))
+            .ToArray();
+
         return new VendingMachineListing(
             marker.Id,
             marker.Name ?? "Unnamed machine",
@@ -80,7 +104,7 @@ public static class VendingMarketplace
             marker.Y,
             grid,
             marker.IsOutOfStock,
-            marker.VendingOrders ?? [],
+            offers,
             nearest?.Member.Name ?? (nearest is null ? null : "Unnamed teammate"),
             nearest?.Distance);
     }

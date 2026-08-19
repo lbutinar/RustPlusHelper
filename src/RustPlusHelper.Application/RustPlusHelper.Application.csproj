@@ -2,4 +2,7 @@
   <PropertyGroup>
     <Description>Application-owned Rust+ contracts and canonical data models.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Vending\rust-items.json" />
+  </ItemGroup>
 </Project>

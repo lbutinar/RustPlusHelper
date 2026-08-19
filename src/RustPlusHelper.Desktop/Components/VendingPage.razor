@@ -5,7 +5,8 @@
         <div>
             <span class="eyebrow">DIRECT MAP MARKERS</span>
             <h1>Vending</h1>
-            <p>Rust+ currently exposes numeric item IDs; item names require a versioned catalogue.</p>
+            <p>Item names come from an external, versioned Rust item catalogue and may lag brand-new
+                game updates; an unmatched ID still shows as a raw number rather than a guess.</p>
         </div>
         <div class="summary-chip">@Listings.Count MACHINES</div>
     </div>
@@ -13,7 +14,7 @@
     <label class="vending-search">
         <span>SEARCH DIRECT DATA</span>
         <input data-testid="vending-search"
-               placeholder="Machine name, item ID, or currency ID"
+               placeholder="Machine name, item name, item ID, or currency ID"
                autocomplete="off"
                @bind="_query"
                @bind:event="oninput" />
@@ -75,9 +76,9 @@
                 @foreach (var order in listing.Offers)
                 {
                     <div class="vending-order">
-                        <div><span>ITEM ID</span><strong>@order.ItemId × @order.Quantity</strong></div>
-                        <div><span>PRICE</span><strong>@order.Cost × @order.CurrencyId</strong></div>
-                        <div><span>STOCK</span><strong>@order.Stock</strong></div>
+                        <div><span>ITEM</span><strong>@(order.ItemName ?? $"Item #{order.Offer.ItemId}") × @order.Offer.Quantity</strong></div>
+                        <div><span>PRICE</span><strong>@order.Offer.Cost × @(order.CurrencyName ?? $"Item #{order.Offer.CurrencyId}")</strong></div>
+                        <div><span>STOCK</span><strong>@order.Offer.Stock</strong></div>
                     </div>
                 }
             </article>
