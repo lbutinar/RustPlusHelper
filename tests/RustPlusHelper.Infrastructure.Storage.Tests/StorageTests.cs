@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
@@ -29,7 +30,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(10L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(11L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -66,6 +67,7 @@ public sealed class StorageTests
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN elevation_rgba;");
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN water_depth_rgba;");
             Execute(connection, "DROP TABLE saved_cameras;");
+            Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
@@ -126,6 +128,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE companion_events;");
             Execute(connection, "DROP TABLE application_secrets;");
             Execute(connection, "DROP TABLE saved_cameras;");
+            Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -295,6 +298,29 @@ public sealed class StorageTests
         Assert.Equal([backDoor, frontGate], repository.GetAll(profile.Id));
         Assert.True(repository.Remove(profile.Id, backDoor.Id));
         Assert.Equal([frontGate], repository.GetAll(profile.Id));
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Empty(repository.GetAll(profile.Id));
+    }
+
+    [Fact]
+    public void PairedEntitiesRoundTripPreserveUlongIdAndCascadeWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqlitePairedEntityRepository(temporary.Database);
+        var frontDoorSwitch = new PairedEntity(
+            Guid.NewGuid(), profile.Id, ulong.MaxValue, PairedEntityKind.Switch, "Front door", FixedUtc.AddMinutes(-1));
+        var baseAlarm = new PairedEntity(
+            Guid.NewGuid(), profile.Id, 123456789UL, PairedEntityKind.Alarm, "Base alarm", FixedUtc);
+
+        repository.Add(frontDoorSwitch);
+        repository.Add(baseAlarm);
+
+        Assert.Equal([baseAlarm, frontDoorSwitch], repository.GetAll(profile.Id));
+        Assert.True(repository.Remove(profile.Id, baseAlarm.Id));
+        Assert.Equal([frontDoorSwitch], repository.GetAll(profile.Id));
         Assert.True(servers.Remove(profile.Id));
         Assert.Empty(repository.GetAll(profile.Id));
     }

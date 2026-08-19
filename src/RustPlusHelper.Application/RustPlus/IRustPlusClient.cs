@@ -55,4 +55,31 @@ public interface IRustPlusClient : IAsyncDisposable
 
     /// <summary>Ends the current camera subscription, if any.</summary>
     Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Raised whenever a paired entity's state changes. Carries no entity type of its
+    /// own — the caller must already know the entity's paired kind to interpret the payload.</summary>
+    event EventHandler<EntityStateChangedSnapshot>? EntityStateChanged;
+
+    /// <summary>Reads a Smart Switch's current value. Also arms this entity's
+    /// <see cref="EntityStateChanged"/> broadcasts going forward (a verified Rust+ behavior — see
+    /// docs/protocol-evidence.md).</summary>
+    Task<RustPlusResult<SmartDeviceStateSnapshot>> GetSmartSwitchInfoAsync(ulong entityId, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads a Smart Alarm's current value (arms broadcasts, same as
+    /// <see cref="GetSmartSwitchInfoAsync"/>). This is the live signal state only — the alarm's
+    /// triggered message/title arrives over a separate FCM channel, not this call.</summary>
+    Task<RustPlusResult<SmartDeviceStateSnapshot>> GetAlarmInfoAsync(ulong entityId, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads a Storage Monitor's capacity/protection/contents (arms broadcasts, same as
+    /// <see cref="GetSmartSwitchInfoAsync"/>).</summary>
+    Task<RustPlusResult<StorageMonitorStateSnapshot>> GetStorageMonitorInfoAsync(ulong entityId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets a Smart Switch's value. Returns the resulting state directly (the verified
+    /// Rust+ response carries it back), so callers never need a separate re-read.</summary>
+    Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchValueAsync(ulong entityId, bool value, CancellationToken cancellationToken = default);
+
+    Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(ulong entityId, CancellationToken cancellationToken = default);
+
+    /// <summary>Rapidly toggles a Smart Switch for <paramref name="duration"/>.</summary>
+    Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(ulong entityId, TimeSpan duration, bool value, CancellationToken cancellationToken = default);
 }

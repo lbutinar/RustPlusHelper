@@ -1,3 +1,5 @@
+using RustPlusHelper.Application.Pairing;
+
 namespace RustPlusHelper.Application.RustPlus;
 
 public enum RustPlusLiveSessionStatus
@@ -63,6 +65,21 @@ public sealed record CameraSessionState(
 {
     public static CameraSessionState Inactive { get; } = new(CameraSessionStatus.Inactive, null, null, null, null);
 }
+
+/// <summary>
+/// Live state for one paired Smart Switch/Alarm/Storage Monitor. <see cref="Kind"/> comes from how
+/// the entity was paired, not from the broadcast payload — Rust+ broadcasts carry no entity type of
+/// their own, so this is the only reliable way to know whether to read <see cref="Value"/>
+/// (Switch/Alarm) or <see cref="Capacity"/>/<see cref="Items"/> (Storage Monitor).
+/// </summary>
+public sealed record PairedEntityLiveState(
+    ulong EntityId,
+    PairedEntityKind Kind,
+    bool? Value,
+    int? Capacity,
+    bool? HasProtection,
+    IReadOnlyList<StorageItemSnapshot> Items,
+    string? Error);
 
 public sealed record RustPlusLiveSessionSeed(
     ServerInfoSnapshot? Server = null,

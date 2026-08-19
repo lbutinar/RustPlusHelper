@@ -23,6 +23,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly InMemorySecretStore _secretStore;
     private readonly PlayerIdentityManager _identityManager;
     private readonly RustPlusConnectionManager _connections;
+    private readonly InMemoryPairedEntityRepository _pairedEntities;
 
     public MainComponentTests()
     {
@@ -52,12 +53,21 @@ public sealed class MainComponentTests : BunitContext
             _secretStore,
             new FakeClientFactory(),
             TimeProvider.System);
+        _pairedEntities = new InMemoryPairedEntityRepository();
         var liveSession = new RustPlusLiveSessionManager(
             new RustPlusSavedConnectionResolver(serverManager, _secretStore),
             new FakeClientFactory(),
             TimeProvider.System,
             RustPlusPollingOptions.Default,
-            new InMemoryCompanionEventRepository());
+            new InMemoryCompanionEventRepository(),
+            _pairedEntities);
+        var entityPairing = new RustPlusEntityPairingManager(
+            new UnavailablePairingProvider(),
+            applicationSecrets,
+            _identityManager,
+            _pairedEntities,
+            TimeProvider.System);
+        entityPairing.Load();
         var client = new FakeRustPlusClient();
         var connection = new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2);
         var mapCache = new InMemoryMapCacheRepository();
@@ -88,6 +98,8 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(_connections);
         Services.AddSingleton(liveSession);
         Services.AddSingleton<ISavedCameraRepository>(new InMemorySavedCameraRepository());
+        Services.AddSingleton<IPairedEntityRepository>(_pairedEntities);
+        Services.AddSingleton(entityPairing);
         Services.AddSingleton<IMapCacheRepository>(mapCache);
         Services.AddSingleton(mapTopology);
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
@@ -99,6 +111,11 @@ public sealed class MainComponentTests : BunitContext
             throw new InvalidOperationException("Not available in component tests.");
 
         public Task<CapturedRustPlusPairing> WaitForServerPairingAsync(
+            ReadOnlyMemory<byte> credentials,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Not available in component tests.");
+
+        public Task<CapturedEntityPairing> WaitForEntityPairingAsync(
             ReadOnlyMemory<byte> credentials,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Not available in component tests.");
@@ -297,6 +314,38 @@ public sealed class MainComponentTests : BunitContext
         component.Find("[data-testid='stop-viewing-camera']").Click();
         component.WaitForAssertion(() =>
             Assert.DoesNotContain("VIEWING", component.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DevicesPageArmsAndTogglesAPairedSmartSwitch()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+        _pairedEntities.Add(new PairedEntity(
+            Guid.NewGuid(), serverId, 555UL, PairedEntityKind.Switch, "Front gate switch", DateTimeOffset.UtcNow));
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+        await WaitUntilAsync(() => liveSession.PairedEntityStates.ContainsKey(555UL));
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Contains("Front gate switch", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("SMART SWITCH", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("On", component.Markup, StringComparison.Ordinal);
+        });
+
+        component.Find("[data-testid='toggle-switch']").Click();
+
+        component.WaitForAssertion(() =>
+            Assert.Contains("Off", component.Markup, StringComparison.Ordinal));
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

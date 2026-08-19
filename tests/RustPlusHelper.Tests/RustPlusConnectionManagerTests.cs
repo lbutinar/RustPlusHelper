@@ -300,6 +300,44 @@ public sealed class RustPlusConnectionManagerTests
 
         public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+        // Connection-management tests never exercise smart devices.
+#pragma warning disable CS0067
+        public event EventHandler<EntityStateChangedSnapshot>? EntityStateChanged;
+#pragma warning restore CS0067
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetSmartSwitchInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No device configured."));
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetAlarmInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No device configured."));
+
+        public Task<RustPlusResult<StorageMonitorStateSnapshot>> GetStorageMonitorInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<StorageMonitorStateSnapshot>.Failure("not_configured", "No device configured."));
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchValueAsync(
+            ulong entityId,
+            bool value,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No device configured."));
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No device configured."));
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(
+            ulong entityId,
+            TimeSpan duration,
+            bool value,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No device configured."));
+
         public async ValueTask DisposeAsync()
         {
             await DisconnectAsync().ConfigureAwait(false);

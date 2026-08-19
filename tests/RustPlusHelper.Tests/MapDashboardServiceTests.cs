@@ -285,7 +285,8 @@ public sealed class MapDashboardServiceTests
             factory,
             TimeProvider.System,
             RustPlusPollingOptions.Default,
-            new InMemoryCompanionEventRepository());
+            new InMemoryCompanionEventRepository(),
+            new InMemoryPairedEntityRepository());
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

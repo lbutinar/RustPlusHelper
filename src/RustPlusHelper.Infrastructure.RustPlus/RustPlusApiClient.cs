@@ -25,6 +25,8 @@ public sealed class RustPlusApiClient : IRustPlusClient
 
     public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
 
+    public event EventHandler<EntityStateChangedSnapshot>? EntityStateChanged;
+
     public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
 
     public async Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
@@ -47,6 +49,7 @@ public sealed class RustPlusApiClient : IRustPlusClient
         try
         {
             await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            client.OnEntityChanged += HandleEntityChanged;
             _client = client;
         }
         catch (OperationCanceledException)
@@ -81,6 +84,7 @@ public sealed class RustPlusApiClient : IRustPlusClient
             return;
         }
 
+        client.OnEntityChanged -= HandleEntityChanged;
         try
         {
             if (client.IsConnected)
@@ -194,6 +198,57 @@ public sealed class RustPlusApiClient : IRustPlusClient
         await TeardownCameraAsync().ConfigureAwait(false);
     }
 
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetSmartSwitchInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.GetSmartSwitchInfoAsync(entityId, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetAlarmInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.GetAlarmInfoAsync(entityId, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
+    public Task<RustPlusResult<StorageMonitorStateSnapshot>> GetStorageMonitorInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.GetStorageMonitorInfoAsync(entityId, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchValueAsync(
+        ulong entityId,
+        bool value,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.SetSmartSwitchValueAsync(entityId, value, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.ToggleSmartSwitchAsync(entityId, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(
+        ulong entityId,
+        TimeSpan duration,
+        bool value,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.StrobeSmartSwitchAsync(entityId, (int)duration.TotalMilliseconds, value, cancellationToken),
+            data => RustPlusApiMapper.Map(entityId, data),
+            cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync().ConfigureAwait(false);
@@ -299,6 +354,9 @@ public sealed class RustPlusApiClient : IRustPlusClient
             new RustPlusError(
                 error.Code.ToString(),
                 SecretRedactor.Redact(error.Message ?? "Camera subscription renewal failed.", _tokenText)));
+
+    private void HandleEntityChanged(object? sender, EntityChangedEventArg args) =>
+        EntityStateChanged?.Invoke(this, RustPlusApiMapper.Map(args));
 
     private async Task TeardownCameraAsync()
     {

@@ -1,3 +1,4 @@
+using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Servers;
 using RustPlusHelper.Application.Testing;
@@ -354,10 +355,125 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.Equal("Camera entity destroyed.", manager.CurrentCamera.Error);
     }
 
+    [Fact]
+    public async Task ArmsEachPairedEntityOnceOnConnectAndPopulatesLiveState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var pairedEntities = new InMemoryPairedEntityRepository();
+        pairedEntities.Add(new PairedEntity(Guid.NewGuid(), profile.Id, 111, PairedEntityKind.Switch, "Front gate", DateTimeOffset.UnixEpoch));
+        var factory = new ScriptedFactory(_ =>
+        {
+            var client = new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]);
+            client.ConfigureSmartDevice(111, value: true);
+            return client;
+        });
+        await using var manager = CreateManager(servers, secrets, factory, pairedEntities);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.PairedEntityStates.ContainsKey(111));
+
+        var state = manager.PairedEntityStates[111];
+        Assert.Equal(PairedEntityKind.Switch, state.Kind);
+        Assert.True(state.Value);
+        Assert.Equal(1, factory.Clients[0].SmartSwitchInfoRequests.Count(id => id == 111));
+    }
+
+    [Fact]
+    public async Task RoutesEntityBroadcastByStoredKindNotPayloadShape()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var pairedEntities = new InMemoryPairedEntityRepository();
+        pairedEntities.Add(new PairedEntity(
+            Guid.NewGuid(), profile.Id, 222, PairedEntityKind.StorageMonitor, "Base storage", DateTimeOffset.UnixEpoch));
+        var factory = new ScriptedFactory(_ =>
+        {
+            var client = new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]);
+            client.ConfigureStorageMonitor(222, capacity: 24, [new StorageItemSnapshot(-932201673, 400, false)]);
+            return client;
+        });
+        await using var manager = CreateManager(servers, secrets, factory, pairedEntities);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.PairedEntityStates.ContainsKey(222));
+
+        // A broadcast that looks switch-shaped (only Value set, no Capacity/Items) must not be
+        // mistaken for this entity's real kind — RustPlusApi itself cannot tell them apart from the
+        // payload alone; only our own paired-entity record can.
+        factory.Clients[0].RaiseEntityStateChanged(new EntityStateChangedSnapshot(222, true, null, null, []));
+
+        var state = manager.PairedEntityStates[222];
+        Assert.Equal(PairedEntityKind.StorageMonitor, state.Kind);
+        Assert.Null(state.Value);
+        Assert.Equal(24, state.Capacity);
+        Assert.Single(state.Items);
+    }
+
+    [Fact]
+    public async Task EntityBroadcastUpdatesASwitchsLiveValue()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var pairedEntities = new InMemoryPairedEntityRepository();
+        pairedEntities.Add(new PairedEntity(Guid.NewGuid(), profile.Id, 333, PairedEntityKind.Switch, "Front gate", DateTimeOffset.UnixEpoch));
+        var factory = new ScriptedFactory(_ =>
+        {
+            var client = new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]);
+            client.ConfigureSmartDevice(333, value: false);
+            return client;
+        });
+        await using var manager = CreateManager(servers, secrets, factory, pairedEntities);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.PairedEntityStates.ContainsKey(333));
+
+        factory.Clients[0].RaiseEntityStateChanged(new EntityStateChangedSnapshot(333, true, null, null, []));
+
+        Assert.True(manager.PairedEntityStates[333].Value);
+    }
+
+    [Fact]
+    public async Task ToggleSmartSwitchAsyncFlipsTheSwitchAndUpdatesLiveState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var pairedEntities = new InMemoryPairedEntityRepository();
+        pairedEntities.Add(new PairedEntity(Guid.NewGuid(), profile.Id, 444, PairedEntityKind.Switch, "Front gate", DateTimeOffset.UnixEpoch));
+        var factory = new ScriptedFactory(_ =>
+        {
+            var client = new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]);
+            client.ConfigureSmartDevice(444, value: false);
+            return client;
+        });
+        await using var manager = CreateManager(servers, secrets, factory, pairedEntities);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.PairedEntityStates.ContainsKey(444));
+
+        var result = await manager.ToggleSmartSwitchAsync(444);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Data!.Value);
+        Assert.True(manager.PairedEntityStates[444].Value);
+    }
+
+    [Fact]
+    public async Task SetSmartSwitchAsyncFailsWhenNotConnected()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        var result = await manager.SetSmartSwitchAsync(555, true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("not_connected", result.Error?.Code);
+    }
+
     private static RustPlusLiveSessionManager CreateManager(
         ServerManager servers,
         InMemorySecretStore secrets,
-        IRustPlusClientFactory factory) =>
+        IRustPlusClientFactory factory,
+        IPairedEntityRepository? pairedEntities = null) =>
         new(
             new RustPlusSavedConnectionResolver(servers, secrets),
             factory,
@@ -369,7 +485,8 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
                 [TimeSpan.FromMilliseconds(5)]),
-            new InMemoryCompanionEventRepository());
+            new InMemoryCompanionEventRepository(),
+            pairedEntities ?? new InMemoryPairedEntityRepository());
 
     [Fact]
     public async Task ReloadsPersistedEventsWhenMonitoringRestarts()
@@ -396,7 +513,8 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
                 [TimeSpan.FromMilliseconds(5)]),
-            history);
+            history,
+            new InMemoryPairedEntityRepository());
 
         await manager.StartAsync(profile.Id);
 
@@ -497,15 +615,93 @@ public sealed class RustPlusLiveSessionManagerTests
 
         public int ZoomCallCount { get; private set; }
 
+        private readonly Dictionary<ulong, SmartDeviceStateSnapshot> _smartDeviceInfo = [];
+        private readonly Dictionary<ulong, StorageMonitorStateSnapshot> _storageMonitorInfo = [];
+
         public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
 
         public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
+
+        public event EventHandler<EntityStateChangedSnapshot>? EntityStateChanged;
 
         /// <summary>Test hook: simulates a camera ray broadcast arriving for the active subscription.</summary>
         public void RaiseCameraFrame(CameraFrameSnapshot frame) => CameraFrameReceived?.Invoke(this, frame);
 
         /// <summary>Test hook: simulates the keep-alive renewal failing (e.g. camera destroyed).</summary>
         public void RaiseCameraSubscriptionFailed(RustPlusError error) => CameraSubscriptionFailed?.Invoke(this, error);
+
+        public List<ulong> SmartSwitchInfoRequests { get; } = [];
+
+        public List<ulong> AlarmInfoRequests { get; } = [];
+
+        public List<ulong> StorageMonitorInfoRequests { get; } = [];
+
+        /// <summary>Test hook: configures the value Get*InfoAsync returns for a given entity.</summary>
+        public void ConfigureSmartDevice(ulong entityId, bool value) =>
+            _smartDeviceInfo[entityId] = new SmartDeviceStateSnapshot(entityId, value);
+
+        /// <summary>Test hook: configures the value GetStorageMonitorInfoAsync returns for a given entity.</summary>
+        public void ConfigureStorageMonitor(ulong entityId, int? capacity, IReadOnlyList<StorageItemSnapshot> items) =>
+            _storageMonitorInfo[entityId] = new StorageMonitorStateSnapshot(entityId, capacity, true, items);
+
+        /// <summary>Test hook: simulates an entity-changed broadcast for the given entity.</summary>
+        public void RaiseEntityStateChanged(EntityStateChangedSnapshot snapshot) =>
+            EntityStateChanged?.Invoke(this, snapshot);
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetSmartSwitchInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default)
+        {
+            SmartSwitchInfoRequests.Add(entityId);
+            return Task.FromResult(_smartDeviceInfo.TryGetValue(entityId, out var value)
+                ? RustPlusResult<SmartDeviceStateSnapshot>.Success(value)
+                : RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No test device configured."));
+        }
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetAlarmInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default)
+        {
+            AlarmInfoRequests.Add(entityId);
+            return Task.FromResult(_smartDeviceInfo.TryGetValue(entityId, out var value)
+                ? RustPlusResult<SmartDeviceStateSnapshot>.Success(value)
+                : RustPlusResult<SmartDeviceStateSnapshot>.Failure("not_configured", "No test device configured."));
+        }
+
+        public Task<RustPlusResult<StorageMonitorStateSnapshot>> GetStorageMonitorInfoAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default)
+        {
+            StorageMonitorInfoRequests.Add(entityId);
+            return Task.FromResult(_storageMonitorInfo.TryGetValue(entityId, out var value)
+                ? RustPlusResult<StorageMonitorStateSnapshot>.Success(value)
+                : RustPlusResult<StorageMonitorStateSnapshot>.Failure("not_configured", "No test device configured."));
+        }
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchValueAsync(
+            ulong entityId,
+            bool value,
+            CancellationToken cancellationToken = default)
+        {
+            var snapshot = new SmartDeviceStateSnapshot(entityId, value);
+            _smartDeviceInfo[entityId] = snapshot;
+            return Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Success(snapshot));
+        }
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(
+            ulong entityId,
+            CancellationToken cancellationToken = default)
+        {
+            var current = _smartDeviceInfo.TryGetValue(entityId, out var existing) && existing.Value;
+            return SetSmartSwitchValueAsync(entityId, !current, cancellationToken);
+        }
+
+        public Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(
+            ulong entityId,
+            TimeSpan duration,
+            bool value,
+            CancellationToken cancellationToken = default) =>
+            SetSmartSwitchValueAsync(entityId, value, cancellationToken);
 
         public Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
         {

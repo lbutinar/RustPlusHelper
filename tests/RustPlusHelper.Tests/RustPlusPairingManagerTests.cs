@@ -155,6 +155,9 @@ public sealed class RustPlusPairingManagerTests
         public CapturedRustPlusPairing Pairing { get; set; } =
             new("pair.invalid", 28082, PlayerId, 42, "Sanitized server");
 
+        public CapturedEntityPairing EntityPairing { get; set; } =
+            new(PlayerId, 42, 12345, PairedEntityKind.Switch, "Sanitized switch");
+
         public Task<byte[]> RegisterAsync(CancellationToken cancellationToken = default)
         {
             ReturnedCredentials = Encoding.UTF8.GetBytes("sanitized-registration");
@@ -164,5 +167,9 @@ public sealed class RustPlusPairingManagerTests
         public Task<CapturedRustPlusPairing> WaitForServerPairingAsync(
             ReadOnlyMemory<byte> credentials,
             CancellationToken cancellationToken = default) => Task.FromResult(Pairing);
+
+        public Task<CapturedEntityPairing> WaitForEntityPairingAsync(
+            ReadOnlyMemory<byte> credentials,
+            CancellationToken cancellationToken = default) => Task.FromResult(EntityPairing);
     }
 }

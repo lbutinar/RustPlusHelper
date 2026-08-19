@@ -1,4 +1,5 @@
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.Vending;
 
 namespace RustPlusHelper.Application.RustPlus;
@@ -12,7 +13,8 @@ public sealed class RustPlusLiveSessionManager(
     IRustPlusClientFactory clientFactory,
     TimeProvider timeProvider,
     RustPlusPollingOptions pollingOptions,
-    ICompanionEventRepository eventRepository) : IAsyncDisposable, IDisposable
+    ICompanionEventRepository eventRepository,
+    IPairedEntityRepository pairedEntities) : IAsyncDisposable, IDisposable
 {
     private const int EventLimit = 200;
     private static readonly TimeSpan MovementEventCooldown = TimeSpan.FromMinutes(1);
@@ -36,12 +38,21 @@ public sealed class RustPlusLiveSessionManager(
     // reach it. Guarded by _stateLock since RunAsync and camera calls run on different tasks.
     private IRustPlusClient? _activeClient;
     private DateTimeOffset _lastCameraFramePublishUtc;
+    private IReadOnlyDictionary<ulong, PairedEntityLiveState> _pairedEntityStates =
+        new Dictionary<ulong, PairedEntityLiveState>();
 
     public event EventHandler? StateChanged;
 
     public RustPlusLiveSessionState Current { get; private set; } = RustPlusLiveSessionState.Stopped;
 
     public CameraSessionState CurrentCamera { get; private set; } = CameraSessionState.Inactive;
+
+    /// <summary>Live state for every entity paired to the current server, keyed by entity ID.
+    /// Populated by (re)arming each paired entity once per connection.</summary>
+    public IReadOnlyDictionary<ulong, PairedEntityLiveState> PairedEntityStates
+    {
+        get { lock (_stateLock) { return _pairedEntityStates; } }
+    }
 
     public async Task StartAsync(
         Guid serverId,
@@ -216,6 +227,11 @@ public sealed class RustPlusLiveSessionManager(
                             LastRefreshUtc = timeProvider.GetUtcNow(),
                             Error = null
                         });
+
+                        // Reading each paired entity's info once arms its broadcast for this
+                        // connection (verified Rust+ behavior — see docs/protocol-evidence.md). A
+                        // fresh connection needs this again; a prior connection's arming is gone.
+                        await ArmPairedEntitiesAsync(serverId, client, cancellationToken).ConfigureAwait(false);
                     }
 
                     await PollConnectedAsync(serverId, client, cancellationToken).ConfigureAwait(false);
@@ -624,6 +640,149 @@ public sealed class RustPlusLiveSessionManager(
         CancellationToken cancellationToken = default) =>
         ExecuteCameraCommandAsync(client => client.MoveCameraAsync(direction, cancellationToken));
 
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchAsync(
+        ulong entityId,
+        bool value,
+        CancellationToken cancellationToken = default) =>
+        ExecuteSmartDeviceCommandAsync(entityId, client => client.SetSmartSwitchValueAsync(entityId, value, cancellationToken));
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteSmartDeviceCommandAsync(entityId, client => client.ToggleSmartSwitchAsync(entityId, cancellationToken));
+
+    /// <summary>Rapidly toggles a Smart Switch for <paramref name="duration"/>, ending at
+    /// <paramref name="value"/>.</summary>
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(
+        ulong entityId,
+        TimeSpan duration,
+        bool value,
+        CancellationToken cancellationToken = default) =>
+        ExecuteSmartDeviceCommandAsync(
+            entityId,
+            client => client.StrobeSmartSwitchAsync(entityId, duration, value, cancellationToken));
+
+    private async Task<RustPlusResult<SmartDeviceStateSnapshot>> ExecuteSmartDeviceCommandAsync(
+        ulong entityId,
+        Func<IRustPlusClient, Task<RustPlusResult<SmartDeviceStateSnapshot>>> operation)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var client = GetActiveClient();
+        if (client is null)
+        {
+            return RustPlusResult<SmartDeviceStateSnapshot>.Failure(
+                "not_connected", "The live Rust+ connection is not ready.");
+        }
+
+        var result = await operation(client).ConfigureAwait(false);
+        if (result.IsSuccess && result.Data is not null)
+        {
+            UpdateEntityState(entityId, existing => existing with { Value = result.Data.Value, Error = null });
+        }
+
+        return result;
+    }
+
+    private async Task ArmPairedEntitiesAsync(Guid serverId, IRustPlusClient client, CancellationToken cancellationToken)
+    {
+        var entities = pairedEntities.GetAll(serverId);
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        var states = new Dictionary<ulong, PairedEntityLiveState>();
+        foreach (var entity in entities)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            states[entity.EntityId] = await ReadEntityStateAsync(client, entity, cancellationToken).ConfigureAwait(false);
+        }
+
+        lock (_stateLock)
+        {
+            _pairedEntityStates = states;
+        }
+
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static async Task<PairedEntityLiveState> ReadEntityStateAsync(
+        IRustPlusClient client,
+        PairedEntity entity,
+        CancellationToken cancellationToken)
+    {
+        switch (entity.Kind)
+        {
+            case PairedEntityKind.Switch:
+            {
+                var result = await client.GetSmartSwitchInfoAsync(entity.EntityId, cancellationToken).ConfigureAwait(false);
+                return ToLiveState(entity, result.IsSuccess && result.Data is not null ? result.Data.Value : null, result);
+            }
+
+            case PairedEntityKind.Alarm:
+            {
+                var result = await client.GetAlarmInfoAsync(entity.EntityId, cancellationToken).ConfigureAwait(false);
+                return ToLiveState(entity, result.IsSuccess && result.Data is not null ? result.Data.Value : null, result);
+            }
+
+            case PairedEntityKind.StorageMonitor:
+            {
+                var result = await client.GetStorageMonitorInfoAsync(entity.EntityId, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess && result.Data is not null
+                    ? new PairedEntityLiveState(
+                        entity.EntityId, entity.Kind, null, result.Data.Capacity, result.Data.HasProtection, result.Data.Items, null)
+                    : new PairedEntityLiveState(
+                        entity.EntityId, entity.Kind, null, null, null, [], DescribeEntityError(result.Error));
+            }
+
+            default:
+                return new PairedEntityLiveState(entity.EntityId, entity.Kind, null, null, null, [], "Unknown device kind.");
+        }
+
+        static PairedEntityLiveState ToLiveState(PairedEntity entity, bool? value, RustPlusResult<SmartDeviceStateSnapshot> result) =>
+            value is { } known
+                ? new PairedEntityLiveState(entity.EntityId, entity.Kind, known, null, null, [], null)
+                : new PairedEntityLiveState(entity.EntityId, entity.Kind, null, null, null, [], DescribeEntityError(result.Error));
+    }
+
+    private static string DescribeEntityError(RustPlusError? error) => error?.Message ?? "Could not read this device.";
+
+    private void HandleEntityStateChanged(object? sender, EntityStateChangedSnapshot snapshot) =>
+        UpdateEntityState(snapshot.EntityId, existing => existing.Kind == PairedEntityKind.StorageMonitor
+            ? existing with
+            {
+                // Some storage-monitor broadcasts carry only Value as a lifecycle pulse (per
+                // rustplus.js: two broadcasts on change, value=true then value=false) with no
+                // Capacity/Items of their own — never let an absent field null out known-good state.
+                Capacity = snapshot.Capacity ?? existing.Capacity,
+                HasProtection = snapshot.HasProtection ?? existing.HasProtection,
+                Items = snapshot.Items.Count > 0 ? snapshot.Items : existing.Items,
+                Error = null
+            }
+            : existing with { Value = snapshot.Value, Error = null });
+
+    private void UpdateEntityState(ulong entityId, Func<PairedEntityLiveState, PairedEntityLiveState> update)
+    {
+        var changed = false;
+        lock (_stateLock)
+        {
+            if (_pairedEntityStates.TryGetValue(entityId, out var existing))
+            {
+                var updated = new Dictionary<ulong, PairedEntityLiveState>(_pairedEntityStates)
+                {
+                    [entityId] = update(existing)
+                };
+                _pairedEntityStates = updated;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private async Task<RustPlusResult<bool>> ExecuteCameraCommandAsync(
         Func<IRustPlusClient, Task<RustPlusResult<bool>>> operation)
     {
@@ -645,10 +804,13 @@ public sealed class RustPlusLiveSessionManager(
         }
     }
 
+    // Also wires the paired-entity broadcast despite the name — both are per-connection event
+    // subscriptions on the same client, attached/detached together.
     private void AttachCameraEvents(IRustPlusClient client)
     {
         client.CameraFrameReceived += HandleCameraFrame;
         client.CameraSubscriptionFailed += HandleCameraSubscriptionFailed;
+        client.EntityStateChanged += HandleEntityStateChanged;
         lock (_stateLock)
         {
             _activeClient = client;
@@ -659,6 +821,7 @@ public sealed class RustPlusLiveSessionManager(
     {
         client.CameraFrameReceived -= HandleCameraFrame;
         client.CameraSubscriptionFailed -= HandleCameraSubscriptionFailed;
+        client.EntityStateChanged -= HandleEntityStateChanged;
     }
 
     private void ClearActiveClient()
@@ -666,6 +829,7 @@ public sealed class RustPlusLiveSessionManager(
         lock (_stateLock)
         {
             _activeClient = null;
+            _pairedEntityStates = new Dictionary<ulong, PairedEntityLiveState>();
         }
 
         // The connection that owned the camera subscription is gone; never leave the UI showing
@@ -678,6 +842,8 @@ public sealed class RustPlusLiveSessionManager(
                 Error = "The Rust+ connection was lost."
             });
         }
+
+        StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void HandleCameraFrame(object? sender, CameraFrameSnapshot frame)

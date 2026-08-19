@@ -65,6 +65,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IMapTopologyRepository, SqliteMapTopologyRepository>();
         builder.Services.AddSingleton<ICompanionEventRepository, SqliteCompanionEventRepository>();
         builder.Services.AddSingleton<ISavedCameraRepository, SqliteSavedCameraRepository>();
+        builder.Services.AddSingleton<IPairedEntityRepository, SqlitePairedEntityRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
         builder.Services.AddSingleton<PlayerIdentityManager>();
         builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();
@@ -73,12 +74,14 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ServerManager>();
         builder.Services.AddSingleton<IRustPlusPairingProvider, RustPlusApiPairingProvider>();
         builder.Services.AddSingleton<RustPlusPairingManager>();
+        builder.Services.AddSingleton<RustPlusEntityPairingManager>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();
         _host.Services.GetRequiredService<PlayerIdentityManager>().Load();
         _host.Services.GetRequiredService<ServerManager>().Load();
         _host.Services.GetRequiredService<RustPlusPairingManager>().Load();
+        _host.Services.GetRequiredService<RustPlusEntityPairingManager>().Load();
 
         var window = new MainWindow(_host.Services);
         MainWindow = window;

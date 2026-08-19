@@ -1,27 +1,114 @@
 @implements IDisposable
 @inject RustPlusHelper.Application.RustPlus.ISavedCameraRepository CameraRepository
+@inject RustPlusHelper.Application.RustPlus.IPairedEntityRepository PairedEntityRepository
 @inject RustPlusHelper.Application.RustPlus.RustPlusLiveSessionManager LiveSession
+@inject RustPlusHelper.Application.Pairing.RustPlusEntityPairingManager EntityPairing
 @using RustPlusHelper.Application.RustPlus
+@using RustPlusHelper.Application.Pairing
+@using RustPlusHelper.Application.Vending
 
 <section class="content-page">
     <div class="page-heading">
         <div>
             <span class="eyebrow">VERIFIED ENTITY BOUNDARY</span>
             <h1>Devices</h1>
-            <p>Smart Switch, Smart Alarm, and Storage Monitor support arrives after entity pairing.</p>
+            <p>Rust+ has no device discovery; pair a Smart Switch, Smart Alarm, or Storage Monitor from Rust to add it here.</p>
         </div>
     </div>
 
-    <div class="empty-capability surface-card">
-        <div class="empty-icon">D</div>
-        <h2>No paired demo devices</h2>
-        <p>Rust+ does not enumerate every electrical entity or provide device map positions. The UI will not fabricate doors, turrets, or generic lights.</p>
-        <div class="capability-tags">
-            <span>SMART SWITCH · DIRECT</span>
-            <span>SMART ALARM · DIRECT</span>
-            <span>STORAGE MONITOR · DIRECT</span>
+    @if (ServerId is null)
+    {
+        <article class="surface-card empty-inline-state">Select a saved server to manage its devices.</article>
+    }
+    else
+    {
+        <div class="device-pairing-status surface-card">
+            <div>
+                <strong>@EntityPairing.State.Label</strong>
+                @if (!string.IsNullOrWhiteSpace(EntityPairing.State.Detail))
+                {
+                    <p>@EntityPairing.State.Detail</p>
+                }
+            </div>
+            <button type="button"
+                    class="primary-button"
+                    data-testid="listen-for-device-pairing"
+                    disabled="@(!EntityPairing.IsConfigured || EntityPairing.State.Status == EntityPairingStatus.Listening)"
+                    @onclick="ListenForDevicePairing">
+                @(EntityPairing.State.Status == EntityPairingStatus.Listening ? "Listening…" : "Listen for device pairing")
+            </button>
         </div>
-    </div>
+
+        @if (PairedEntities.Count == 0)
+        {
+            <article class="surface-card empty-inline-state">No paired devices yet.</article>
+        }
+        else
+        {
+            <div class="camera-list">
+                @foreach (var entity in PairedEntities)
+                {
+                    var live = LiveSession.PairedEntityStates.GetValueOrDefault(entity.EntityId);
+                    <article class="surface-card camera-row" @key="entity.Id">
+                        <div>
+                            <strong>@entity.Nickname</strong>
+                            <span class="camera-code">@DeviceKindLabel(entity.Kind)</span>
+                            @if (live?.Error is { } error)
+                            {
+                                <p class="camera-status camera-error">@error</p>
+                            }
+                            else if (entity.Kind == PairedEntityKind.StorageMonitor)
+                            {
+                                @if (live is not null)
+                                {
+                                    <p class="camera-status">
+                                        @(live.Capacity is { } capacity
+                                            ? $"{live.Items.Count} item(s) · capacity {capacity}"
+                                            : $"{live.Items.Count} item(s)")
+                                    </p>
+                                    @if (live.Items.Count > 0)
+                                    {
+                                        <ul class="storage-items">
+                                            @foreach (var item in live.Items)
+                                            {
+                                                <li>@ItemLabel(item.ItemId) × @item.Quantity</li>
+                                            }
+                                        </ul>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="camera-status">Reading…</p>
+                                }
+                            }
+                            else
+                            {
+                                <p class="camera-status">@(live?.Value is { } value ? (value ? "On" : "Off") : "Reading…")</p>
+                            }
+                        </div>
+                        <div class="camera-row-actions">
+                            @if (entity.Kind == PairedEntityKind.Switch)
+                            {
+                                <button type="button"
+                                        class="ghost-button"
+                                        data-testid="toggle-switch"
+                                        @onclick="() => LiveSession.ToggleSmartSwitchAsync(entity.EntityId)">
+                                    Toggle
+                                </button>
+                                <button type="button"
+                                        class="ghost-button"
+                                        data-testid="strobe-switch"
+                                        @onclick="() => LiveSession.StrobeSmartSwitchAsync(entity.EntityId, StrobeDuration, true)">
+                                    Strobe
+                                </button>
+                            }
+                            <button type="button" class="ghost-button" @onclick="() => RemoveEntity(entity.Id)">Remove</button>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
 
     <div class="page-heading camera-heading">
         <div>
@@ -142,6 +229,7 @@
 
 @code {
     private const float LookStep = 10f;
+    private static readonly TimeSpan StrobeDuration = TimeSpan.FromSeconds(3);
 
     private string _newCode = string.Empty;
     private string _newNickname = string.Empty;
@@ -155,15 +243,40 @@
 
     private IReadOnlyList<SavedCamera> Cameras => ServerId is { } serverId ? CameraRepository.GetAll(serverId) : [];
 
+    private IReadOnlyList<PairedEntity> PairedEntities =>
+        ServerId is { } serverId ? PairedEntityRepository.GetAll(serverId) : [];
+
     protected override void OnInitialized()
     {
         LiveSession.StateChanged += HandleStateChanged;
+        EntityPairing.StateChanged += HandleStateChanged;
     }
 
     public void Dispose()
     {
         LiveSession.StateChanged -= HandleStateChanged;
+        EntityPairing.StateChanged -= HandleStateChanged;
     }
+
+    private Task ListenForDevicePairing() => ServerId is { } serverId ? EntityPairing.ListenAsync(serverId) : Task.CompletedTask;
+
+    private void RemoveEntity(Guid id)
+    {
+        if (ServerId is { } serverId)
+        {
+            PairedEntityRepository.Remove(serverId, id);
+        }
+    }
+
+    private static string DeviceKindLabel(PairedEntityKind kind) => kind switch
+    {
+        PairedEntityKind.Switch => "SMART SWITCH",
+        PairedEntityKind.Alarm => "SMART ALARM",
+        PairedEntityKind.StorageMonitor => "STORAGE MONITOR",
+        _ => "DEVICE"
+    };
+
+    private static string ItemLabel(int itemId) => ItemCatalog.TryResolve(itemId)?.Name ?? $"Item #{itemId}";
 
     private void AddCamera()
     {

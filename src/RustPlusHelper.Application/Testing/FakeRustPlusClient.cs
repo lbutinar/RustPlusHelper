@@ -17,10 +17,13 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
         + "LJZNjgAAAABJRU5ErkJggg==");
 
     private bool _cameraSubscribed;
+    private bool _fakeSwitchValue = true;
 
     public bool IsConnected { get; private set; }
 
     public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
+
+    public event EventHandler<EntityStateChangedSnapshot>? EntityStateChanged;
 
     // The deterministic fake client has no keep-alive concept to fail, so this never raises.
 #pragma warning disable CS0067
@@ -171,6 +174,55 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
         _cameraSubscribed = false;
         return Task.CompletedTask;
     }
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetSmartSwitchInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ConnectedResult(new SmartDeviceStateSnapshot(entityId, _fakeSwitchValue), cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> GetAlarmInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ConnectedResult(new SmartDeviceStateSnapshot(entityId, _fakeSwitchValue), cancellationToken);
+
+    public Task<RustPlusResult<StorageMonitorStateSnapshot>> GetStorageMonitorInfoAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        ConnectedResult(new StorageMonitorStateSnapshot(
+            entityId,
+            Capacity: 24,
+            HasProtection: true,
+            Items: [new StorageItemSnapshot(-932201673, 400, false)]), cancellationToken); // Scrap
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchValueAsync(
+        ulong entityId,
+        bool value,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsConnected)
+        {
+            return Task.FromResult(RustPlusResult<SmartDeviceStateSnapshot>.Failure(
+                "not_connected", "The fake Rust+ client is not connected."));
+        }
+
+        _fakeSwitchValue = value;
+        EntityStateChanged?.Invoke(this, new EntityStateChangedSnapshot(entityId, _fakeSwitchValue, null, null, []));
+        return Task.FromResult(
+            RustPlusResult<SmartDeviceStateSnapshot>.Success(new SmartDeviceStateSnapshot(entityId, _fakeSwitchValue)));
+    }
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> ToggleSmartSwitchAsync(
+        ulong entityId,
+        CancellationToken cancellationToken = default) =>
+        SetSmartSwitchValueAsync(entityId, !_fakeSwitchValue, cancellationToken);
+
+    public Task<RustPlusResult<SmartDeviceStateSnapshot>> StrobeSmartSwitchAsync(
+        ulong entityId,
+        TimeSpan duration,
+        bool value,
+        CancellationToken cancellationToken = default) =>
+        SetSmartSwitchValueAsync(entityId, value, cancellationToken);
 
     public async ValueTask DisposeAsync()
     {

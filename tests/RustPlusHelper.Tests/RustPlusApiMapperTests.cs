@@ -1,4 +1,6 @@
 using RustPlusApi.Data;
+using RustPlusApi.Data.Entities;
+using RustPlusApi.Data.Events;
 using RustPlusApi.Data.Markers;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Infrastructure.RustPlus;
@@ -97,5 +99,81 @@ public sealed class RustPlusApiMapperTests
         var order = Assert.Single(Assert.Single(result.Markers).VendingOrders!);
         Assert.Equal(1.25f, order.PriceMultiplier);
         Assert.Equal(0.5f, order.ReceivedQuantityMultiplier);
+    }
+
+    [Fact]
+    public void SmartDeviceInfoCarriesTheGivenEntityIdAndValue()
+    {
+        var source = new SmartDeviceInfo { IsActive = true };
+
+        var result = RustPlusApiMapper.Map(4242UL, source);
+
+        Assert.Equal(4242UL, result.EntityId);
+        Assert.True(result.Value);
+    }
+
+    [Fact]
+    public void StorageMonitorInfoPreservesCapacityProtectionAndItems()
+    {
+        var source = new StorageMonitorInfo
+        {
+            Capacity = 24,
+            HasProtection = true,
+            Items =
+            [
+                new StorageMonitorItemInfo { Id = -932201673, Quantity = 400, IsItemBlueprint = false }
+            ]
+        };
+
+        var result = RustPlusApiMapper.Map(99UL, source);
+
+        Assert.Equal(99UL, result.EntityId);
+        Assert.Equal(24, result.Capacity);
+        Assert.True(result.HasProtection);
+        var item = Assert.Single(result.Items);
+        Assert.Equal(-932201673, item.ItemId);
+        Assert.Equal(400, item.Quantity);
+        Assert.False(item.IsBlueprint);
+    }
+
+    [Fact]
+    public void StorageMonitorItemsWithNullQuantityOrBlueprintDefaultSafely()
+    {
+        var source = new StorageMonitorInfo
+        {
+            Items = [new StorageMonitorItemInfo { Id = 123, Quantity = null, IsItemBlueprint = null }]
+        };
+
+        var result = RustPlusApiMapper.Map(1UL, source);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(0, item.Quantity);
+        Assert.False(item.IsBlueprint);
+    }
+
+    [Fact]
+    public void EntityChangedEventArgMapsSwitchAndStorageFieldsWithoutGuessingKind()
+    {
+        var switchChange = new EntityChangedEventArg { Id = 7UL, Value = true };
+        var storageChange = new EntityChangedEventArg
+        {
+            Id = 8UL,
+            Capacity = 10,
+            HasProtection = false,
+            Items = [new StorageMonitorItemInfo { Id = -151838493, Quantity = 200, IsItemBlueprint = false }]
+        };
+
+        var switchResult = RustPlusApiMapper.Map(switchChange);
+        var storageResult = RustPlusApiMapper.Map(storageChange);
+
+        Assert.Equal(7UL, switchResult.EntityId);
+        Assert.True(switchResult.Value);
+        Assert.Null(switchResult.Capacity);
+
+        Assert.Equal(8UL, storageResult.EntityId);
+        Assert.Null(storageResult.Value);
+        Assert.Equal(10, storageResult.Capacity);
+        Assert.False(storageResult.HasProtection);
+        Assert.Equal(-151838493, Assert.Single(storageResult.Items).ItemId);
     }
 }

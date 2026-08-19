@@ -1,5 +1,7 @@
 using System.Globalization;
 using RustPlusApi.Data;
+using RustPlusApi.Data.Entities;
+using RustPlusApi.Data.Events;
 using RustPlusApi.Data.Markers;
 using RustPlusHelper.Application.RustPlus;
 
@@ -7,6 +9,27 @@ namespace RustPlusHelper.Infrastructure.RustPlus;
 
 internal static class RustPlusApiMapper
 {
+    internal static SmartDeviceStateSnapshot Map(ulong entityId, SmartDeviceInfo source) =>
+        new(entityId, source.IsActive);
+
+    internal static StorageMonitorStateSnapshot Map(ulong entityId, StorageMonitorInfo source) => new(
+        entityId,
+        source.Capacity,
+        source.HasProtection,
+        MapItems(source.Items));
+
+    internal static EntityStateChangedSnapshot Map(EntityChangedEventArg source) => new(
+        source.Id,
+        source.Value,
+        source.Capacity,
+        source.HasProtection,
+        MapItems(source.Items));
+
+    private static IReadOnlyList<StorageItemSnapshot> MapItems(IEnumerable<StorageMonitorItemInfo>? items) =>
+        items?.Select(item => new StorageItemSnapshot(item.Id, item.Quantity ?? 0, item.IsItemBlueprint ?? false))
+            .ToArray()
+        ?? [];
+
     internal static ServerInfoSnapshot Map(ServerInfo source) => new(
         source.Name,
         source.HeaderImage,
