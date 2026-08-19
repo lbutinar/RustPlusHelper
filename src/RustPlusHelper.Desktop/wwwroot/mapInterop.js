@@ -171,8 +171,8 @@
         const icon = L.divIcon({
             className: "rust-grid-label-wrap",
             html: `<span class="rust-grid-label">${escapeHtml(text)}</span>`,
-            iconSize: [30, 18],
-            iconAnchor: [15, 9]
+            iconSize: [20, 10],
+            iconAnchor: [0, 10]
         });
         return L.marker([entry.height - pixelY, pixelX], {
             icon,
@@ -214,12 +214,16 @@
             return;
         }
 
+        const cellWidth = width / grid.cellCount;
+        const cellHeight = height / grid.cellCount;
+        const insetX = cellWidth * 0.08;
+        const insetY = cellHeight * 0.08;
         for (let row = 0; row < grid.cellCount; row++) {
-            const centerY = grid.top + (height * (row + 0.5) / grid.cellCount);
+            const bottomY = grid.top + (cellHeight * (row + 1)) - insetY;
             for (let column = 0; column < grid.cellCount; column++) {
-                const centerX = grid.left + (width * (column + 0.5) / grid.cellCount);
+                const leftX = grid.left + (cellWidth * column) + insetX;
                 const label = grid.cellLabels[(row * grid.cellCount) + column];
-                layer.addLayer(gridLabel(entry, label, centerX, centerY));
+                layer.addLayer(gridLabel(entry, label, leftX, bottomY));
             }
         }
     }
