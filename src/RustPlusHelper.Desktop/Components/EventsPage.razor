@@ -51,6 +51,9 @@
             "Derived from consecutive online, alive team positions; limited to one event per member per minute.",
         CompanionEventKind.MarkerAppeared or CompanionEventKind.MarkerDisappeared =>
             "Derived from consecutive map-marker snapshots.",
+        CompanionEventKind.VendingPriceChanged or CompanionEventKind.VendingStockChanged
+            or CompanionEventKind.VendingOfferAdded or CompanionEventKind.VendingOfferRemoved =>
+            "Derived from comparing consecutive vending machine sell orders.",
         _ => "Derived from Rust+ state."
     };
 }

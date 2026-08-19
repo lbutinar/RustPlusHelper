@@ -1,4 +1,5 @@
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Vending;
 
 namespace RustPlusHelper.Application.RustPlus;
 
@@ -451,7 +452,86 @@ public sealed class RustPlusLiveSessionManager(
                 CompanionEventSource.SnapshotDiff,
                 $"{MarkerLabel(marker)} disappeared");
         }
+
+        // Only diff offers for markers present before and after; a marker that just appeared or
+        // disappeared already got its own event above and should not also flood offer-level events.
+        foreach (var key in oldMarkers.Keys.Where(newMarkers.ContainsKey))
+        {
+            var previousMarker = oldMarkers[key];
+            var currentMarker = newMarkers[key];
+            if (currentMarker.Kind == MapMarkerKind.VendingMachine)
+            {
+                AddVendingOfferEvents(serverId, previousMarker, currentMarker);
+            }
+        }
     }
+
+    private void AddVendingOfferEvents(Guid serverId, MapMarkerSnapshot previous, MapMarkerSnapshot current)
+    {
+        var oldOffers = ToOfferDictionary(previous.VendingOrders);
+        var newOffers = ToOfferDictionary(current.VendingOrders);
+        var position = current.X is { } x && current.Y is { } y ? new MapPositionSnapshot(x, y) : null;
+        var machineName = MarkerLabel(current);
+
+        foreach (var (key, offer) in newOffers)
+        {
+            if (!oldOffers.TryGetValue(key, out var previousOffer))
+            {
+                AddEvent(
+                    serverId,
+                    CompanionEventKind.VendingOfferAdded,
+                    CompanionEventSource.SnapshotDiff,
+                    $"New offer at {machineName}",
+                    $"{ItemLabel(offer.ItemId)} for {offer.Cost} {ItemLabel(offer.CurrencyId)}",
+                    position);
+                continue;
+            }
+
+            if (previousOffer.Cost != offer.Cost)
+            {
+                AddEvent(
+                    serverId,
+                    CompanionEventKind.VendingPriceChanged,
+                    CompanionEventSource.SnapshotDiff,
+                    $"{ItemLabel(offer.ItemId)} price changed at {machineName}",
+                    $"{previousOffer.Cost} → {offer.Cost} {ItemLabel(offer.CurrencyId)}",
+                    position);
+            }
+
+            if (previousOffer.Stock != offer.Stock)
+            {
+                AddEvent(
+                    serverId,
+                    CompanionEventKind.VendingStockChanged,
+                    CompanionEventSource.SnapshotDiff,
+                    $"{ItemLabel(offer.ItemId)} stock changed at {machineName}",
+                    $"{previousOffer.Stock} → {offer.Stock} in stock",
+                    position);
+            }
+        }
+
+        foreach (var (key, offer) in oldOffers)
+        {
+            if (!newOffers.ContainsKey(key))
+            {
+                AddEvent(
+                    serverId,
+                    CompanionEventKind.VendingOfferRemoved,
+                    CompanionEventSource.SnapshotDiff,
+                    $"Offer removed at {machineName}",
+                    $"{ItemLabel(offer.ItemId)} for {offer.Cost} {ItemLabel(offer.CurrencyId)}",
+                    position);
+            }
+        }
+    }
+
+    private static IReadOnlyDictionary<(int ItemId, int CurrencyId, bool IsItemBlueprint, bool IsCurrencyBlueprint), VendingOrderSnapshot>
+        ToOfferDictionary(IReadOnlyList<VendingOrderSnapshot>? offers) =>
+        (offers ?? [])
+            .GroupBy(offer => (offer.ItemId, offer.CurrencyId, offer.IsItemBlueprint, offer.IsCurrencyBlueprint))
+            .ToDictionary(group => group.Key, group => group.First());
+
+    private static string ItemLabel(int itemId) => ItemCatalog.TryResolve(itemId)?.Name ?? $"item #{itemId}";
 
     private void AddEvent(
         Guid serverId,

@@ -21,7 +21,11 @@ public enum CompanionEventKind
     TeamMemberRespawned,
     TeamMemberChangedGrid,
     MarkerAppeared,
-    MarkerDisappeared
+    MarkerDisappeared,
+    VendingPriceChanged,
+    VendingStockChanged,
+    VendingOfferAdded,
+    VendingOfferRemoved
 }
 
 public enum CompanionEventSource

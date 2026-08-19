@@ -84,6 +84,125 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.Equal("Moved from A28 to B28.", movement.Detail);
     }
 
+    [Fact]
+    public async Task EmitsVendingPriceChangedWhenOfferCostChangesAndNothingElse()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5)),
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 150, stock: 5))
+            ]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.VendingPriceChanged));
+
+        var changed = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingPriceChanged);
+        Assert.Equal(CompanionEventSource.SnapshotDiff, changed.Source);
+        Assert.Equal("Semi-Automatic Rifle price changed at Test Shop", changed.Title);
+        Assert.Equal("100 → 150 Scrap", changed.Detail);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingStockChanged);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferAdded);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferRemoved);
+    }
+
+    [Fact]
+    public async Task EmitsVendingStockChangedWhenOfferStockChangesAndNothingElse()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5)),
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 2))
+            ]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.VendingStockChanged));
+
+        var changed = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingStockChanged);
+        Assert.Equal("Semi-Automatic Rifle stock changed at Test Shop", changed.Title);
+        Assert.Equal("5 → 2 in stock", changed.Detail);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingPriceChanged);
+    }
+
+    [Fact]
+    public async Task EmitsVendingOfferAddedForANewSlotSignatureOnAnExistingMarker()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5)),
+                VendingMarkers(
+                    1,
+                    Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5),
+                    Offer(Wood, Scrap, cost: 10, stock: 20))
+            ]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.VendingOfferAdded));
+
+        var added = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferAdded);
+        Assert.Equal("New offer at Test Shop", added.Title);
+        Assert.Equal("Wood for 10 Scrap", added.Detail);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingPriceChanged);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingStockChanged);
+    }
+
+    [Fact]
+    public async Task EmitsVendingOfferRemovedForAMissingSlotSignatureOnAnExistingMarker()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [
+                VendingMarkers(
+                    1,
+                    Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5),
+                    Offer(Wood, Scrap, cost: 10, stock: 20)),
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5))
+            ]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.VendingOfferRemoved));
+
+        var removed = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferRemoved);
+        Assert.Equal("Offer removed at Test Shop", removed.Title);
+        Assert.Equal("Wood for 10 Scrap", removed.Detail);
+    }
+
+    [Fact]
+    public async Task DoesNotEmitOfferLevelEventsForABrandNewVendingMarker()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [
+                new MapMarkersSnapshot([]),
+                VendingMarkers(1, Offer(RifleSemiAuto, Scrap, cost: 100, stock: 5))
+            ]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.MarkerAppeared));
+
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferAdded);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingPriceChanged);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingStockChanged);
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferRemoved);
+    }
+
     private static RustPlusLiveSessionManager CreateManager(
         ServerManager servers,
         InMemorySecretStore secrets,
@@ -169,6 +288,17 @@ public sealed class RustPlusLiveSessionManagerTests
 
     private static MapMarkersSnapshot Markers(ulong id) => new(
         [new MapMarkerSnapshot(id, MapMarkerKind.CargoShip, 100, 200)]);
+
+    // Stable, catalogue-verified Rust item IDs (see ItemCatalogTests): rifle.semiauto, scrap, wood.
+    private const int RifleSemiAuto = -904863145;
+    private const int Scrap = -932201673;
+    private const int Wood = -151838493;
+
+    private static MapMarkersSnapshot VendingMarkers(ulong id, params VendingOrderSnapshot[] offers) => new(
+        [new MapMarkerSnapshot(id, MapMarkerKind.VendingMachine, 150, 300, Name: "Test Shop", VendingOrders: offers)]);
+
+    private static VendingOrderSnapshot Offer(int itemId, int currencyId, int cost, int stock) =>
+        new(itemId, 1, currencyId, cost, stock, false, false, 1, 1, null, null);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
