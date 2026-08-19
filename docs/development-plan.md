@@ -247,6 +247,22 @@ camera actually supports; stopping and switching cameras tears down the previous
 
 **Done:** desktop alerts are controlled and deduplicated while background monitoring recovers safely.
 
+**Status:** Implemented on 2026-08-19. The app now minimizes to a Windows tray icon instead of
+exiting on close (real exit only via the tray menu or an actual OS shutdown, distinguished via
+`Application.SessionEnding`); a per-category `NotificationPreferences` toggle set gates a tray-balloon
+desktop notification for every companion event, keyed off a new `RustPlusLiveSessionManager.EventRecorded`
+event. Smart Alarm's "triggered" push (deferred from Phase 8) is now wired up via a new persistent
+`RustPlusAlarmNotificationListener` connection, independent of which server's live session is active;
+attributing an alarm push to a saved server required capturing Rust+'s own server GUID at pairing time
+(a gap found while researching this phase — server pairing previously discarded it), so
+`RustPlusApiPairingProvider.WaitForServerPairingAsync` was rewritten to read it directly off
+`RustPlusApi.Fcm.RustPlusFcm.OnServerPairing` instead of the higher-level `PairingListener` wrapper
+that dropped it. De-duplication of alarm pushes across reconnects reuses the pinned package's own
+`persistentIds` mechanism rather than inventing one. Companion event history now also purges rows
+older than 30 days (in addition to the existing 200-row-per-server cap), with an unscoped sweep at
+startup covering servers whose live session hasn't run recently. See `docs/protocol-evidence.md` for
+the full evidence trail.
+
 ## Phase 11 — Packaging and hardening
 
 **Goal:** Distribute a supportable Windows application.

@@ -30,6 +30,7 @@ Classifications describe the primary verified source.
 | Vending owner Steam ID | **NOT CURRENTLY POSSIBLE** | Not in verified marker contract |
 | Smart Switch read/control | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
 | Smart Alarm state/subscription | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID; read-only, no in-game control surface |
+| Smart Alarm "triggered" push notification | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Separate FCM channel from state polling; attributable to a saved server only if paired after the server's own Rust+ ID capture shipped |
 | Storage Monitor | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
 | Smart device discovery and pairing | **REQUIRES ADDITIONAL DATA SOURCE** | No Rust+ enumeration; entity ID/type/name arrives only via the FCM pairing notification triggered by pairing in-game |
 | Generic electrical entity discovery | **NOT CURRENTLY POSSIBLE** | No verified enumeration request |

@@ -300,6 +300,52 @@ the only real sources.
   `Set/Toggle/StrobeSmartSwitchAsync` are all default-cost (1 token) requests, confirmed via the same
   rustplus.js rate-limit table already cited above.
 
+## Notifications and background operation
+
+Verified 2026-08-19 directly against `HandyS11/RustPlusApi`'s `RustPlusApi.Fcm` package (reflection on
+the installed DLL plus source fetched from GitHub at the pinned tag `v2.0.0-beta.6`) — completing the
+Smart Alarm "triggered" push explicitly deferred from the Smart devices section above.
+
+- **`RustPlusApi.Fcm.RustPlusFcm.OnAlarmTriggered`** fires with an `AlarmNotification` (extends
+  `NotificationBase { Guid ServerId, string? PersistentId }`, adds `string Title`, `string Message`) —
+  confirmed by fetching `RustPlusFcm.cs`'s actual `ParseNotification`/`OnAlarmTriggered` source at the
+  pinned tag, not just its XML docs.
+- **`AlarmNotification.ServerId` is Rust+'s own server GUID, not this app's `ServerProfile.Id`.**
+  Confirmed via `RustPlusApi.Fcm.Data.Events.ServerEvent.Id` (used in server-pairing notifications),
+  doc-commented "The server's unique Rust+ ID" — the same kind of ID, a genuinely different ID space
+  from this app's locally-generated server GUIDs. **This app did not previously capture it**:
+  `RustPlusApiPairingProvider.WaitForServerPairingAsync` used the high-level
+  `RustPlusApi.Fcm.Registration.PairingListener.WaitForServerPairingAsync`, whose `ServerPairing` result
+  type only exposes `Ip/Port/PlayerId/PlayerToken/Name` — no `Id` field exists on it at all (confirmed
+  via the package's own XML docs, which describe it as "exactly the four arguments needed for `new
+  RustPlus(new RustPlusConnection(...))`"). Fixed by rewriting that method to bypass `PairingListener`
+  and read `ServerEvent.Id` directly off `RustPlusFcm.OnServerPairing`, mirroring the same
+  lower-level pattern the entity-pairing method already used. Servers paired before this fix have no
+  captured ID and cannot be attributed to an alarm push until re-paired — a real, documented
+  limitation, not silently glossed over.
+- **`RustPlusFcm` has no built-in auto-reconnect.** Its own doc comment: "Instances are
+  single-connection: after Disconnect or disposal, create a new instance." A built-in heartbeat +
+  inactivity-timeout loop self-detects a silently-dead connection (raises `ErrorOccurred` and calls
+  `Disconnect()` automatically), but reconnecting requires constructing a fresh `RustPlusFcm` and
+  calling `ConnectAsync` again — this app's `RustPlusAlarmNotificationListener` owns that retry loop
+  itself, reusing the same bounded 2/5/10/30s backoff already used for the main Rust+ connection
+  (`RustPlusPollingOptions.Default.ReconnectDelays`) rather than inventing a second one.
+- **De-duplication is a verified, built-in mechanism, not invented.** `RustPlusFcm`'s constructor takes
+  an optional caller-owned `ICollection<string>? persistentIds` — already-processed FCM message ids,
+  used to skip re-dispatching a redelivered notification. Its own doc comment states the set "is NOT
+  cleared on login, so seeded ids survive reconnect" and that ids "have a server-side lifespan, so
+  pruning your stored copy is your responsibility" — this app persists the set (capped at 500 entries,
+  oldest evicted first, since the ids are opaque strings with no visible timestamp) via the existing
+  `IApplicationSecretStore`'s single-row `secret_kind`/`protected_value` table, reused rather than
+  adding a new migration for one small blob.
+- **Reading the live `persistentIds`/`PersistentIds` collection off-thread is unsafe** (same doc
+  block: can throw during concurrent enumeration while traffic flows). This app never touches that
+  live collection after constructing `RustPlusFcm` with it — it tracks newly-received ids purely from
+  the `PersistentIdReceived` event's own payload (the id string arrives directly as the event arg, no
+  need to re-read the shared collection at all).
+- **No official documentation exists for any of this**, as with every other FCM-based integration in
+  this app — Facepunch's pages describe none of the pairing or alarm-push protocol.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
