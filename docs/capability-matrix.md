@@ -29,8 +29,9 @@ Classifications describe the primary verified source.
 | Vending item names/icons (names only) | **AVAILABLE VIA EXTERNAL CATALOGUE** | Versioned Rust item catalogue, not live Rust+ data |
 | Vending owner Steam ID | **NOT CURRENTLY POSSIBLE** | Not in verified marker contract |
 | Smart Switch read/control | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
-| Smart Alarm state/subscription | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
+| Smart Alarm state/subscription | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID; read-only, no in-game control surface |
 | Storage Monitor | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
+| Smart device discovery and pairing | **REQUIRES ADDITIONAL DATA SOURCE** | No Rust+ enumeration; entity ID/type/name arrives only via the FCM pairing notification triggered by pairing in-game |
 | Generic electrical entity discovery | **NOT CURRENTLY POSSIBLE** | No verified enumeration request |
 | Dedicated light/door/lock/turret state | **NOT CURRENTLY POSSIBLE** | Smart Switch can only control a wired circuit indirectly |
 | CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code; ray stream is client-decoded via `RustPlusApi.Camera` |

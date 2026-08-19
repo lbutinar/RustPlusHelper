@@ -9,8 +9,9 @@ Phase 0 contains the client boundary, real adapter, fake source, verification co
 documentation. Phase 1 adds the WPF/Blazor/Leaflet shell against fake data. Phase 2 adds SQLite
 migrations, the server registry, and DPAPI-protected secret persistence. Phase 3 now includes a
 single application-level Steam64 identity, manual per-server token entry, and an explicit read-only
-connection/authentication test. Automated pairing and notifications are not implemented yet;
-persistent selected-server monitoring is implemented. Phase 4 uses the connection manager for
+connection/authentication test. Automated server pairing and entity (Smart Switch/Alarm/Storage
+Monitor) pairing are both implemented via FCM push notifications; persistent selected-server
+monitoring is implemented. Phase 4 uses the connection manager for
 explicit `GetInfo` + `GetMap` operations, persists the latest successful snapshot, and renders the
 real JPEG without exposing credentials to UI components. A persistent read-only session reuses one
 authenticated connection for info, team, chat, and marker requests. Team/chat/marker results are

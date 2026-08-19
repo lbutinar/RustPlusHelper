@@ -181,6 +181,19 @@ calculate distance, locate on map, and see vending price/stock/offer changes as 
 
 **Done:** supported state is accurate and control always follows explicit user action.
 
+**Status:** Implemented on 2026-08-19. Rust+ has no device discovery; Smart Switch, Smart Alarm, and
+Storage Monitor entities are paired in-game and delivered to the app as an FCM push notification
+(`entityId`, `entityType`, `entityName`) — the same envelope shape as server pairing, but a level
+below the app's existing `PairingListener`-based flow, which only surfaces server pairing. A new
+`RustPlusEntityPairingManager` talks to `RustPlusApi.Fcm.RustPlusFcm` directly to receive it. Reading
+an entity's info once (`GetSmartSwitchInfoAsync`/`GetAlarmInfoAsync`/`GetStorageMonitorInfoAsync`) is
+what arms that entity's live broadcast for the current connection; the broadcast itself
+(`OnEntityChanged`) carries no entity type of its own, so the live session manager always routes it
+by the app's own persisted `PairedEntityKind`, never by the payload's shape (see
+`docs/protocol-evidence.md`). Switches support Toggle/Strobe; Storage Monitor rows show capacity and
+resolved item names via the existing `ItemCatalog`; Alarms are read-only. See
+`docs/protocol-evidence.md` for the full evidence trail.
+
 ## Phase 9 — Cameras
 
 **Goal:** Add known-code camera viewing and supported controls.

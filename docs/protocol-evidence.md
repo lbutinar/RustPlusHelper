@@ -239,6 +239,67 @@ community implementations are the only real sources.
   from a computer station. This app stores user-entered codes with a nickname per server
   (`saved_cameras`) — a manual list, not a derived/direct one.
 
+## Smart devices
+
+Verified 2026-08-19 directly against `liamcottle/rustplus.js` (`rustplus.proto`, the FCM listener
+example in its README) and `HandyS11/RustPlusApi` (`RustPlusApi.Fcm.dll`, `RustPlusApi.Fcm.Registration.dll`,
+`RustPlusApi.dll`, all reflected on the pinned installed packages) at the pinned revisions above.
+Neither Facepunch page describes any of this — as with cameras, the community implementations are
+the only real sources.
+
+- **No device discovery.** As with cameras, Rust+ never enumerates a player's Smart Switches, Smart
+  Alarms, or Storage Monitors. The only way the app learns an entity's ID, type, and name is the FCM
+  push notification sent the moment the player pairs the device in-game — the same envelope shape
+  used for server pairing (`entityId`, `entityType`, `entityName`), confirmed via
+  `RustPlusApi.Fcm.Data.Events.EntityEvent`.
+- **Entity pairing needs a level below this app's existing pairing code.** The app's
+  `RustPlusPairingManager`/`RustPlusApiPairingProvider` only talk to
+  `RustPlusApi.Fcm.Registration.PairingListener`, a convenience wrapper that exclusively raises
+  `OnServerPairing` and drops entity-pairing notifications on the floor. Reflecting on the installed
+  `RustPlusApi.Fcm.dll` found the underlying `RustPlusApi.Fcm.RustPlusFcm` class one layer down — a
+  peer of `PairingListener`, same `Credentials` type — already exposes
+  `event EventHandler<Notification<EntityEvent?>>? OnEntityPairing`. No new FCM/MCS protocol work was
+  needed; `RustPlusEntityPairingManager`/`RustPlusApiPairingProvider.WaitForEntityPairingAsync` just
+  construct `RustPlusFcm` directly from the same already-registered/stored
+  `ApplicationSecretKind.RustPlusFcmCredentials`, reusing the one registration for both server and
+  entity pairing.
+- **`EntityType` enum values are a verified protocol fact, not a guess:** `Switch = 1`, `Alarm = 2`,
+  `StorageMonitor = 3`, mirrored exactly as the app's own `PairedEntityKind`.
+- **Reading an entity's info once arms its broadcast.** Per `rustplus.js`'s documented behavior and
+  confirmed against `RustPlusApi`'s own XML doc comments, calling
+  `GetSmartSwitchInfoAsync`/`GetAlarmInfoAsync`/`GetStorageMonitorInfoAsync(entityId)` is what makes
+  the server start sending that entity's `OnEntityChanged` broadcasts on the current connection — a
+  fresh connection needs this call again per paired entity. The wire also defines
+  `SetSubscription`/`CheckSubscription` requests, but neither reference implementation uses or
+  documents them meaningfully, so this app does not rely on them either — noted here rather than
+  guessed at.
+- **The broadcast cannot tell you what kind of entity it is (real, load-bearing gotcha).**
+  `EntityChangedEventArg` carries `Id`, optional `Value` (switch/alarm on-off), and optional
+  `Capacity`/`HasProtection`/`Items` (storage monitor) all on the same shape — `RustPlusApi`'s own
+  doc comments note it can misclassify a Storage Monitor's plain broadcast as a Smart Switch. This app
+  never trusts the payload's shape: `RustPlusLiveSessionManager` always routes an incoming broadcast
+  by the entity's own persisted `PairedEntityKind` (captured at pairing time), and preserves any
+  known-good `Capacity`/`HasProtection`/`Items` when a broadcast for a Storage Monitor arrives with
+  those fields absent (a real observed shape — see next point).
+- **Storage Monitor's two-broadcast quirk:** `rustplus.js`'s README documents that a Storage Monitor
+  change can arrive as two separate broadcasts — one carrying only a `Value` pulse, a second carrying
+  the actual `Capacity`/`Items`. A regression test
+  (`RoutesEntityBroadcastByStoredKindNotPayloadShape`) locks in that a `Value`-only broadcast for a
+  known Storage Monitor never nulls out its last-known capacity/items.
+- **Control surface confirmed via reflection on `RustPlusApi.dll`:** `SetSmartSwitchValueAsync(ulong,
+  bool, ct)`, `ToggleSmartSwitchAsync(ulong, ct)`, `StrobeSmartSwitchAsync(ulong, TimeSpan, bool, ct)`
+  all return the resulting `SmartDeviceInfo` (not just an acknowledgement bool) — the app's own
+  `Set/Toggle/StrobeSmartSwitchAsync` wrappers return that resulting state directly rather than
+  re-reading it. Smart Alarms have no control surface in Rust+ — the UI never offers alarm controls.
+- **Smart Alarm's "triggered" push notification is out of scope here.** `RustPlusApi.Fcm` exposes a
+  separate `OnAlarmTriggered`/`AlarmNotification { Title, Message }` channel — a different kind of FCM
+  push from pairing. That's background push-notification handling, deliberately deferred to Phase 10
+  ("notification rules/channels"); this phase reads Smart Alarm state the same way as a switch, via
+  `GetAlarmInfoAsync`/`OnEntityChanged`.
+- **Token cost:** `GetSmartSwitchInfoAsync`/`GetAlarmInfoAsync`/`GetStorageMonitorInfoAsync` and
+  `Set/Toggle/StrobeSmartSwitchAsync` are all default-cost (1 token) requests, confirmed via the same
+  rustplus.js rate-limit table already cited above.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
