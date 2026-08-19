@@ -185,11 +185,44 @@ calculate distance, locate on map, and see vending price/stock/offer changes as 
 
 **Goal:** Add known-code camera viewing and supported controls.
 
-**Modules:** camera manager, ray renderer, canvas interop.
+**Status:** Implemented on 2026-08-19. Rust+ CCTV has no discovery and no video/JPEG stream — it
+sends a compact custom-encoded ray stream that the client decodes and rasterizes itself, and the
+subscription silently stops after ~10 seconds unless renewed. Both facts, plus the exact
+subscribe/input/ray message shapes, were verified against `liamcottle/rustplus.js` and the app's
+already-pinned `RustPlusApi` package (see `docs/protocol-evidence.md`). Rather than hand-rolling that
+decoder, the app takes a new dependency on `RustPlusApi`'s own optional `RustPlusApi.Camera` package
+(same pinned version, same repository, an explicitly validated port of rustplus.js's decode/render
+with golden fixtures from four device types) and reuses its `CameraController` (resubscribe keep-alive,
+capability-gated `ZoomAsync`/`ShootAsync`/`ReloadAsync`/`LookAsync`/`MoveAsync`) and `CameraRenderer`
+(ray frame → PNG bytes) — both stay fully inside `RustPlusHelper.Infrastructure.RustPlus`, matching the
+architecture rule that third-party protocol types never escape the adapter.
 
-**Risks/tests:** CPU, bandwidth, rendering semantics; golden frames and mock streams.
+A per-server list of user-entered camera codes (`saved_cameras`, migration 10) lets the user name and
+recall known codes; there is still no automatic camera discovery. Viewing shares the app's single
+persistent connection via new methods on `RustPlusLiveSessionManager` (see `docs/architecture.md`)
+rather than a separate `CameraManager` or a second connection. Controls are shown only when the
+subscribed camera's `ControlFlags` actually support them (Zoom for PTZ, Shoot/Reload for auto-turrets,
+look/move nudges otherwise) — never a fabricated control. Continuous mouse-drag look and held-key
+drone movement are out of scope for this slice; discrete tap/nudge buttons cover the same capability
+with much less UI complexity, and remain the natural next increment.
 
-**Done:** subscribe/render/control/unsubscribe lifecycle is stable.
+**Modules:** camera subscribe/input/frame methods on `IRustPlusClient`/`RustPlusApiClient`
+(`RustPlusApi.Camera`-backed), `ISavedCameraRepository`/`SqliteSavedCameraRepository`, the Devices &
+Cameras page.
+
+**Risks/tests:** CPU cost is negligible in practice (accumulate-and-render one modest-resolution frame
+per broadcast); the UI-visible publish rate is throttled independent of broadcast frequency to avoid
+the same freeze class fixed earlier for map layer toggles (see `AGENTS.md`'s "Map rendering rules").
+Mapping fidelity is covered indirectly (the adapter's camera code compiles directly against
+`RustPlusApi.Camera`'s real types); direct adapter-level testing isn't practical without stubbing the
+33-member third-party `IRustPlus` interface, so — consistent with this repo's existing precedent that
+`RustPlusApiClient` itself stays untested in favor of manual, opt-in live verification — that surface
+is instead covered end-to-end via `RustPlusLiveSessionManagerTests` (subscribe/throttle/stop/keep-alive
+failure, including a regression test for a frame arriving mid-subscribe) and a full bUnit flow
+(add/list/view/gated-controls/stop) in `MainComponentTests`.
+
+**Done:** user can save/nickname a camera code, view its live feed, and use only the controls that
+camera actually supports; stopping and switching cameras tears down the previous subscription cleanly.
 
 ## Phase 10 — Notifications, background operation, and history
 

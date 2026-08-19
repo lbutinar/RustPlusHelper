@@ -1,6 +1,6 @@
 # Rust+ protocol evidence
 
-Last research review: **2026-08-18**
+Last research review: **2026-08-19**
 
 ## Evidence baseline
 
@@ -9,6 +9,7 @@ Last research review: **2026-08-18**
 | Facepunch Rust+ | Current public companion pages | Official product and server-hosting behavior |
 | `liamcottle/rustplus.js` | [`75915f25`](https://github.com/liamcottle/rustplus.js/commit/75915f25fc7c1718f7c23c419953f4655840fade) | Established unofficial WebSocket, protobuf, pairing, request, and event reference |
 | `HandyS11/RustPlusApi` | [`v2.0.0-beta.7`](https://github.com/HandyS11/RustPlusApi/releases/tag/v2.0.0-beta.7), commit `3c4037ae` | Pinned C# implementation and current typed contract |
+| `HandyS11/RustPlusApi.Camera` | Same repo/tag, `v2.0.0-beta.7` | Pinned camera session (`CameraController`) and ray-decode/render (`CameraRenderer`) implementation |
 | `RustPlusApi.Fcm` / `.Fcm.Registration` | `2.0.0-beta.6` | Pinned C# FCM registration and pairing-notification implementation |
 | RustPlusPlus | Current open-source polling/event handlers | Evidence for snapshot-derived team/marker events |
 
@@ -185,6 +186,59 @@ versioned catalogue (`RustPlusHelper.Application.Vending.ItemCatalog`), not from
 - The catalogue can drift from the live game after a Rust update; `ItemCatalog.CatalogueVersion`
   records which reviewed snapshot is bundled so drift is at least attributable.
 
+## Cameras (CCTV)
+
+Verified 2026-08-19 directly against `liamcottle/rustplus.js` (`camera.js`, `rustplus.proto`) and
+`HandyS11/RustPlusApi` (`RustPlusApi/Protobuf/RustPlusContracts.proto`,
+`RustPlusApi/Interfaces/IRustPlus.cs`, `RustPlusApi.Camera/*`) at the pinned revisions above. Neither
+Facepunch page in this document's evidence baseline describes the CCTV protocol at all — these two
+community implementations are the only real sources.
+
+- **Subscribe/unsubscribe/input, request/response shape:** the client sends an `AppRequest` with
+  `cameraSubscribe: { cameraId }`; the server's `AppResponse` carries `cameraSubscribeInfo`
+  (`width`, `height`, `nearPlane`, `farPlane`, `controlFlags`) before any ray broadcasts arrive.
+  `cameraUnsubscribe` (an empty `AppEmpty`) ends it. `cameraInput` carries `{ buttons, mouseDelta }`.
+  Both reference implementations agree on these fields exactly.
+- **The subscription is not "fire and forget":** both `rustplus.js` (a 10-second `setInterval`) and
+  `RustPlusApi.Camera`'s `CameraController` (`DefaultResubscribeInterval = 10s`) re-send
+  `cameraSubscribe` on a timer with an explicit comment that the server stops streaming rays for a
+  stale subscription. `CameraController` owns this keep-alive loop so the app never re-implements it.
+- **A camera frame is not video/JPEG.** `AppCameraRays` carries `rayData` — a run-length/delta-encoded
+  byte stream of quantized `(distance, alignment, material)` samples that the client must decode and
+  rasterize itself. `RustPlusApi.Camera`'s `CameraRenderer`/`IndexGenerator` are an explicitly
+  acknowledged, golden-fixture-validated port of `rustplus.js`'s decode (`_renderCameraFrame`,
+  `IndexGenerator`, seed `1337`): a shuffled sample-position buffer is filled in progressively —
+  each broadcast frame only supplies a sparse subset of pixels (a real captured 160×90 fixture
+  averaged ~6 KB of `rayData` per frame, well under one byte per pixel), so the image sharpens over
+  several accumulated frames rather than arriving complete in one broadcast.
+- **`entityId` width discrepancy (real, unresolved, flagged rather than silently picked):**
+  `rustplus.js`'s hand-maintained proto declares `AppCameraRays.Entity.entityId` as `uint32`;
+  `RustPlusApi`'s proto — regenerated from the live server assembly, not hand-maintained — declares
+  `entity_id` as `uint64` and also carries four extra optional fields (`time_of_day`,
+  `camera_position`, `camera_rotation`, `sample_rotation`) that `rustplus.js`'s proto doesn't declare
+  at all. This app doesn't map the per-frame entity list at all yet (v1 renders the PNG only), so the
+  discrepancy has no code impact today, but it matters if entity overlays are ever added.
+- **Capability-gated actions, not a raw button API:** `AppCameraInfo.controlFlags`
+  (`None/Movement/Mouse/SprintAndDuck/Fire/Reload/Crosshair`) tells the client which inputs a camera
+  accepts. `CameraController` exposes named, gated helpers (`ZoomAsync`, `ShootAsync`, `ReloadAsync`,
+  `LookAsync`, `MoveAsync`) that refuse client-side (nothing sent) when the device doesn't advertise
+  the required flag — documented as necessary because zoom and turret-fire share the same
+  `FirePrimary` button, and because **the live server acknowledges unsupported inputs with success
+  while silently ignoring them**, so an ungated zoom sent to a turret would actually fire it.
+  `IsAutoTurret`/`IsDrone`/`IsPtzCamera`/`IsStaticCamera` are derived from those same flags and are
+  read directly off the real controller rather than re-implemented.
+- **Live-tested behavior (RustPlusApi.Camera's own doc comments, 2026-06):** PTZ zoom cycles four real
+  FOV levels (65 → 43.33 → 26 → 16.25, wrapping); a drone only actually moves under a *continuous*
+  input stream (`MoveAsync` streams frames for a hold duration; a single press-and-release is acked
+  but does nothing); `Sprint`/`Duck` are a drone's ascend/descend, not jump/duck; a destroyed camera
+  entity fails subsequent subscribes with `RustPlusErrorCode.NoPlayer`.
+- **No official documentation exists.** `rust.facepunch.com/companion` and
+  `wiki.facepunch.com/rust/rust-companion-server` only list "CCTV Camera"/"PTZ CCTV Camera" as in-game
+  item names; neither describes the streaming protocol, subscribe/unsubscribe, or ray format.
+- **No camera discovery.** Rust+ never enumerates cameras; the user must already know the in-game code
+  from a computer station. This app stores user-entered codes with a nickname per server
+  (`saved_cameras`) — a manual list, not a derived/direct one.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
@@ -199,6 +253,9 @@ versioned catalogue (`RustPlusHelper.Application.Vending.ItemCatalog`), not from
 | Vending price/stock/offer-slot change | Derived by comparing marker sell orders, keyed by item/currency/blueprint |
 | Vending grid/distance | Derived locally from direct marker/team coordinates and map size |
 | WebSocket lost/restored | Transport event; restored requires a successful authenticated check |
+| Camera subscribe info/input ack | Direct Rust+ response |
+| Camera rendered image | Client-decoded/rasterized from `AppCameraRays`, not a direct video feed |
+| Camera code/nickname | User-entered; Rust+ provides no camera discovery |
 
 ## Live evidence status
 

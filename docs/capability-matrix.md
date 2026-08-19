@@ -33,8 +33,8 @@ Classifications describe the primary verified source.
 | Storage Monitor | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
 | Generic electrical entity discovery | **NOT CURRENTLY POSSIBLE** | No verified enumeration request |
 | Dedicated light/door/lock/turret state | **NOT CURRENTLY POSSIBLE** | Smart Switch can only control a wired circuit indirectly |
-| CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code |
-| CCTV discovery and map position | **REQUIRES ADDITIONAL DATA SOURCE** | User/static catalogue/manual placement |
+| CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code; ray stream is client-decoded via `RustPlusApi.Camera` |
+| CCTV discovery and map position | **REQUIRES ADDITIONAL DATA SOURCE** | No Rust+ discovery; user enters and nicknames a known code per server |
 | Exact live resource-node locations | **REQUIRES RUST SERVER ACCESS** | Dynamic spawned entities are not in Rust+ or static `.map` data |
 | Resource spawn potential | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from imported topology; biome/splat spawn-rule evaluation is still needed for higher fidelity |
 | Exact recycler locations | **REQUIRES ADDITIONAL DATA SOURCE** | Static catalogue or parsed server map |

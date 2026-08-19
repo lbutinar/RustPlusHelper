@@ -70,7 +70,10 @@ Implemented:
   elevation/contour, water-depth, ore-potential, road, rail, detailed-river, and no-build overlays.
   Build planning combines static evidence but does not claim that candidate terrain is guaranteed
   buildable. Each raster renders as its own Leaflet image overlay on a fixed-z-index pane, and
-  visibility-only changes toggle existing layers rather than re-rasterizing or rebuilding the map.
+  visibility-only changes toggle existing layers rather than re-rasterizing or rebuilding the map;
+- user-entered known camera codes per server, live CCTV/PTZ/auto-turret/drone viewing over the same
+  persistent connection, and only the controls a given camera actually supports (zoom, shoot/reload,
+  look, move). Rust+'s ray stream is decoded and rendered locally; there is still no camera discovery.
 
 Still requiring live verification or later phases:
 

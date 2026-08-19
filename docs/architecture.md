@@ -69,7 +69,15 @@ server connection tests and live map downloads; replacing the adapter does not c
 - `RustPlusConnectionManager` currently owns serialized, short-lived saved-server connection tests
   and full map downloads.
 - `RustPlusLiveSessionManager` owns the selected server's persistent WebSocket, all low-cost polling,
-  reconnect backoff, and bounded snapshot-diff/transport events; UI components own no timers.
+  reconnect backoff, and bounded snapshot-diff/transport events; UI components own no timers. It also
+  owns user-initiated camera viewing (`ViewCameraAsync`/`StopViewingCameraAsync` and the gated
+  zoom/shoot/reload/look/move actions) on that same connection rather than a separate `CameraManager`
+  service — a camera subscription is a single-connection-only resource (the server tracks one
+  subscription per client), so it lives with the connection that already owns that constraint. Camera
+  frames are pushed rather than polled: `IRustPlusClient.CameraFrameReceived` is the app's first
+  event-based (not request/response) adapter surface, wrapping `RustPlusApi.Camera`'s
+  `CameraController`/`CameraRenderer`. The frame→UI publish rate is throttled independent of how often
+  the server actually broadcasts.
 - `MapDashboardService` selects live, cached, or fake sources and exposes one canonical map state.
 - live overlays and semantic events are memory-only. Polling and reconnection are centralized in the
   supervisor rather than UI timers.
@@ -80,8 +88,9 @@ server connection tests and live map downloads; replacing the adapter does not c
   candidates stay manual.
 - `RustPlusPollingScheduler` centrally budgets server requests.
 - `RustPlusEventTranslator` and `SnapshotDiffer` emit direct, derived, or heuristic domain events.
-- `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, `DeviceManager`, and
-  `CameraManager` maintain domain state.
+- `ServerManager`, `TeamManager`, `MapManager`, `MarkerManager`, `MarketManager`, and `DeviceManager`
+  maintain domain state. Camera viewing is implemented on `RustPlusLiveSessionManager` above rather
+  than a separate `CameraManager`.
 - `NotificationManager` evaluates rules and sends messages through `INotificationChannel`.
 - SQLite repositories store server/session state and bounded semantic history.
 
