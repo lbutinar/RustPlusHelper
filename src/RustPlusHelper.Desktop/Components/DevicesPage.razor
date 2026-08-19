@@ -1,3 +1,8 @@
+@implements IDisposable
+@inject RustPlusHelper.Application.RustPlus.ISavedCameraRepository CameraRepository
+@inject RustPlusHelper.Application.RustPlus.RustPlusLiveSessionManager LiveSession
+@using RustPlusHelper.Application.RustPlus
+
 <section class="content-page">
     <div class="page-heading">
         <div>
@@ -17,4 +22,172 @@
             <span>STORAGE MONITOR · DIRECT</span>
         </div>
     </div>
+
+    <div class="page-heading camera-heading">
+        <div>
+            <span class="eyebrow">USER-ENTERED CAMERA CODES</span>
+            <h1>Cameras</h1>
+            <p>Rust+ has no camera discovery; enter the in-game code shown on the camera's computer station.</p>
+        </div>
+    </div>
+
+    @if (ServerId is null)
+    {
+        <article class="surface-card empty-inline-state">Select a saved server to manage its cameras.</article>
+    }
+    else
+    {
+        <form class="camera-add-form" @onsubmit="AddCamera">
+            <label>
+                <span>CAMERA CODE</span>
+                <input data-testid="camera-code-input" placeholder="e.g. CAM01" @bind="_newCode" @bind:event="oninput" />
+            </label>
+            <label>
+                <span>NICKNAME</span>
+                <input data-testid="camera-nickname-input" placeholder="Front gate" @bind="_newNickname" @bind:event="oninput" />
+            </label>
+            <button data-testid="add-camera" type="submit" class="primary-button" disabled="@(!CanAddCamera)">Add camera</button>
+        </form>
+
+        @if (Cameras.Count == 0)
+        {
+            <article class="surface-card empty-inline-state">No saved cameras yet.</article>
+        }
+        else
+        {
+            <div class="camera-list">
+                @foreach (var camera in Cameras)
+                {
+                    <article class="surface-card camera-row" @key="camera.Id">
+                        <div>
+                            <strong>@camera.Nickname</strong>
+                            <span class="camera-code">@camera.Code</span>
+                        </div>
+                        <div class="camera-row-actions">
+                            <button type="button"
+                                    class="ghost-button"
+                                    data-testid="view-camera"
+                                    disabled="@(LiveSession.CurrentCamera.Status == CameraSessionStatus.Subscribing)"
+                                    @onclick="() => ViewCamera(camera.Code)">
+                                View
+                            </button>
+                            <button type="button" class="ghost-button" @onclick="() => RemoveCamera(camera.Id)">Remove</button>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        @if (LiveSession.CurrentCamera.Status != CameraSessionStatus.Inactive)
+        {
+            <article class="surface-card camera-viewer">
+                <header>
+                    <div><span class="eyebrow">VIEWING</span><h2>@LiveSession.CurrentCamera.CameraCode</h2></div>
+                    <button type="button" class="ghost-button" data-testid="stop-viewing-camera" @onclick="StopViewing">Stop viewing</button>
+                </header>
+
+                @if (LiveSession.CurrentCamera.Status == CameraSessionStatus.Subscribing)
+                {
+                    <p class="camera-status">Connecting to camera…</p>
+                }
+                else if (LiveSession.CurrentCamera.Status == CameraSessionStatus.Failed)
+                {
+                    <p class="camera-status camera-error">@(LiveSession.CurrentCamera.Error ?? "Camera subscription failed.")</p>
+                }
+                else if (LiveSession.CurrentCamera is { Status: CameraSessionStatus.Active, Info: { } info })
+                {
+                    @if (LiveSession.CurrentCamera.LatestFrame is { } frame)
+                    {
+                        <img class="camera-frame"
+                             alt="Live camera view"
+                             src="@($"data:image/png;base64,{Convert.ToBase64String(frame.PngImage)}")" />
+                    }
+                    else
+                    {
+                        <p class="camera-status">Waiting for the first frame…</p>
+                    }
+
+                    <div class="camera-controls">
+                        @if (info.IsPtzCamera)
+                        {
+                            <button type="button" class="ghost-button" data-testid="camera-zoom" @onclick="() => LiveSession.ZoomCameraAsync()">Zoom</button>
+                        }
+                        @if (info.IsAutoTurret)
+                        {
+                            <button type="button" class="ghost-button" data-testid="camera-shoot" @onclick="() => LiveSession.ShootCameraAsync()">Shoot</button>
+                            <button type="button" class="ghost-button" data-testid="camera-reload" @onclick="() => LiveSession.ReloadCameraAsync()">Reload</button>
+                        }
+                        @if (!info.IsStaticCamera)
+                        {
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.LookCameraAsync(-LookStep, 0)">Look left</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.LookCameraAsync(LookStep, 0)">Look right</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.LookCameraAsync(0, -LookStep)">Look up</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.LookCameraAsync(0, LookStep)">Look down</button>
+                        }
+                        @if (info.IsDrone)
+                        {
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Forward)">Forward</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Backward)">Backward</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Left)">Left</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Right)">Right</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Ascend)">Ascend</button>
+                            <button type="button" class="ghost-button" @onclick="() => LiveSession.MoveCameraAsync(CameraMoveDirection.Descend)">Descend</button>
+                        }
+                    </div>
+                }
+            </article>
+        }
+    }
 </section>
+
+@code {
+    private const float LookStep = 10f;
+
+    private string _newCode = string.Empty;
+    private string _newNickname = string.Empty;
+
+    [Parameter, EditorRequired]
+    public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private Guid? ServerId => State.ServerId;
+
+    private bool CanAddCamera => !string.IsNullOrWhiteSpace(_newCode) && !string.IsNullOrWhiteSpace(_newNickname);
+
+    private IReadOnlyList<SavedCamera> Cameras => ServerId is { } serverId ? CameraRepository.GetAll(serverId) : [];
+
+    protected override void OnInitialized()
+    {
+        LiveSession.StateChanged += HandleStateChanged;
+    }
+
+    public void Dispose()
+    {
+        LiveSession.StateChanged -= HandleStateChanged;
+    }
+
+    private void AddCamera()
+    {
+        if (ServerId is not { } serverId || !CanAddCamera)
+        {
+            return;
+        }
+
+        CameraRepository.Add(new SavedCamera(Guid.NewGuid(), serverId, _newCode.Trim(), _newNickname.Trim(), DateTimeOffset.UtcNow));
+        _newCode = string.Empty;
+        _newNickname = string.Empty;
+    }
+
+    private void RemoveCamera(Guid id)
+    {
+        if (ServerId is { } serverId)
+        {
+            CameraRepository.Remove(serverId, id);
+        }
+    }
+
+    private Task ViewCamera(string code) => LiveSession.ViewCameraAsync(code);
+
+    private Task StopViewing() => LiveSession.StopViewingCameraAsync();
+
+    private void HandleStateChanged(object? sender, EventArgs args) => InvokeAsync(StateHasChanged);
+}

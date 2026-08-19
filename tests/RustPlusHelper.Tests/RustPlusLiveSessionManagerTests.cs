@@ -203,6 +203,157 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.VendingOfferRemoved);
     }
 
+    [Fact]
+    public async Task ViewCameraAsyncFailsWhenNotConnected()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        var result = await manager.ViewCameraAsync("CAM01");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("not_connected", result.Error?.Code);
+        Assert.Equal(CameraSessionStatus.Inactive, manager.CurrentCamera.Status);
+    }
+
+    [Fact]
+    public async Task ViewCameraAsyncSubscribesAndUpdatesCameraState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var cameraInfo = new CameraInfoSnapshot(160, 90, 0.1f, 200f, false, true, false, false);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1)],
+            cameraInfo: cameraInfo));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var result = await manager.ViewCameraAsync("CAM01");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(cameraInfo, result.Data);
+        Assert.Equal(CameraSessionStatus.Active, manager.CurrentCamera.Status);
+        Assert.Equal("CAM01", manager.CurrentCamera.CameraCode);
+        Assert.Equal(cameraInfo, manager.CurrentCamera.Info);
+        Assert.Equal(1, factory.Clients[0].CameraSubscribeCallCount);
+        Assert.Equal("CAM01", factory.Clients[0].LastSubscribedCameraId);
+    }
+
+    [Fact]
+    public async Task ViewCameraAsyncPreservesAFrameThatArrivesWhileSubscribingInFlight()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var cameraInfo = new CameraInfoSnapshot(160, 90, 0.1f, 200f, false, true, false, false);
+        var raceFrame = new CameraFrameSnapshot([9], 65f, DateTimeOffset.UtcNow);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1)],
+            cameraInfo: cameraInfo,
+            frameDuringSubscribe: raceFrame));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        await manager.ViewCameraAsync("CAM01");
+
+        Assert.Equal(CameraSessionStatus.Active, manager.CurrentCamera.Status);
+        Assert.Same(raceFrame, manager.CurrentCamera.LatestFrame);
+    }
+
+    [Fact]
+    public async Task ViewCameraAsyncFailsWhenNoCameraIsConfigured()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var result = await manager.ViewCameraAsync("UNKNOWN");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(CameraSessionStatus.Failed, manager.CurrentCamera.Status);
+    }
+
+    [Fact]
+    public async Task CameraFrameEventsThrottleHowOftenLatestFrameUpdates()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var cameraInfo = new CameraInfoSnapshot(160, 90, 0.1f, 200f, false, true, false, false);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1)],
+            cameraInfo: cameraInfo));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+        await manager.ViewCameraAsync("CAM01");
+        var client = factory.Clients[0];
+
+        var frameA = new CameraFrameSnapshot([1], 65f, DateTimeOffset.UtcNow);
+        client.RaiseCameraFrame(frameA);
+        Assert.Same(frameA, manager.CurrentCamera.LatestFrame);
+
+        var frameB = new CameraFrameSnapshot([2], 65f, DateTimeOffset.UtcNow);
+        client.RaiseCameraFrame(frameB);
+        Assert.Same(frameA, manager.CurrentCamera.LatestFrame); // still within the throttle window
+
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        var frameC = new CameraFrameSnapshot([3], 65f, DateTimeOffset.UtcNow);
+        client.RaiseCameraFrame(frameC);
+        Assert.Same(frameC, manager.CurrentCamera.LatestFrame);
+    }
+
+    [Fact]
+    public async Task StopViewingCameraAsyncResetsCameraState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var cameraInfo = new CameraInfoSnapshot(160, 90, 0.1f, 200f, false, true, false, false);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1)],
+            cameraInfo: cameraInfo));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+        await manager.ViewCameraAsync("CAM01");
+        Assert.Equal(CameraSessionStatus.Active, manager.CurrentCamera.Status);
+
+        await manager.StopViewingCameraAsync();
+
+        Assert.Equal(CameraSessionState.Inactive, manager.CurrentCamera);
+    }
+
+    [Fact]
+    public async Task CameraSubscriptionFailedEventMarksCameraStateFailed()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var cameraInfo = new CameraInfoSnapshot(160, 90, 0.1f, 200f, false, true, false, false);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1)],
+            cameraInfo: cameraInfo));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+        await manager.ViewCameraAsync("CAM01");
+        var client = factory.Clients[0];
+
+        client.RaiseCameraSubscriptionFailed(new RustPlusError("no_player", "Camera entity destroyed."));
+
+        Assert.Equal(CameraSessionStatus.Failed, manager.CurrentCamera.Status);
+        Assert.Equal("Camera entity destroyed.", manager.CurrentCamera.Error);
+    }
+
     private static RustPlusLiveSessionManager CreateManager(
         ServerManager servers,
         InMemorySecretStore secrets,
@@ -326,16 +477,35 @@ public sealed class RustPlusLiveSessionManagerTests
     private sealed class ScriptedClient(
         IReadOnlyList<TeamSnapshot> teams,
         IReadOnlyList<MapMarkersSnapshot> markerSnapshots,
-        bool disconnectAfterFirstTeam = false) : IRustPlusClient
+        bool disconnectAfterFirstTeam = false,
+        CameraInfoSnapshot? cameraInfo = null,
+        CameraFrameSnapshot? frameDuringSubscribe = null) : IRustPlusClient
     {
         private int _teamIndex;
         private int _markerIndex;
+        private bool _cameraSubscribed;
 
         public bool IsConnected { get; private set; }
 
         public int MapCallCount { get; private set; }
 
         public int TeamCallCount => Volatile.Read(ref _teamIndex);
+
+        public int CameraSubscribeCallCount { get; private set; }
+
+        public string? LastSubscribedCameraId { get; private set; }
+
+        public int ZoomCallCount { get; private set; }
+
+        public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
+
+        public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
+
+        /// <summary>Test hook: simulates a camera ray broadcast arriving for the active subscription.</summary>
+        public void RaiseCameraFrame(CameraFrameSnapshot frame) => CameraFrameReceived?.Invoke(this, frame);
+
+        /// <summary>Test hook: simulates the keep-alive renewal failing (e.g. camera destroyed).</summary>
+        public void RaiseCameraSubscriptionFailed(RustPlusError error) => CameraSubscriptionFailed?.Invoke(this, error);
 
         public Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
         {
@@ -393,6 +563,68 @@ public sealed class RustPlusLiveSessionManagerTests
 
             var result = markerSnapshots[Math.Min(Interlocked.Increment(ref _markerIndex) - 1, markerSnapshots.Count - 1)];
             return Task.FromResult(RustPlusResult<MapMarkersSnapshot>.Success(result));
+        }
+
+        public Task<RustPlusResult<CameraInfoSnapshot>> SubscribeToCameraAsync(
+            string cameraId,
+            CancellationToken cancellationToken = default)
+        {
+            CameraSubscribeCallCount++;
+            LastSubscribedCameraId = cameraId;
+            if (cameraInfo is null)
+            {
+                return Task.FromResult(
+                    RustPlusResult<CameraInfoSnapshot>.Failure("no_camera_configured", "No test camera configured."));
+            }
+
+            _cameraSubscribed = true;
+            if (frameDuringSubscribe is not null)
+            {
+                // Simulates a ray broadcast arriving on the shared connection while the subscribe
+                // request/response is still in flight.
+                CameraFrameReceived?.Invoke(this, frameDuringSubscribe);
+            }
+
+            return Task.FromResult(RustPlusResult<CameraInfoSnapshot>.Success(cameraInfo));
+        }
+
+        public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default)
+        {
+            ZoomCallCount++;
+            return Task.FromResult(_cameraSubscribed
+                ? RustPlusResult<bool>.Success(true)
+                : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+        }
+
+        public Task<RustPlusResult<bool>> ShootCameraAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_cameraSubscribed
+                ? RustPlusResult<bool>.Success(true)
+                : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+
+        public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_cameraSubscribed
+                ? RustPlusResult<bool>.Success(true)
+                : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+
+        public Task<RustPlusResult<bool>> LookCameraAsync(
+            float deltaX,
+            float deltaY,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_cameraSubscribed
+                ? RustPlusResult<bool>.Success(true)
+                : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+
+        public Task<RustPlusResult<bool>> MoveCameraAsync(
+            CameraMoveDirection direction,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_cameraSubscribed
+                ? RustPlusResult<bool>.Success(true)
+                : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+
+        public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default)
+        {
+            _cameraSubscribed = false;
+            return Task.CompletedTask;
         }
 
         public ValueTask DisposeAsync()

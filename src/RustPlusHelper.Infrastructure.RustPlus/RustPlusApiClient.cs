@@ -1,4 +1,7 @@
+using RustPlusApi.Camera;
 using RustPlusApi.Data;
+using RustPlusApi.Data.Cameras;
+using RustPlusApi.Data.Events;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using ApiClient = RustPlusApi.RustPlus;
@@ -15,8 +18,14 @@ public sealed class RustPlusApiClient : IRustPlusClient
 {
     private ApiInterface? _client;
     private string? _tokenText;
+    private CameraController? _cameraController;
+    private CameraRenderer? _cameraRenderer;
 
     public bool IsConnected => _client?.IsConnected == true;
+
+    public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
+
+    public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
 
     public async Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
     {
@@ -60,6 +69,8 @@ public sealed class RustPlusApiClient : IRustPlusClient
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        await TeardownCameraAsync().ConfigureAwait(false);
 
         var client = _client;
         _client = null;
@@ -113,6 +124,76 @@ public sealed class RustPlusApiClient : IRustPlusClient
             RustPlusApiMapper.Map,
             cancellationToken);
 
+    public async Task<RustPlusResult<CameraInfoSnapshot>> SubscribeToCameraAsync(
+        string cameraId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var client = _client;
+        if (client?.IsConnected != true)
+        {
+            return RustPlusResult<CameraInfoSnapshot>.Failure("not_connected", "The Rust+ client is not connected.");
+        }
+
+        // The server tracks only one camera subscription per connection.
+        await TeardownCameraAsync().ConfigureAwait(false);
+
+        try
+        {
+            var response = await CameraController.SubscribeAsync(client, cameraId, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccess || response.Data is null)
+            {
+                var code = response.Error?.Code.ToString() ?? "unknown_error";
+                var message = SecretRedactor.Redact(response.Error?.Message ?? "Rust+ returned no data.", _tokenText);
+                return RustPlusResult<CameraInfoSnapshot>.Failure(code, message);
+            }
+
+            _cameraController = response.Data;
+            _cameraRenderer = new CameraRenderer(_cameraController.Info.Width, _cameraController.Info.Height);
+            _cameraController.OnFrameReceived += HandleCameraFrame;
+            _cameraController.OnKeepAliveFailed += HandleCameraKeepAliveFailed;
+            return RustPlusResult<CameraInfoSnapshot>.Success(RustPlusApiMapper.Map(_cameraController));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return RustPlusResult<CameraInfoSnapshot>.Failure(
+                "transport_exception",
+                SecretRedactor.Redact(exception.Message, _tokenText));
+        }
+    }
+
+    public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(controller => controller.ZoomAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> ShootCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(controller => controller.ShootAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(controller => controller.ReloadAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> LookCameraAsync(
+        float deltaX,
+        float deltaY,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(controller => controller.LookAsync(deltaX, deltaY, cancellationToken));
+
+    public Task<RustPlusResult<bool>> MoveCameraAsync(
+        CameraMoveDirection direction,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(controller => controller.MoveAsync(ToCameraButtons(direction), cancellationToken: cancellationToken));
+
+    public async Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await TeardownCameraAsync().ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync().ConfigureAwait(false);
@@ -154,5 +235,83 @@ public sealed class RustPlusApiClient : IRustPlusClient
                 "transport_exception",
                 SecretRedactor.Redact(exception.Message, _tokenText));
         }
+    }
+
+    private async Task<RustPlusResult<bool>> ExecuteCameraCommandAsync(Func<CameraController, Task<Response>> operation)
+    {
+        var controller = _cameraController;
+        if (controller is null)
+        {
+            return RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active.");
+        }
+
+        try
+        {
+            var response = await operation(controller).ConfigureAwait(false);
+            if (!response.IsSuccess)
+            {
+                var code = response.Error?.Code.ToString() ?? "unknown_error";
+                var message = SecretRedactor.Redact(response.Error?.Message ?? "Rust+ returned no data.", _tokenText);
+                return RustPlusResult<bool>.Failure(code, message);
+            }
+
+            return RustPlusResult<bool>.Success(true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return RustPlusResult<bool>.Failure(
+                "transport_exception",
+                SecretRedactor.Redact(exception.Message, _tokenText));
+        }
+    }
+
+    private static CameraButtons ToCameraButtons(CameraMoveDirection direction) => direction switch
+    {
+        CameraMoveDirection.Forward => CameraButtons.Forward,
+        CameraMoveDirection.Backward => CameraButtons.Backward,
+        CameraMoveDirection.Left => CameraButtons.Left,
+        CameraMoveDirection.Right => CameraButtons.Right,
+        CameraMoveDirection.Ascend => CameraButtons.Sprint,
+        CameraMoveDirection.Descend => CameraButtons.Duck,
+        _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+    };
+
+    private void HandleCameraFrame(object? sender, CameraRaysEventArg frame)
+    {
+        var renderer = _cameraRenderer;
+        if (renderer is null)
+        {
+            return;
+        }
+
+        renderer.AddRays(frame);
+        var png = renderer.Render();
+        CameraFrameReceived?.Invoke(this, new CameraFrameSnapshot(png, frame.VerticalFov, DateTimeOffset.UtcNow));
+    }
+
+    private void HandleCameraKeepAliveFailed(object? sender, ErrorMessage error) =>
+        CameraSubscriptionFailed?.Invoke(
+            this,
+            new RustPlusError(
+                error.Code.ToString(),
+                SecretRedactor.Redact(error.Message ?? "Camera subscription renewal failed.", _tokenText)));
+
+    private async Task TeardownCameraAsync()
+    {
+        var controller = _cameraController;
+        _cameraController = null;
+        _cameraRenderer = null;
+        if (controller is null)
+        {
+            return;
+        }
+
+        controller.OnFrameReceived -= HandleCameraFrame;
+        controller.OnKeepAliveFailed -= HandleCameraKeepAliveFailed;
+        await controller.DisposeAsync().ConfigureAwait(false);
     }
 }

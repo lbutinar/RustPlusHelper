@@ -44,6 +44,26 @@ public sealed record CompanionEvent(
     string? Detail = null,
     MapPositionSnapshot? Position = null);
 
+public enum CameraSessionStatus
+{
+    Inactive,
+    Subscribing,
+    Active,
+    Failed
+}
+
+/// <summary>Camera-viewing state, independent of team/chat/marker polling above — a camera is
+/// only ever viewed on explicit user action, never on a background timer.</summary>
+public sealed record CameraSessionState(
+    CameraSessionStatus Status,
+    string? CameraCode,
+    CameraInfoSnapshot? Info,
+    CameraFrameSnapshot? LatestFrame,
+    string? Error)
+{
+    public static CameraSessionState Inactive { get; } = new(CameraSessionStatus.Inactive, null, null, null, null);
+}
+
 public sealed record RustPlusLiveSessionSeed(
     ServerInfoSnapshot? Server = null,
     TeamSnapshot? Team = null,

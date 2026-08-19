@@ -92,7 +92,7 @@
                     <VendingPage State="State" OnLocate="LocateVending" />
                     break;
                 case AppSection.Devices:
-                    <DevicesPage />
+                    <DevicesPage State="State" />
                     break;
                 case AppSection.Servers:
                     <ServersPage State="State" OnOpenMap="OpenServerMap" />
@@ -112,7 +112,7 @@
         new(AppSection.Team, "Team", "chat_bubble"),
         new(AppSection.Events, "Events", "notifications_active"),
         new(AppSection.Vending, "Vending", "storefront"),
-        new(AppSection.Devices, "Devices", "lightbulb"),
+        new(AppSection.Devices, "Devices & Cameras", "lightbulb"),
         new(AppSection.Servers, "Servers", "dns"),
         new(AppSection.Settings, "Settings", "settings")
     ];

@@ -16,6 +16,12 @@ public sealed class RustPlusLiveSessionManager(
 {
     private const int EventLimit = 200;
     private static readonly TimeSpan MovementEventCooldown = TimeSpan.FromMinutes(1);
+
+    // Caps how often a camera frame updates the UI-visible state, independent of how often the
+    // server broadcasts rays — the renderer keeps accumulating every frame regardless, only the
+    // published rate is capped. See AGENTS.md's "Map rendering rules" for why this matters.
+    private static readonly TimeSpan CameraFrameThrottle = TimeSpan.FromMilliseconds(200);
+
     private readonly Lock _stateLock = new();
     private readonly Dictionary<ulong, DateTimeOffset> _lastMovementEventUtc = [];
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
@@ -25,9 +31,17 @@ public sealed class RustPlusLiveSessionManager(
     private int _forceRefresh;
     private bool _disposed;
 
+    // The connection is owned locally inside RunAsync's reconnect loop; this mirrors whichever
+    // client instance is currently connected so camera calls (user-initiated, not polled) can
+    // reach it. Guarded by _stateLock since RunAsync and camera calls run on different tasks.
+    private IRustPlusClient? _activeClient;
+    private DateTimeOffset _lastCameraFramePublishUtc;
+
     public event EventHandler? StateChanged;
 
     public RustPlusLiveSessionState Current { get; private set; } = RustPlusLiveSessionState.Stopped;
+
+    public CameraSessionState CurrentCamera { get; private set; } = CameraSessionState.Inactive;
 
     public async Task StartAsync(
         Guid serverId,
@@ -89,6 +103,7 @@ public sealed class RustPlusLiveSessionManager(
         {
             await StopCoreAsync().ConfigureAwait(false);
             SetState(RustPlusLiveSessionState.Stopped);
+            SetCameraState(CameraSessionState.Inactive);
         }
         finally
         {
@@ -127,8 +142,10 @@ public sealed class RustPlusLiveSessionManager(
                     {
                         if (client is not null)
                         {
+                            DetachCameraEvents(client);
                             await client.DisposeAsync().ConfigureAwait(false);
                             client = null;
+                            ClearActiveClient();
                         }
 
                         var resolution = connectionResolver.Resolve(serverId);
@@ -165,6 +182,7 @@ public sealed class RustPlusLiveSessionManager(
                         using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                         connectTimeout.CancelAfter(pollingOptions.ConnectTimeout);
                         await client.ConnectAsync(connection.Options, connectTimeout.Token).ConfigureAwait(false);
+                        AttachCameraEvents(client);
 
                         var info = await client.GetServerInfoAsync(connectTimeout.Token).ConfigureAwait(false);
                         if (!info.IsSuccess || info.Data is null)
@@ -210,8 +228,10 @@ public sealed class RustPlusLiveSessionManager(
                 {
                     if (client is not null)
                     {
+                        DetachCameraEvents(client);
                         await client.DisposeAsync().ConfigureAwait(false);
                         client = null;
+                        ClearActiveClient();
                     }
 
                     if (hasConnected && Current.Status == RustPlusLiveSessionStatus.Connected)
@@ -237,7 +257,9 @@ public sealed class RustPlusLiveSessionManager(
         {
             if (client is not null)
             {
+                DetachCameraEvents(client);
                 await client.DisposeAsync().ConfigureAwait(false);
+                ClearActiveClient();
             }
         }
     }
@@ -532,6 +554,163 @@ public sealed class RustPlusLiveSessionManager(
             .ToDictionary(group => group.Key, group => group.First());
 
     private static string ItemLabel(int itemId) => ItemCatalog.TryResolve(itemId)?.Name ?? $"item #{itemId}";
+
+    /// <summary>Subscribes to a camera on the shared live connection, replacing any previous
+    /// camera view. Cameras are viewed only on this explicit call, never on a background timer.</summary>
+    public async Task<RustPlusResult<CameraInfoSnapshot>> ViewCameraAsync(
+        string cameraCode,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(cameraCode);
+
+        var client = GetActiveClient();
+        if (client is null)
+        {
+            return RustPlusResult<CameraInfoSnapshot>.Failure(
+                "not_connected",
+                "The live Rust+ connection is not ready.");
+        }
+
+        SetCameraState(new CameraSessionState(CameraSessionStatus.Subscribing, cameraCode, null, null, null));
+
+        var result = await client.SubscribeToCameraAsync(cameraCode, cancellationToken).ConfigureAwait(false);
+
+        // A ray frame can arrive on the shared connection while the subscribe call is still in
+        // flight; HandleCameraFrame will have already advanced CurrentCamera to Active with it.
+        // Keep that frame rather than clobbering it back to null on the "just subscribed" state.
+        var precedingFrame = CurrentCamera.CameraCode == cameraCode ? CurrentCamera.LatestFrame : null;
+        SetCameraState(result.IsSuccess && result.Data is not null
+            ? new CameraSessionState(CameraSessionStatus.Active, cameraCode, result.Data, precedingFrame, null)
+            : new CameraSessionState(
+                CameraSessionStatus.Failed,
+                cameraCode,
+                null,
+                null,
+                result.Error?.Message ?? "Camera subscription failed."));
+        return result;
+    }
+
+    /// <summary>Ends the current camera view, if any.</summary>
+    public async Task StopViewingCameraAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var client = GetActiveClient();
+        if (client is not null)
+        {
+            await client.UnsubscribeFromCameraAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        SetCameraState(CameraSessionState.Inactive);
+    }
+
+    public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(client => client.ZoomCameraAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> ShootCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(client => client.ShootCameraAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(client => client.ReloadCameraAsync(cancellationToken));
+
+    public Task<RustPlusResult<bool>> LookCameraAsync(
+        float deltaX,
+        float deltaY,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(client => client.LookCameraAsync(deltaX, deltaY, cancellationToken));
+
+    public Task<RustPlusResult<bool>> MoveCameraAsync(
+        CameraMoveDirection direction,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCameraCommandAsync(client => client.MoveCameraAsync(direction, cancellationToken));
+
+    private async Task<RustPlusResult<bool>> ExecuteCameraCommandAsync(
+        Func<IRustPlusClient, Task<RustPlusResult<bool>>> operation)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var client = GetActiveClient();
+        if (client is null || CurrentCamera.Status != CameraSessionStatus.Active)
+        {
+            return RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active.");
+        }
+
+        return await operation(client).ConfigureAwait(false);
+    }
+
+    private IRustPlusClient? GetActiveClient()
+    {
+        lock (_stateLock)
+        {
+            return _activeClient;
+        }
+    }
+
+    private void AttachCameraEvents(IRustPlusClient client)
+    {
+        client.CameraFrameReceived += HandleCameraFrame;
+        client.CameraSubscriptionFailed += HandleCameraSubscriptionFailed;
+        lock (_stateLock)
+        {
+            _activeClient = client;
+        }
+    }
+
+    private void DetachCameraEvents(IRustPlusClient client)
+    {
+        client.CameraFrameReceived -= HandleCameraFrame;
+        client.CameraSubscriptionFailed -= HandleCameraSubscriptionFailed;
+    }
+
+    private void ClearActiveClient()
+    {
+        lock (_stateLock)
+        {
+            _activeClient = null;
+        }
+
+        // The connection that owned the camera subscription is gone; never leave the UI showing
+        // a stale "still active" view once it truthfully is not.
+        if (CurrentCamera.Status == CameraSessionStatus.Active)
+        {
+            SetCameraState(CurrentCamera with
+            {
+                Status = CameraSessionStatus.Failed,
+                Error = "The Rust+ connection was lost."
+            });
+        }
+    }
+
+    private void HandleCameraFrame(object? sender, CameraFrameSnapshot frame)
+    {
+        var shouldPublish = false;
+        lock (_stateLock)
+        {
+            var now = timeProvider.GetUtcNow();
+            if (now - _lastCameraFramePublishUtc >= CameraFrameThrottle)
+            {
+                _lastCameraFramePublishUtc = now;
+                shouldPublish = true;
+            }
+        }
+
+        if (shouldPublish)
+        {
+            SetCameraState(CurrentCamera with { Status = CameraSessionStatus.Active, LatestFrame = frame, Error = null });
+        }
+    }
+
+    private void HandleCameraSubscriptionFailed(object? sender, RustPlusError error) =>
+        SetCameraState(CurrentCamera with { Status = CameraSessionStatus.Failed, Error = error.Message });
+
+    private void SetCameraState(CameraSessionState state)
+    {
+        lock (_stateLock)
+        {
+            CurrentCamera = state;
+        }
+
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void AddEvent(
         Guid serverId,

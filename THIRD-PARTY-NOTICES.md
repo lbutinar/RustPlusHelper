@@ -46,6 +46,16 @@ src/RustPlusHelper.Desktop/wwwroot/vendor/leaflet/
 RustPlusApi and its FCM registration packages are consumed as pinned NuGet dependencies and are not
 vendored into this repository.
 
+## RustPlusApi.Camera
+
+- Version: 2.0.0-beta.7
+- Project: https://github.com/HandyS11/RustPlusApi
+- License: MIT
+
+RustPlusApi.Camera is the same repository's optional camera session/rendering layer (`CameraController`
+and `CameraRenderer`), pinned to the same beta as the core `RustPlusApi` package it depends on. It is
+consumed as a pinned NuGet dependency and is not vendored into this repository.
+
 ## Microsoft.Data.Sqlite
 
 - Version: 10.0.10

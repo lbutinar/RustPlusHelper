@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../RustPlusHelper.Application/RustPlusHelper.Application.csproj" />
     <PackageReference Include="RustPlusApi" />
+    <PackageReference Include="RustPlusApi.Camera" />
     <PackageReference Include="RustPlusApi.Fcm" />
     <PackageReference Include="RustPlusApi.Fcm.Registration" />
   </ItemGroup>

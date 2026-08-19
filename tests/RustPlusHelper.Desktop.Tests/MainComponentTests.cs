@@ -87,6 +87,7 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton(pairing);
         Services.AddSingleton(_connections);
         Services.AddSingleton(liveSession);
+        Services.AddSingleton<ISavedCameraRepository>(new InMemorySavedCameraRepository());
         Services.AddSingleton<IMapCacheRepository>(mapCache);
         Services.AddSingleton(mapTopology);
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
@@ -256,6 +257,55 @@ public sealed class MainComponentTests : BunitContext
                 invocation => invocation.Identifier == "rustPlusMap.focusItem");
             Assert.Equal("marker:2", focus.Arguments[1]);
         });
+    }
+
+    [Fact]
+    public async Task DevicesPageAddsListsAndViewsASavedCameraWithGatedControls()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        Assert.Contains("No saved cameras yet.", component.Markup, StringComparison.Ordinal);
+
+        component.Find("[data-testid='camera-code-input']").Input("CAM01");
+        component.Find("[data-testid='camera-nickname-input']").Input("Front gate");
+        component.Find("form.camera-add-form").Submit();
+
+        Assert.Contains("Front gate", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("CAM01", component.Markup, StringComparison.Ordinal);
+
+        component.Find("[data-testid='view-camera']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Contains("VIEWING", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("Zoom", component.Markup, StringComparison.Ordinal);
+        });
+        Assert.DoesNotContain("Shoot", component.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Forward", component.Markup, StringComparison.Ordinal);
+
+        component.Find("[data-testid='stop-viewing-camera']").Click();
+        component.WaitForAssertion(() =>
+            Assert.DoesNotContain("VIEWING", component.Markup, StringComparison.Ordinal));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        while (!condition())
+        {
+            await Task.Delay(5, timeout.Token);
+        }
     }
 
     [Fact]

@@ -14,6 +14,7 @@
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="RustPlusApi" Version="2.0.0-beta.7" />
+    <PackageVersion Include="RustPlusApi.Camera" Version="2.0.0-beta.7" />
     <PackageVersion Include="RustPlusApi.Fcm" Version="2.0.0-beta.6" />
     <PackageVersion Include="RustPlusApi.Fcm.Registration" Version="2.0.0-beta.6" />
     <PackageVersion Include="protobuf-net" Version="3.2.56" />

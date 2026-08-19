@@ -7,7 +7,25 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
 {
     private static readonly DateTimeOffset FixedUtc = new(2026, 8, 17, 12, 0, 0, TimeSpan.Zero);
 
+    // A tiny deterministic 160x90 solid-color PNG (the app's existing dark panel background),
+    // matching the fake map image's "deterministic development data" convention.
+    private static readonly byte[] FakeCameraPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAKAAAABaCAIAAACwpMoFAAAA60lEQVR4nO3RUQkAIBTAwBfDb8H+FU0hwji4AIPNOpuw"
+        + "+V7AUwbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbH"
+        + "GRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzB"
+        + "cQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcRcjCuDt"
+        + "LJZNjgAAAABJRU5ErkJggg==");
+
+    private bool _cameraSubscribed;
+
     public bool IsConnected { get; private set; }
+
+    public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
+
+    // The deterministic fake client has no keep-alive concept to fail, so this never raises.
+#pragma warning disable CS0067
+    public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
+#pragma warning restore CS0067
 
     public Task ConnectAsync(RustPlusConnectionOptions options, CancellationToken cancellationToken = default)
     {
@@ -21,6 +39,7 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         IsConnected = false;
+        _cameraSubscribed = false;
         return Task.CompletedTask;
     }
 
@@ -106,12 +125,73 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
             new MapMarkerSnapshot(ulong.MaxValue - 7, MapMarkerKind.Unknown, 100, 200, RawType: 777)
         ]), cancellationToken);
 
+    public Task<RustPlusResult<CameraInfoSnapshot>> SubscribeToCameraAsync(
+        string cameraId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(cameraId);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsConnected)
+        {
+            return Task.FromResult(
+                RustPlusResult<CameraInfoSnapshot>.Failure("not_connected", "The fake Rust+ client is not connected."));
+        }
+
+        // A fake PTZ camera: zoom/look succeed, shoot/reload/move are refused, exactly like a real
+        // PTZ camera would refuse turret/drone-only actions.
+        _cameraSubscribed = true;
+        CameraFrameReceived?.Invoke(this, new CameraFrameSnapshot(FakeCameraPng, VerticalFov: 65f, DateTimeOffset.UtcNow));
+        return Task.FromResult(RustPlusResult<CameraInfoSnapshot>.Success(new CameraInfoSnapshot(
+            160, 90, 0.1f, 200f, IsStaticCamera: false, IsPtzCamera: true, IsAutoTurret: false, IsDrone: false)));
+    }
+
+    public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default) =>
+        FakeCameraCommandAsync();
+
+    public Task<RustPlusResult<bool>> ShootCameraAsync(CancellationToken cancellationToken = default) =>
+        FakeCameraRefusedAsync("shoot is an auto-turret action; the fake camera is a PTZ camera");
+
+    public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
+        FakeCameraRefusedAsync("reload is an auto-turret action; the fake camera is a PTZ camera");
+
+    public Task<RustPlusResult<bool>> LookCameraAsync(
+        float deltaX,
+        float deltaY,
+        CancellationToken cancellationToken = default) =>
+        FakeCameraCommandAsync();
+
+    public Task<RustPlusResult<bool>> MoveCameraAsync(
+        CameraMoveDirection direction,
+        CancellationToken cancellationToken = default) =>
+        FakeCameraRefusedAsync("movement is a drone action; the fake camera is a PTZ camera");
+
+    public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _cameraSubscribed = false;
+        return Task.CompletedTask;
+    }
+
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync().ConfigureAwait(false);
     }
 
-    public void Dispose() => IsConnected = false;
+    public void Dispose()
+    {
+        IsConnected = false;
+        _cameraSubscribed = false;
+    }
+
+    private Task<RustPlusResult<bool>> FakeCameraCommandAsync() =>
+        Task.FromResult(_cameraSubscribed
+            ? RustPlusResult<bool>.Success(true)
+            : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+
+    private Task<RustPlusResult<bool>> FakeCameraRefusedAsync(string reason) =>
+        Task.FromResult(_cameraSubscribed
+            ? RustPlusResult<bool>.Failure("not_supported", reason)
+            : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
 
     private Task<RustPlusResult<T>> ConnectedResult<T>(T value, CancellationToken cancellationToken)
     {

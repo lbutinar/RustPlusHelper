@@ -64,6 +64,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IMapCacheRepository, SqliteMapCacheRepository>();
         builder.Services.AddSingleton<IMapTopologyRepository, SqliteMapTopologyRepository>();
         builder.Services.AddSingleton<ICompanionEventRepository, SqliteCompanionEventRepository>();
+        builder.Services.AddSingleton<ISavedCameraRepository, SqliteSavedCameraRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
         builder.Services.AddSingleton<PlayerIdentityManager>();
         builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();

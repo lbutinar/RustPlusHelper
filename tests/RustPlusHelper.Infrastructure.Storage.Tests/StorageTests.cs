@@ -29,7 +29,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(9L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(10L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -65,6 +65,7 @@ public sealed class StorageTests
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN build_planning_rgba;");
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN elevation_rgba;");
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN water_depth_rgba;");
+            Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
@@ -124,6 +125,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE map_topology;");
             Execute(connection, "DROP TABLE companion_events;");
             Execute(connection, "DROP TABLE application_secrets;");
+            Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -274,6 +276,27 @@ public sealed class StorageTests
         Assert.Equal([newest, middle], repository.GetRecent(profile.Id, 10));
         Assert.True(servers.Remove(profile.Id));
         Assert.Empty(repository.GetRecent(profile.Id, 10));
+    }
+
+    [Fact]
+    public void SavedCamerasRoundTripOrderedByNicknameAndCascadeWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqliteSavedCameraRepository(temporary.Database);
+        var frontGate = new SavedCamera(Guid.NewGuid(), profile.Id, "CAM01", "Front gate", FixedUtc.AddMinutes(-1));
+        var backDoor = new SavedCamera(Guid.NewGuid(), profile.Id, "CAM02", "Back door", FixedUtc);
+
+        repository.Add(frontGate);
+        repository.Add(backDoor);
+
+        Assert.Equal([backDoor, frontGate], repository.GetAll(profile.Id));
+        Assert.True(repository.Remove(profile.Id, backDoor.Id));
+        Assert.Equal([frontGate], repository.GetAll(profile.Id));
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Empty(repository.GetAll(profile.Id));
     }
 
     [Fact]

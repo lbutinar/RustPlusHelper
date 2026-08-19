@@ -24,6 +24,16 @@ internal static class RustPlusApiMapper
         source.NexusId,
         source.NexusZone);
 
+    internal static CameraInfoSnapshot Map(RustPlusApi.Camera.CameraController controller) => new(
+        controller.Info.Width,
+        controller.Info.Height,
+        controller.Info.NearPlane,
+        controller.Info.FarPlane,
+        controller.IsStaticCamera,
+        controller.IsPtzCamera,
+        controller.IsAutoTurret,
+        controller.IsDrone);
+
     internal static ServerMapSnapshot Map(ServerMap source) => new(
         source.Width,
         source.Height,

@@ -267,6 +267,39 @@ public sealed class RustPlusConnectionManagerTests
                 ?? RustPlusResult<MapMarkersSnapshot>.Success(new MapMarkersSnapshot([])));
         }
 
+        // Connection-management tests never exercise cameras.
+#pragma warning disable CS0067
+        public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
+        public event EventHandler<RustPlusError>? CameraSubscriptionFailed;
+#pragma warning restore CS0067
+
+        public Task<RustPlusResult<CameraInfoSnapshot>> SubscribeToCameraAsync(
+            string cameraId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<CameraInfoSnapshot>.Failure("not_configured", "No camera configured."));
+
+        public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No camera configured."));
+
+        public Task<RustPlusResult<bool>> ShootCameraAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No camera configured."));
+
+        public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No camera configured."));
+
+        public Task<RustPlusResult<bool>> LookCameraAsync(
+            float deltaX,
+            float deltaY,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No camera configured."));
+
+        public Task<RustPlusResult<bool>> MoveCameraAsync(
+            CameraMoveDirection direction,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No camera configured."));
+
+        public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public async ValueTask DisposeAsync()
         {
             await DisconnectAsync().ConfigureAwait(false);
