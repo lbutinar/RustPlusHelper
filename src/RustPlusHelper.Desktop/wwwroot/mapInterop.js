@@ -50,6 +50,9 @@
     const externalPathLayerKeys = new Set(["roads", "railways", "rivers"]);
     const externalPolygonLayerKeys = new Set(["noBuildZones", "rivers"]);
 
+    // Fixed draw order for stacked terrain rasters, independent of the order layers are toggled in.
+    const rasterLayerOrder = layerKeys.filter(key => externalRasterLayerKeys.has(key));
+
     function escapeHtml(value) {
         return String(value ?? "")
             .replaceAll("&", "&amp;")
@@ -71,9 +74,19 @@
 
         L.control.zoom({ position: "bottomleft" }).addTo(map);
 
+        // Dedicated panes keep each raster layer's stacking order fixed (biomes lowest, resource
+        // potential highest) no matter which order the user toggles them in, and keep every raster
+        // below the tilePane-hosted base map's default vector/marker panes.
+        rasterLayerOrder.forEach((key, index) => {
+            const pane = map.createPane(`raster-${key}`);
+            pane.style.zIndex = String(205 + index);
+            pane.style.pointerEvents = "none";
+        });
+
         const bounds = L.latLngBounds([0, 0], [model.height, model.width]);
         const layers = Object.fromEntries(layerKeys.map(key => [key, L.layerGroup()]));
         const image = L.imageOverlay(imageUrl, bounds, {
+            pane: "tilePane",
             interactive: false,
             className: "rust-base-map"
         });
@@ -83,16 +96,10 @@
             map,
             bounds,
             layers,
-            baseImage: image,
             width: model.width,
             height: model.height,
             imageUrl,
             rasterUrls: new Map(),
-            rasters: [],
-            imagePromises: new Map(),
-            compositeUrls: new Map(),
-            compositeGeneration: 0,
-            activeCompositeKey: "base|",
             markers: new Map()
         };
         entries.set(elementId, entry);
@@ -240,10 +247,16 @@
     }
 
     function renderRaster(entry, raster) {
-        entry.rasters.push({
-            ...raster,
-            dataUrl: rasterDataUrl(entry, raster)
+        const dataUrl = rasterDataUrl(entry, raster);
+        const bounds = L.latLngBounds(
+            [entry.height - raster.pixelBottom, raster.pixelLeft],
+            [entry.height - raster.pixelTop, raster.pixelRight]);
+        const overlay = L.imageOverlay(dataUrl, bounds, {
+            pane: `raster-${raster.layer}`,
+            interactive: false,
+            className: "rust-raster-overlay"
         });
+        entry.layers[raster.layer].addLayer(overlay);
     }
 
     function renderPolyline(entry, polyline) {
@@ -316,15 +329,9 @@
     }
 
     function applyVisibility(entry, visibility) {
-        const hasVisibleRaster = entry.rasters.some(raster => visibility[raster.layer] === true);
         for (const key of layerKeys) {
             const layer = entry.layers[key];
-            const isRasterLayer = externalRasterLayerKeys.has(key);
-            const shouldShow = isRasterLayer
-                ? false
-                : key === "baseMap"
-                    ? visibility.baseMap === true || hasVisibleRaster
-                    : visibility[key] === true;
+            const shouldShow = visibility[key] === true;
             const isShown = entry.map.hasLayer(layer);
             if (shouldShow && !isShown) {
                 layer.addTo(entry.map);
@@ -334,85 +341,16 @@
         }
     }
 
-    function loadImage(entry, url) {
-        const cached = entry.imagePromises.get(url);
-        if (cached) {
-            return cached;
-        }
-
-        const promise = new Promise((resolve, reject) => {
-            const image = new Image();
-            image.onload = () => resolve(image);
-            image.onerror = () => reject(new Error("A local map image could not be decoded."));
-            image.src = url;
-        });
-        entry.imagePromises.set(url, promise);
-        return promise;
-    }
-
-    async function updateCompositeMap(entry, visibility) {
-        const visibleRasters = entry.rasters.filter(raster => visibility[raster.layer] === true);
-        const includeBaseMap = visibility.baseMap === true;
-        const cacheKey = `${includeBaseMap ? "base" : "background"}|${visibleRasters.map(raster => raster.id).join("|")}`;
-        if (entry.activeCompositeKey === cacheKey) {
-            return;
-        }
-
-        const generation = ++entry.compositeGeneration;
-        if (visibleRasters.length === 0 && includeBaseMap) {
-            entry.baseImage.setUrl(entry.imageUrl);
-            entry.activeCompositeKey = cacheKey;
-            return;
-        }
-
-        const cached = entry.compositeUrls.get(cacheKey);
-        if (cached) {
-            entry.baseImage.setUrl(cached);
-            entry.activeCompositeKey = cacheKey;
-            return;
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = entry.width;
-        canvas.height = entry.height;
-        const context = canvas.getContext("2d", { alpha: false });
-        if (includeBaseMap) {
-            const baseImage = await loadImage(entry, entry.imageUrl);
-            context.drawImage(baseImage, 0, 0, entry.width, entry.height);
-        } else {
-            context.fillStyle = "#182522";
-            context.fillRect(0, 0, entry.width, entry.height);
-        }
-
-        for (const raster of visibleRasters) {
-            const image = await loadImage(entry, raster.dataUrl);
-            context.drawImage(
-                image,
-                raster.pixelLeft,
-                raster.pixelTop,
-                raster.pixelRight - raster.pixelLeft,
-                raster.pixelBottom - raster.pixelTop);
-        }
-
-        const dataUrl = canvas.toDataURL("image/png");
-        entry.compositeUrls.set(cacheKey, dataUrl);
-        if (generation === entry.compositeGeneration) {
-            entry.baseImage.setUrl(dataUrl);
-            entry.activeCompositeKey = cacheKey;
-        }
-    }
-
-    async function setLayerVisibility(elementId, visibility) {
+    function setLayerVisibility(elementId, visibility) {
         const entry = entries.get(elementId);
         if (!entry) {
             return;
         }
 
         applyVisibility(entry, visibility ?? {});
-        await updateCompositeMap(entry, visibility ?? {});
     }
 
-    async function render(elementId, imageUrl, model) {
+    function render(elementId, imageUrl, model) {
         if (!window.L) {
             throw new Error("Leaflet was not loaded from the local application assets.");
         }
@@ -437,11 +375,7 @@
         renderGrid(entry, model.grid);
 
         if (model.rasters != null) {
-            entry.rasters = [];
             entry.rasterUrls.clear();
-            entry.imagePromises.clear();
-            entry.compositeUrls.clear();
-            entry.activeCompositeKey = null;
             for (const raster of model.rasters) {
                 renderRaster(entry, raster);
             }
@@ -473,7 +407,6 @@
         }
 
         applyVisibility(entry, model.layerVisibility ?? {});
-        await updateCompositeMap(entry, model.layerVisibility ?? {});
         window.setTimeout(() => entry.map.invalidateSize({ pan: false }), 0);
     }
 
