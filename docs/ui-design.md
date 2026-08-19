@@ -27,9 +27,9 @@ Implemented:
   No-build geometry remains off by default and carries its build-snapshot warning.
 
 The map grid is a toggleable derived layer based on Facepunch's current centered-grid formula. Every
-square carries its complete player-facing reference such as `A0` or `T14`; the same references appear
-in marker tooltips and the team roster. A future search box may navigate to a typed grid without
-changing the projection.
+square carries its complete player-facing reference such as `A0` or `T14`, rendered as a small label
+in the square's bottom-left corner; the same references appear in marker tooltips and the team
+roster. A future search box may navigate to a typed grid without changing the projection.
 
 ## Server registry
 
@@ -63,11 +63,15 @@ The application opens to the map, not a generic dashboard.
 - small JavaScript adapter receiving canonical map DTOs and batched deltas.
 
 The UI sends normalized overlay snapshots to a persistent Leaflet map when source data changes.
-Visibility-only changes use a small interop call and do not rebuild markers, paths, or the grid.
-Biome, terrain-topology, terrain-slope, build-planning, elevation, water-depth, and ore-potential
-rasters are flattened into one cached, opaque map image so
-WebView2 does not continuously composite multiple full-map transparent layers. Fine-grained
-add/update/remove deltas for moving markers remain deferred.
+Visibility-only changes use a small interop call (`rustPlusMap.setLayerVisibility`) that only adds or
+removes existing Leaflet layers from the map; it never rebuilds markers, paths, the grid, or the base
+map image. Biome, terrain-topology, terrain-slope, build-planning, elevation, water-depth, and
+ore-potential rasters each render as their own Leaflet image overlay pinned to a dedicated fixed
+z-index pane, so stacking order (biomes lowest, resource potential highest) stays correct regardless
+of the order layers are toggled in. An earlier version instead flattened the visible rasters into one
+canvas-composited image per toggle; that was replaced because encoding a full-map canvas on every
+click blocked the WebView2 UI thread and froze the app. Fine-grained add/update/remove deltas for
+moving markers remain deferred.
 
 Keeping the full interactive content inside `BlazorWebView` avoids mixing native WPF overlays with the
 browser-rendered map.

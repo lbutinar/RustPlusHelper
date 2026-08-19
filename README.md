@@ -66,8 +66,8 @@ Implemented:
 - per-server SQLite persistence and toggleable biome, topology, terrain-slope, build-planning,
   elevation/contour, water-depth, ore-potential, road, rail, detailed-river, and no-build overlays.
   Build planning combines static evidence but does not claim that candidate terrain is guaranteed
-  buildable. Raster overlays are cached into one map image and visibility-only changes avoid a full
-  Leaflet rebuild.
+  buildable. Each raster renders as its own Leaflet image overlay on a fixed-z-index pane, and
+  visibility-only changes toggle existing layers rather than re-rasterizing or rebuilding the map.
 
 Still requiring live verification or later phases:
 

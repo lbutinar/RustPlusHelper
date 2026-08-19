@@ -33,6 +33,22 @@ distinct.
 - Store unsigned 64-bit Rust identifiers safely; SQLite persistence should use canonical decimal
   text where signed integer range is insufficient.
 
+## Map rendering rules
+
+- A layer/filter visibility toggle must stay an O(1) DOM operation in `mapInterop.js`
+  (`rustPlusMap.setLayerVisibility` adding/removing existing Leaflet layers). It must never
+  re-rasterize, re-encode, or otherwise regenerate the base map image or a raster overlay — that work
+  runs synchronously on the WebView2 UI thread and freezes the app. A canvas-compositing approach was
+  tried and reverted for exactly this reason; see [ui-design.md](docs/ui-design.md).
+- Only a genuine data change (new map image, topology import, markers, team snapshot) may rebuild
+  Leaflet layers. `MapCanvas.razor`'s `OnAfterRenderAsync` already distinguishes this via reference
+  equality on `MapDashboardState`; preserve that short-circuit rather than routing visibility changes
+  through the full-render path.
+- Each terrain/topology raster layer renders as its own Leaflet image overlay on a dedicated
+  fixed-z-index pane (`raster-<layerKey>`), so stacking order is deterministic no matter what order
+  the user toggles layers in. Give any new raster layer its own pane in `rasterLayerOrder` rather than
+  relying on DOM insertion order.
+
 ## Security rules
 
 - Never commit or log player tokens, FCM credentials, Expo tokens, Facepunch auth tokens, pairing
