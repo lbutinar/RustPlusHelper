@@ -21,7 +21,7 @@ public sealed class InMemoryCompanionEventRepository : ICompanionEventRepository
         }
     }
 
-    public void Append(CompanionEvent companionEvent, int retentionLimit)
+    public void Append(CompanionEvent companionEvent, int retentionLimit, DateTimeOffset minRetainedUtc)
     {
         ArgumentNullException.ThrowIfNull(companionEvent);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(retentionLimit);
@@ -36,7 +36,16 @@ public sealed class InMemoryCompanionEventRepository : ICompanionEventRepository
                 .Select(item => item.Id)
                 .ToHashSet();
             _events.RemoveAll(item =>
-                item.ServerId == companionEvent.ServerId && !retainedIds.Contains(item.Id));
+                item.ServerId == companionEvent.ServerId
+                && (!retainedIds.Contains(item.Id) || item.OccurredAtUtc < minRetainedUtc));
+        }
+    }
+
+    public void PurgeOlderThan(DateTimeOffset cutoffUtc)
+    {
+        lock (_lock)
+        {
+            _events.RemoveAll(item => item.OccurredAtUtc < cutoffUtc);
         }
     }
 }

@@ -90,6 +90,8 @@ public sealed class SqliteApplicationSecretStore(
     private static string ToStorageName(ApplicationSecretKind kind) => kind switch
     {
         ApplicationSecretKind.RustPlusFcmCredentials => "rustplus-fcm-credentials",
+        ApplicationSecretKind.AlarmFcmPersistentIds => "alarm-fcm-persistent-ids",
+        ApplicationSecretKind.NotificationPreferences => "notification-preferences",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown application secret kind.")
     };
 }

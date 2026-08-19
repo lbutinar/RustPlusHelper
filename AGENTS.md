@@ -49,6 +49,21 @@ distinct.
   the user toggles layers in. Give any new raster layer its own pane in `rasterLayerOrder` rather than
   relying on DOM insertion order.
 
+## Notification and tray rules
+
+- `System.Windows.Forms` types (`NotifyIcon`, `ContextMenuStrip`, etc.) must stay isolated to their own
+  file(s) using fully-qualified names, never a bare `using System.Windows.Forms;` — that namespace
+  defines `Application`/`MessageBox`/etc. with the same names as WPF's `System.Windows`, which this
+  project uses everywhere else, and the two collide as soon as both usings are in scope together.
+- Third-party FCM/notification types (`RustPlusApi.Fcm.*`) never escape
+  `RustPlusHelper.Infrastructure.RustPlus` — the same adapter boundary rule as every other Rust+
+  integration. The Application layer only sees app-owned types (`AlarmTriggeredCapture`,
+  `AlarmToastNotification`, etc.).
+- A new companion-event-producing feature must raise it through
+  `RustPlusLiveSessionManager.AddEvent`/`RecordExternalEvent` (never append to
+  `ICompanionEventRepository` directly) so it's automatically picked up by `EventRecorded` and reaches
+  both the Events timeline and the notification dispatcher.
+
 ## Security rules
 
 - Never commit or log player tokens, FCM credentials, Expo tokens, Facepunch auth tokens, pairing

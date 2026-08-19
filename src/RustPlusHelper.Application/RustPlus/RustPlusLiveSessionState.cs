@@ -27,7 +27,8 @@ public enum CompanionEventKind
     VendingPriceChanged,
     VendingStockChanged,
     VendingOfferAdded,
-    VendingOfferRemoved
+    VendingOfferRemoved,
+    AlarmTriggered
 }
 
 public enum CompanionEventSource

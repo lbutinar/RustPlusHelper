@@ -65,7 +65,8 @@ public sealed class ServerManager(
                 draft.PlayerId,
                 existing?.CreatedUtc ?? now,
                 now,
-                now);
+                now,
+                draft.RustPlusServerId ?? existing?.RustPlusServerId);
 
             repository.Upsert(profile);
             Profiles = repository.GetAll();

@@ -198,7 +198,8 @@ public sealed class RustPlusPairingManager(
             capture.Host,
             capture.Port,
             true,
-            capture.PlayerId), capture.PlayerToken);
+            capture.PlayerId,
+            capture.RustPlusServerId), capture.PlayerToken);
     }
 
     private CancellationTokenSource BeginOperation(

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Notifications;
 using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
@@ -103,6 +104,8 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton<IMapCacheRepository>(mapCache);
         Services.AddSingleton(mapTopology);
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
+        Services.AddSingleton<IStartupRegistration>(new InMemoryStartupRegistration());
+        Services.AddSingleton(new NotificationPreferencesStore(applicationSecrets));
     }
 
     private sealed class UnavailablePairingProvider : IRustPlusPairingProvider
@@ -653,8 +656,37 @@ public sealed class MainComponentTests : BunitContext
         });
     }
 
+    [Fact]
+    public void SettingsPageTogglesStartWithWindowsAndNotificationPreferences()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Settings", StringComparison.Ordinal))
+            .Click();
+        component.WaitForElement("[data-testid='start-with-windows']");
+
+        var startupRegistration = Services.GetRequiredService<IStartupRegistration>();
+        Assert.False(startupRegistration.IsEnabled);
+        component.Find("[data-testid='start-with-windows']").Change(true);
+        Assert.True(startupRegistration.IsEnabled);
+
+        var preferencesStore = Services.GetRequiredService<NotificationPreferencesStore>();
+        Assert.True(preferencesStore.Get().MarkerEvents);
+        component.Find("[data-testid='notify-markers']").Change(false);
+        Assert.False(preferencesStore.Get().MarkerEvents);
+        Assert.True(preferencesStore.Get().AlarmEvents, "Toggling one category must not affect another.");
+    }
+
     private sealed class FakeClientFactory : IRustPlusClientFactory
     {
         public IRustPlusClient Create() => new FakeRustPlusClient();
+    }
+
+    private sealed class InMemoryStartupRegistration : IStartupRegistration
+    {
+        public bool IsEnabled { get; private set; }
+
+        public void SetEnabled(bool enabled) => IsEnabled = enabled;
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
+using RustPlusHelper.Application.Notifications;
 using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
@@ -25,10 +26,18 @@ namespace RustPlusHelper.Desktop;
 public partial class App : System.Windows.Application
 {
     private IHost? _host;
+    private MainWindow? _mainWindow;
+    private bool _exitRequested;
+    private bool _isOsShuttingDown;
+    private Microsoft.Win32.PowerModeChangedEventHandler? _powerModeChangedHandler;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Set before any window exists: minimize-to-tray relies on Closing being reliably
+        // cancellable without an incidental window-close path ever shutting the app down early.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddWpfBlazorWebView();
@@ -55,6 +64,7 @@ public partial class App : System.Windows.Application
             new RustMapCacheDiscovery(WindowsSteamRustInstallLocator.FindInstallations()));
         builder.Services.AddSingleton<MapTopologyManager>();
         builder.Services.AddSingleton<IMapFilePicker, WindowsMapFilePicker>();
+        builder.Services.AddSingleton<IStartupRegistration, WindowsStartupRegistration>();
         builder.Services.AddSingleton(TimeProvider.System);
 
         var database = new SqliteDatabase(ApplicationDataPaths.GetDatabasePath());
@@ -75,6 +85,12 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IRustPlusPairingProvider, RustPlusApiPairingProvider>();
         builder.Services.AddSingleton<RustPlusPairingManager>();
         builder.Services.AddSingleton<RustPlusEntityPairingManager>();
+        builder.Services.AddSingleton<IRustPlusAlarmListenerProvider, RustPlusApiAlarmListenerProvider>();
+        builder.Services.AddSingleton<RustPlusAlarmNotificationListener>();
+        builder.Services.AddSingleton<NotificationPreferencesStore>();
+        builder.Services.AddSingleton<TrayIconService>();
+        builder.Services.AddSingleton<IDesktopNotifier>(sp => sp.GetRequiredService<TrayIconService>());
+        builder.Services.AddSingleton<NotificationDispatcher>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();
@@ -82,14 +98,78 @@ public partial class App : System.Windows.Application
         _host.Services.GetRequiredService<ServerManager>().Load();
         _host.Services.GetRequiredService<RustPlusPairingManager>().Load();
         _host.Services.GetRequiredService<RustPlusEntityPairingManager>().Load();
+        _host.Services.GetRequiredService<RustPlusAlarmNotificationListener>().Load();
+        _host.Services.GetRequiredService<NotificationDispatcher>(); // materializes and wires subscriptions
+
+        PurgeStaleCompanionEvents();
+
+        var trayIcon = _host.Services.GetRequiredService<TrayIconService>();
+        trayIcon.OpenRequested += (_, _) => ShowMainWindow();
+        trayIcon.ExitRequested += (_, _) =>
+        {
+            _exitRequested = true;
+            Shutdown();
+        };
+
+        SessionEnding += (_, _) => _isOsShuttingDown = true;
+
+        _powerModeChangedHandler = (_, args) =>
+        {
+            if (args.Mode != Microsoft.Win32.PowerModes.Resume)
+            {
+                return;
+            }
+
+            _host.Services.GetRequiredService<RustPlusLiveSessionManager>().RequestRefresh();
+            _host.Services.GetRequiredService<RustPlusAlarmNotificationListener>().RequestReconnect();
+        };
+        Microsoft.Win32.SystemEvents.PowerModeChanged += _powerModeChangedHandler;
 
         var window = new MainWindow(_host.Services);
+        _mainWindow = window;
         MainWindow = window;
+        window.Closing += HandleMainWindowClosing;
         window.Show();
+    }
+
+    private void HandleMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_exitRequested || _isOsShuttingDown)
+        {
+            return;
+        }
+
+        // Minimize to tray instead of exiting — background monitoring keeps running.
+        e.Cancel = true;
+        _mainWindow?.Hide();
+    }
+
+    private void ShowMainWindow()
+    {
+        if (_mainWindow is null)
+        {
+            return;
+        }
+
+        _mainWindow.Show();
+        _mainWindow.WindowState = WindowState.Normal;
+        _mainWindow.Activate();
+    }
+
+    private void PurgeStaleCompanionEvents()
+    {
+        var repository = _host!.Services.GetRequiredService<ICompanionEventRepository>();
+        var timeProvider = _host.Services.GetRequiredService<TimeProvider>();
+        repository.PurgeOlderThan(timeProvider.GetUtcNow() - RustPlusLiveSessionManager.EventRetentionAge);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_powerModeChangedHandler is not null)
+        {
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= _powerModeChangedHandler;
+        }
+
         if (_host is not null)
         {
             _host.StopAsync().GetAwaiter().GetResult();

@@ -469,6 +469,45 @@ public sealed class RustPlusLiveSessionManagerTests
         Assert.Equal("not_connected", result.Error?.Code);
     }
 
+    [Fact]
+    public async Task RecordExternalEventUpdatesLiveStateOnlyForTheActiveServerButAlwaysPersists()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var history = new InMemoryCompanionEventRepository();
+        await using var manager = new RustPlusLiveSessionManager(
+            new RustPlusSavedConnectionResolver(servers, secrets),
+            new ScriptedFactory(_ => new ScriptedClient([Team(true, true)], [Markers(1)])),
+            TimeProvider.System,
+            new RustPlusPollingOptions(
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(1),
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromSeconds(1),
+                [TimeSpan.FromMilliseconds(5)]),
+            history,
+            new InMemoryPairedEntityRepository());
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var recorded = new List<CompanionEvent>();
+        manager.EventRecorded += (_, item) => recorded.Add(item);
+
+        manager.RecordExternalEvent(profile.Id, CompanionEventKind.AlarmTriggered, "Base alarm", "Raiders detected");
+
+        Assert.Contains(manager.Current.Events, item => item.Title == "Base alarm");
+        Assert.Contains(history.GetRecent(profile.Id, 200), item => item.Title == "Base alarm");
+        Assert.Single(recorded, item => item.Title == "Base alarm");
+
+        var otherServerId = Guid.NewGuid();
+        manager.RecordExternalEvent(otherServerId, CompanionEventKind.AlarmTriggered, "Other server alarm");
+
+        Assert.DoesNotContain(manager.Current.Events, item => item.Title == "Other server alarm");
+        Assert.Contains(history.GetRecent(otherServerId, 200), item => item.Title == "Other server alarm");
+        Assert.Single(recorded, item => item.Title == "Other server alarm");
+    }
+
     private static RustPlusLiveSessionManager CreateManager(
         ServerManager servers,
         InMemorySecretStore secrets,
@@ -501,7 +540,7 @@ public sealed class RustPlusLiveSessionManagerTests
             CompanionEventKind.MarkerAppeared,
             CompanionEventSource.SnapshotDiff,
             "Cargo ship appeared");
-        history.Append(persisted, 200);
+        history.Append(persisted, 200, DateTimeOffset.MinValue);
         await using var manager = new RustPlusLiveSessionManager(
             new RustPlusSavedConnectionResolver(servers, secrets),
             new ScriptedFactory(_ => new ScriptedClient([Team(true, true)], [Markers(1)])),

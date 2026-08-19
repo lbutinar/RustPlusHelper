@@ -1,11 +1,18 @@
 namespace RustPlusHelper.Application.Pairing;
 
+/// <summary>
+/// <paramref name="RustPlusServerId"/> is Rust+'s own server GUID (confirmed via
+/// <c>RustPlusApi.Fcm.Data.Events.ServerEvent.Id</c>, doc-commented "The server's unique Rust+ ID")
+/// — distinct from this app's own <c>ServerProfile.Id</c>. It's the only way to attribute a later
+/// alarm-triggered push to the right saved server (see docs/protocol-evidence.md).
+/// </summary>
 public sealed record CapturedRustPlusPairing(
     string Host,
     int Port,
     ulong PlayerId,
     int PlayerToken,
-    string? ServerName);
+    string? ServerName,
+    Guid RustPlusServerId);
 
 /// <summary>Mirrors the verified Rust+ FCM entity-pairing notification's <c>entityType</c>
 /// (Switch/Alarm/StorageMonitor) — see docs/protocol-evidence.md.</summary>

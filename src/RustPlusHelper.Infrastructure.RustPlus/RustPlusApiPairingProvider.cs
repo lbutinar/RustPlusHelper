@@ -18,20 +18,58 @@ public sealed class RustPlusApiPairingProvider : IRustPlusPairingProvider
         return Encoding.UTF8.GetBytes(CredentialsStore.Serialize(credentials));
     }
 
+    /// <summary>
+    /// Bypasses <see cref="PairingListener.WaitForServerPairingAsync"/>: that convenience wrapper's
+    /// <c>ServerPairing</c> result only carries <c>Ip/Port/PlayerId/PlayerToken/Name</c>, dropping the
+    /// Rust+ server's own GUID (<see cref="ServerEvent.Id"/>) that alarm-triggered pushes key off of
+    /// (see docs/protocol-evidence.md). Talks to <see cref="RustPlusFcm.OnServerPairing"/> directly
+    /// instead, mirroring <see cref="WaitForEntityPairingAsync"/>'s already-established pattern below.
+    /// </summary>
     public async Task<CapturedRustPlusPairing> WaitForServerPairingAsync(
         ReadOnlyMemory<byte> credentials,
         CancellationToken cancellationToken = default)
     {
         var serialized = Encoding.UTF8.GetString(credentials.Span);
         var parsed = CredentialsStore.Deserialize(serialized);
-        using var listener = new PairingListener(parsed);
-        var pairing = await listener.WaitForServerPairingAsync(cancellationToken);
-        return new(
-            pairing.Ip,
-            pairing.Port,
-            pairing.PlayerId,
-            pairing.PlayerToken,
-            pairing.Name);
+        using var fcm = new RustPlusFcm(parsed);
+        var androidFcmRegister = new AndroidFcmRegister(null);
+        var completion = new TaskCompletionSource<CapturedRustPlusPairing>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnServerPairing(object? sender, RustPlusApi.Fcm.Data.Notification<ServerEvent?> notification)
+        {
+            if (notification.Data is not { } server)
+            {
+                return;
+            }
+
+            completion.TrySetResult(new CapturedRustPlusPairing(
+                server.Ip,
+                server.Port,
+                notification.PlayerId,
+                notification.PlayerToken,
+                server.Name,
+                server.Id));
+        }
+
+        void OnError(object? sender, Exception exception) => completion.TrySetException(exception);
+
+        using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+
+        fcm.OnServerPairing += OnServerPairing;
+        fcm.ErrorOccurred += OnError;
+        try
+        {
+            await androidFcmRegister.CheckInAsync(parsed.Gcm, cancellationToken).ConfigureAwait(false);
+            await fcm.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            fcm.OnServerPairing -= OnServerPairing;
+            fcm.ErrorOccurred -= OnError;
+            fcm.Disconnect();
+        }
     }
 
     /// <summary>

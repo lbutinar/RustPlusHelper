@@ -1,3 +1,7 @@
+@inject RustPlusHelper.Application.Notifications.NotificationPreferencesStore PreferencesStore
+@inject RustPlusHelper.Desktop.Services.IStartupRegistration StartupRegistration
+@using RustPlusHelper.Application.Notifications
+
 <section class="content-page">
     <div class="page-heading">
         <div>
@@ -16,13 +20,88 @@
             <div><strong>Data source</strong><p>Deterministic application-owned fake client</p></div>
             <span class="setting-value">FAKE</span>
         </div>
-        <div class="setting-row disabled">
-            <div><strong>Start with Windows</strong><p>Available after background lifecycle work.</p></div>
-            <span class="setting-value">PHASE 10</span>
+        <div class="setting-row">
+            <div><strong>Start with Windows</strong><p>Launch RustPlusHelper minimized to the tray when you sign in.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="start-with-windows"
+                       checked="@StartWithWindowsEnabled"
+                       @onchange="@(e => StartWithWindowsEnabled = (bool)e.Value!)" />
+            </label>
         </div>
         <div class="setting-row">
             <div><strong>About</strong><p>Unofficial community project; not affiliated with or endorsed by Facepunch Studios.</p></div>
             <span class="setting-value">UNOFFICIAL</span>
         </div>
     </div>
+
+    <div class="page-heading">
+        <div>
+            <span class="eyebrow">DESKTOP ALERTS</span>
+            <h1>Notifications</h1>
+            <p>Choose which companion events show a tray notification while RustPlusHelper is minimized.</p>
+        </div>
+    </div>
+
+    <div class="surface-card settings-card">
+        <div class="setting-row">
+            <div><strong>Connection</strong><p>Monitoring connected, lost, or restored.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-connection"
+                       checked="@Preferences.ConnectionEvents"
+                       @onchange="@(e => SavePreferences(Preferences with { ConnectionEvents = (bool)e.Value! }))" />
+            </label>
+        </div>
+        <div class="setting-row">
+            <div><strong>Team</strong><p>Teammates connecting, dying, or changing location.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-team"
+                       checked="@Preferences.TeamEvents"
+                       @onchange="@(e => SavePreferences(Preferences with { TeamEvents = (bool)e.Value! }))" />
+            </label>
+        </div>
+        <div class="setting-row">
+            <div><strong>Map markers</strong><p>World events such as cargo ship or patrol helicopter.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-markers"
+                       checked="@Preferences.MarkerEvents"
+                       @onchange="@(e => SavePreferences(Preferences with { MarkerEvents = (bool)e.Value! }))" />
+            </label>
+        </div>
+        <div class="setting-row">
+            <div><strong>Vending</strong><p>Tracked sell-order price, stock, and offer changes.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-vending"
+                       checked="@Preferences.VendingEvents"
+                       @onchange="@(e => SavePreferences(Preferences with { VendingEvents = (bool)e.Value! }))" />
+            </label>
+        </div>
+        <div class="setting-row">
+            <div><strong>Smart Alarms</strong><p>A paired Smart Alarm was triggered.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-alarms"
+                       checked="@Preferences.AlarmEvents"
+                       @onchange="@(e => SavePreferences(Preferences with { AlarmEvents = (bool)e.Value! }))" />
+            </label>
+        </div>
+    </div>
 </section>
+
+@code {
+    private NotificationPreferences Preferences => PreferencesStore.Get();
+
+    // Read live on every access rather than cached: a single registry read is negligible cost and
+    // this self-heals if the value was ever changed outside the app.
+    private bool StartWithWindowsEnabled
+    {
+        get => StartupRegistration.IsEnabled;
+        set => StartupRegistration.SetEnabled(value);
+    }
+
+    private void SavePreferences(NotificationPreferences preferences) => PreferencesStore.Save(preferences);
+}

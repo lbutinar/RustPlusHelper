@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 11;
+    private const int LatestVersion = 12;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -124,6 +124,10 @@ internal static class SqliteMigrationRunner
             ON saved_cameras(server_id, camera_code);
         """;
 
+    private const string ServerRustPlusIdSchema = """
+        ALTER TABLE servers ADD COLUMN rust_plus_server_id TEXT;
+        """;
+
     private const string PairedEntitySchema = """
         CREATE TABLE paired_entities (
             id TEXT NOT NULL PRIMARY KEY,
@@ -184,6 +188,7 @@ internal static class SqliteMigrationRunner
             9 => ("derived terrain planning rasters", TerrainPlanningSchema),
             10 => ("saved camera codes", SavedCameraSchema),
             11 => ("paired smart devices", PairedEntitySchema),
+            12 => ("server rust+ id capture", ServerRustPlusIdSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

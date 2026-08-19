@@ -30,7 +30,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(11L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(12L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -68,6 +68,7 @@ public sealed class StorageTests
             Execute(connection, "ALTER TABLE map_topology DROP COLUMN water_depth_rgba;");
             Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DROP TABLE paired_entities;");
+            Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
@@ -95,6 +96,29 @@ public sealed class StorageTests
         Assert.Equal("text", ExecuteScalar<string>(connection, "SELECT typeof(player_id) FROM servers;"));
         Assert.Equal(ulong.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ExecuteScalar<string>(connection, "SELECT player_id FROM servers;"));
+    }
+
+    [Fact]
+    public void ServerProfileRoundTripsRustPlusServerIdAndAllowsItToRemainNull()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var rustPlusServerId = Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+        var withId = CreateProfile(playerId: 1, rustPlusServerId: rustPlusServerId);
+        servers.Upsert(withId);
+
+        var withoutId = withId with
+        {
+            Id = Guid.Parse("6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+            RustPlusServerId = null
+        };
+        servers.Upsert(withoutId);
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        var restored = new SqliteServerRepository(reopenedDatabase).GetAll();
+
+        Assert.Equal(rustPlusServerId, restored.Single(profile => profile.Id == withId.Id).RustPlusServerId);
+        Assert.Null(restored.Single(profile => profile.Id == withoutId.Id).RustPlusServerId);
     }
 
     [Fact]
@@ -129,6 +153,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE application_secrets;");
             Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DROP TABLE paired_entities;");
+            Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -272,13 +297,71 @@ public sealed class StorageTests
             CompanionEventSource.Transport,
             "Connection lost");
 
-        repository.Append(oldest, 2);
-        repository.Append(middle, 2);
-        repository.Append(newest, 2);
+        repository.Append(oldest, 2, DateTimeOffset.MinValue);
+        repository.Append(middle, 2, DateTimeOffset.MinValue);
+        repository.Append(newest, 2, DateTimeOffset.MinValue);
 
         Assert.Equal([newest, middle], repository.GetRecent(profile.Id, 10));
         Assert.True(servers.Remove(profile.Id));
         Assert.Empty(repository.GetRecent(profile.Id, 10));
+    }
+
+    [Fact]
+    public void CompanionEventAppendPurgesRowsOlderThanMinRetainedRegardlessOfRowCountCap()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqliteCompanionEventRepository(temporary.Database);
+        var old = new CompanionEvent(
+            Guid.Parse("40000000-0000-0000-0000-000000000000"),
+            profile.Id,
+            FixedUtc.AddDays(-31),
+            CompanionEventKind.ConnectionEstablished,
+            CompanionEventSource.Transport,
+            "Old connection event");
+        repository.Append(old, 200, DateTimeOffset.MinValue);
+
+        var recent = new CompanionEvent(
+            Guid.Parse("50000000-0000-0000-0000-000000000000"),
+            profile.Id,
+            FixedUtc,
+            CompanionEventKind.ConnectionLost,
+            CompanionEventSource.Transport,
+            "Recent connection event");
+        repository.Append(recent, 200, FixedUtc.AddDays(-30));
+
+        var remaining = repository.GetRecent(profile.Id, 10);
+        Assert.Single(remaining);
+        Assert.Equal(recent.Id, remaining[0].Id);
+    }
+
+    [Fact]
+    public void CompanionEventPurgeOlderThanSweepsEveryServerNotJustTheOneAppendedTo()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var activeProfile = CreateProfile();
+        servers.Upsert(activeProfile);
+        var staleProfile = activeProfile with { Id = Guid.Parse("6ba7b812-9dad-11d1-80b4-00c04fd430c8") };
+        servers.Upsert(staleProfile);
+        var repository = new SqliteCompanionEventRepository(temporary.Database);
+
+        var staleEvent = new CompanionEvent(
+            Guid.Parse("60000000-0000-0000-0000-000000000000"),
+            staleProfile.Id,
+            FixedUtc.AddDays(-45),
+            CompanionEventKind.ConnectionEstablished,
+            CompanionEventSource.Transport,
+            "Stale server's old event");
+        // Appended with an effectively-disabled age cutoff, mirroring a server whose live session
+        // hasn't run recently enough to have its own Append call trim it by age.
+        repository.Append(staleEvent, 200, DateTimeOffset.MinValue);
+
+        repository.PurgeOlderThan(FixedUtc.AddDays(-30));
+
+        Assert.Empty(repository.GetRecent(staleProfile.Id, 10));
     }
 
     [Fact]
@@ -444,7 +527,7 @@ public sealed class StorageTests
         }
     }
 
-    private static ServerProfile CreateProfile(ulong? playerId = null) => new(
+    private static ServerProfile CreateProfile(ulong? playerId = null, Guid? rustPlusServerId = null) => new(
         Guid.Parse("349b4e9a-215f-4388-ad24-4df8fa572f1c"),
         "EU Main",
         "companion.example.invalid",
@@ -453,7 +536,8 @@ public sealed class StorageTests
         playerId,
         FixedUtc,
         FixedUtc,
-        FixedUtc);
+        FixedUtc,
+        rustPlusServerId);
 
     private static T ExecuteScalar<T>(SqliteConnection connection, string sql)
     {

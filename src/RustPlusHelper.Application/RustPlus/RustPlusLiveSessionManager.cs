@@ -17,6 +17,11 @@ public sealed class RustPlusLiveSessionManager(
     IPairedEntityRepository pairedEntities) : IAsyncDisposable, IDisposable
 {
     private const int EventLimit = 200;
+
+    /// <summary>Also used for the app-startup <see cref="ICompanionEventRepository.PurgeOlderThan"/>
+    /// sweep, which covers servers whose live session hasn't run recently enough to trigger this
+    /// manager's own per-append age trim.</summary>
+    public static readonly TimeSpan EventRetentionAge = TimeSpan.FromDays(30);
     private static readonly TimeSpan MovementEventCooldown = TimeSpan.FromMinutes(1);
 
     // Caps how often a camera frame updates the UI-visible state, independent of how often the
@@ -42,6 +47,11 @@ public sealed class RustPlusLiveSessionManager(
         new Dictionary<ulong, PairedEntityLiveState>();
 
     public event EventHandler? StateChanged;
+
+    /// <summary>Raised for every <see cref="CompanionEvent"/> persisted, whether from this manager's
+    /// own polling/diffing or from <see cref="RecordExternalEvent"/> — the single hook a notification
+    /// dispatcher needs, independent of whether the event's server is the one currently active.</summary>
+    public event EventHandler<CompanionEvent>? EventRecorded;
 
     public RustPlusLiveSessionState Current { get; private set; } = RustPlusLiveSessionState.Stopped;
 
@@ -895,13 +905,54 @@ public sealed class RustPlusLiveSessionManager(
             title,
             detail,
             position);
-        eventRepository.Append(item, EventLimit);
+        PersistAndPublish(item, updateCurrent: true);
+    }
+
+    /// <summary>Records a <see cref="CompanionEvent"/> that did not originate from this manager's own
+    /// connection/polling — e.g. a Smart Alarm push that can arrive for any paired server, not just
+    /// the one currently active. Always persists and raises <see cref="EventRecorded"/>; only updates
+    /// <see cref="Current"/>/raises <see cref="StateChanged"/> when the event's server is the one
+    /// currently active, so an alarm for a server you aren't viewing doesn't corrupt the live
+    /// dashboard state.</summary>
+    public void RecordExternalEvent(
+        Guid serverId,
+        CompanionEventKind kind,
+        string title,
+        string? detail = null)
+    {
+        var item = new CompanionEvent(
+            Guid.NewGuid(),
+            serverId,
+            timeProvider.GetUtcNow(),
+            kind,
+            CompanionEventSource.Transport,
+            title,
+            detail);
+        bool isActiveServer;
         lock (_stateLock)
         {
-            Current = Current with { Events = [item, .. Current.Events.Take(EventLimit - 1)] };
+            isActiveServer = Current.ServerId == serverId;
         }
 
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        PersistAndPublish(item, updateCurrent: isActiveServer);
+    }
+
+    private void PersistAndPublish(CompanionEvent item, bool updateCurrent)
+    {
+        eventRepository.Append(item, EventLimit, timeProvider.GetUtcNow() - EventRetentionAge);
+        if (updateCurrent)
+        {
+            lock (_stateLock)
+            {
+                Current = Current with { Events = [item, .. Current.Events.Take(EventLimit - 1)] };
+            }
+        }
+
+        EventRecorded?.Invoke(this, item);
+        if (updateCurrent)
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void SetState(RustPlusLiveSessionState state)

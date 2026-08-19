@@ -42,7 +42,7 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
         return events;
     }
 
-    public void Append(CompanionEvent companionEvent, int retentionLimit)
+    public void Append(CompanionEvent companionEvent, int retentionLimit, DateTimeOffset minRetainedUtc)
     {
         ArgumentNullException.ThrowIfNull(companionEvent);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(retentionLimit);
@@ -80,19 +80,33 @@ public sealed class SqliteCompanionEventRepository(SqliteDatabase database) : IC
             trim.CommandText = """
                 DELETE FROM companion_events
                 WHERE server_id = $serverId
-                  AND id NOT IN (
-                      SELECT id
-                      FROM companion_events
-                      WHERE server_id = $serverId
-                      ORDER BY occurred_utc_ms DESC, id DESC
-                      LIMIT $retentionLimit
+                  AND (
+                      id NOT IN (
+                          SELECT id
+                          FROM companion_events
+                          WHERE server_id = $serverId
+                          ORDER BY occurred_utc_ms DESC, id DESC
+                          LIMIT $retentionLimit
+                      )
+                      OR occurred_utc_ms < $minRetainedUtcMs
                   );
                 """;
             trim.Parameters.AddWithValue("$serverId", companionEvent.ServerId.ToString("D"));
             trim.Parameters.AddWithValue("$retentionLimit", retentionLimit);
+            trim.Parameters.AddWithValue("$minRetainedUtcMs", minRetainedUtc.ToUnixTimeMilliseconds());
             trim.ExecuteNonQuery();
         }
 
         transaction.Commit();
+    }
+
+    public void PurgeOlderThan(DateTimeOffset cutoffUtc)
+    {
+        database.Initialize();
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM companion_events WHERE occurred_utc_ms < $cutoffUtcMs;";
+        command.Parameters.AddWithValue("$cutoffUtcMs", cutoffUtc.ToUnixTimeMilliseconds());
+        command.ExecuteNonQuery();
     }
 }

@@ -9,7 +9,8 @@ public sealed record ServerProfile(
     ulong? PlayerId,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc,
-    DateTimeOffset? LastSelectedUtc);
+    DateTimeOffset? LastSelectedUtc,
+    Guid? RustPlusServerId = null);
 
 public sealed record ServerProfileDraft(
     Guid? Id,
@@ -17,4 +18,5 @@ public sealed record ServerProfileDraft(
     string Host,
     int Port,
     bool UseFacepunchProxy = true,
-    ulong? PlayerId = null);
+    ulong? PlayerId = null,
+    Guid? RustPlusServerId = null);

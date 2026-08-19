@@ -54,6 +54,8 @@
         CompanionEventKind.VendingPriceChanged or CompanionEventKind.VendingStockChanged
             or CompanionEventKind.VendingOfferAdded or CompanionEventKind.VendingOfferRemoved =>
             "Derived from comparing consecutive vending machine sell orders.",
+        CompanionEventKind.AlarmTriggered =>
+            "Pushed directly by a paired Smart Alarm, independent of polling.",
         _ => "Derived from Rust+ state."
     };
 }

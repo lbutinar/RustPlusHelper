@@ -3,6 +3,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon/balloon notification (System.Windows.Forms.NotifyIcon) — see
+         AGENTS.md's notification rules for why that code stays isolated in its own file. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WFO0003 assumes a WinForms app configures high-DPI itself; app.manifest's existing
+         PerMonitorV2 setting is WPF's own, deliberate DPI configuration and must not be removed for
+         this thin NotifyIcon usage. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>RustPlusHelper</AssemblyName>
@@ -20,5 +27,8 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\rustplus-app-icon.png" />
+    <!-- EmbeddedResource, not Resource: the tray icon is loaded as a System.Drawing.Icon via
+         Assembly.GetManifestResourceStream, not through a WPF pack:// URI. -->
+    <EmbeddedResource Include="Assets\rustplus-tray-icon.ico" />
   </ItemGroup>
 </Project>

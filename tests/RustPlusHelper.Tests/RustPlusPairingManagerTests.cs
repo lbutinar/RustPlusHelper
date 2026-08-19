@@ -11,6 +11,7 @@ namespace RustPlusHelper.Tests;
 public sealed class RustPlusPairingManagerTests
 {
     private const ulong PlayerId = 76561198000000000UL;
+    private static readonly Guid RustPlusServerId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     [Fact]
     public async Task RegistrationProtectsCredentialsAndZerosProviderBuffer()
@@ -44,7 +45,7 @@ public sealed class RustPlusPairingManagerTests
         using var serverSecrets = new InMemorySecretStore();
         var provider = new FakePairingProvider
         {
-            Pairing = new("203.0.113.20", 28082, PlayerId, -4242, "Sanitized server")
+            Pairing = new("203.0.113.20", 28082, PlayerId, -4242, "Sanitized server", RustPlusServerId)
         };
         var serverRepository = new InMemoryServerRepository();
         var identity = new PlayerIdentityManager(
@@ -64,6 +65,7 @@ public sealed class RustPlusPairingManagerTests
         Assert.Equal("203.0.113.20", profile.Host);
         Assert.Equal(28082, profile.Port);
         Assert.True(profile.UseFacepunchProxy);
+        Assert.Equal(RustPlusServerId, profile.RustPlusServerId);
         AssertToken(serverSecrets, profile.Id, "-4242");
     }
 
@@ -74,7 +76,7 @@ public sealed class RustPlusPairingManagerTests
         using var serverSecrets = new InMemorySecretStore();
         var provider = new FakePairingProvider
         {
-            Pairing = new("pair.invalid", 28082, PlayerId, 1, "First name")
+            Pairing = new("pair.invalid", 28082, PlayerId, 1, "First name", RustPlusServerId)
         };
         var serverRepository = new InMemoryServerRepository();
         var identity = new PlayerIdentityManager(
@@ -84,12 +86,14 @@ public sealed class RustPlusPairingManagerTests
 
         await manager.ListenAsync();
         var originalId = Assert.Single(servers.Profiles).Id;
-        provider.Pairing = new("PAIR.INVALID", 28082, PlayerId, 2, "Updated name");
+        var updatedRustPlusServerId = Guid.NewGuid();
+        provider.Pairing = new("PAIR.INVALID", 28082, PlayerId, 2, "Updated name", updatedRustPlusServerId);
         await manager.ListenAsync();
 
         var updated = Assert.Single(servers.Profiles);
         Assert.Equal(originalId, updated.Id);
         Assert.Equal("Updated name", updated.DisplayName);
+        Assert.Equal(updatedRustPlusServerId, updated.RustPlusServerId);
         AssertToken(serverSecrets, updated.Id, "2");
     }
 
@@ -100,7 +104,7 @@ public sealed class RustPlusPairingManagerTests
         using var serverSecrets = new InMemorySecretStore();
         var provider = new FakePairingProvider
         {
-            Pairing = new("pair.invalid", 28082, PlayerId + 1, 99, "Other account")
+            Pairing = new("pair.invalid", 28082, PlayerId + 1, 99, "Other account", RustPlusServerId)
         };
         var serverRepository = new InMemoryServerRepository();
         var identity = new PlayerIdentityManager(
@@ -153,7 +157,7 @@ public sealed class RustPlusPairingManagerTests
         public byte[]? ReturnedCredentials { get; private set; }
 
         public CapturedRustPlusPairing Pairing { get; set; } =
-            new("pair.invalid", 28082, PlayerId, 42, "Sanitized server");
+            new("pair.invalid", 28082, PlayerId, 42, "Sanitized server", RustPlusServerId);
 
         public CapturedEntityPairing EntityPairing { get; set; } =
             new(PlayerId, 42, 12345, PairedEntityKind.Switch, "Sanitized switch");
