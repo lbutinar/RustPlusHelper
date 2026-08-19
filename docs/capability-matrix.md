@@ -26,7 +26,7 @@ Classifications describe the primary verified source.
 | Oil-rig monument | **AVAILABLE DIRECTLY THROUGH RUST+** | Monument data |
 | Oil-rig activation | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Heuristic, not direct event |
 | Vending position, orders, price, stock | **AVAILABLE DIRECTLY THROUGH RUST+** | Vending marker sell orders |
-| Vending item names/icons | **REQUIRES ADDITIONAL DATA SOURCE** | Versioned Rust item catalogue |
+| Vending item names/icons (names only) | **AVAILABLE VIA EXTERNAL CATALOGUE** | Versioned Rust item catalogue, not live Rust+ data |
 | Vending owner Steam ID | **NOT CURRENTLY POSSIBLE** | Not in verified marker contract |
 | Smart Switch read/control | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |
 | Smart Alarm state/subscription | **AVAILABLE DIRECTLY THROUGH RUST+** | Paired entity ID |

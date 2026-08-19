@@ -146,16 +146,30 @@ or current enemy presence. Sampled movement trails remain deferred.
 
 **Goal:** Search offers and locate machines.
 
-**Status:** First direct-data slice implemented. Machine names and numeric Rust+ item/currency IDs
-are searchable, each result shows direct price/stock, its derived grid, and distance from the nearest
-online teammate. Friendly item names still require a reviewed versioned external catalogue; map
-focus/navigation is implemented, while offer-change history remains.
+**Status:** Implemented on 2026-08-19. Machine names, friendly item/currency names, and numeric
+Rust+ item/currency IDs are all searchable; each result shows direct price/stock, its derived grid,
+and distance from the nearest online teammate; map focus/navigation works. Friendly names come from
+a bundled, versioned external catalogue (`ItemCatalog`, see `docs/protocol-evidence.md`) — an
+unresolved ID always falls back to the raw number rather than a guess. Offer-change history is
+derived by keying each vending offer on `(ItemId, CurrencyId, IsItemBlueprint, IsCurrencyBlueprint)`
+and comparing that "slot signature" across consecutive polls of the same marker, emitting
+`VendingPriceChanged`/`VendingStockChanged`/`VendingOfferAdded`/`VendingOfferRemoved` events; a
+marker that itself just appeared or disappeared only gets that marker-level event, never a flood of
+offer-level ones.
 
-**Modules:** market manager, versioned item catalogue, vending differ/repositories.
+**Modules:** `VendingMarketplace` (market manager + search), `ItemCatalog` (versioned item
+catalogue), and an inline offer differ inside `RustPlusLiveSessionManager.AddMarkerEvents` — matching
+the same inline-differ convention Phase 5's team/marker events already use rather than a separate
+differ class. No new SQLite table was needed; offer-change events reuse the existing
+`companion_events` history.
 
-**Risks/tests:** item definition drift and multiplier semantics; known offer fixtures.
+**Risks/tests:** item definition drift (catalogue can lag a Rust update; always labelled external,
+never silently guessed) and multiplier semantics (covered by `RustPlusApiMapperTests`); known offer
+fixtures for price/stock/add/remove diffing and the appear-suppression rule are covered in
+`RustPlusLiveSessionManagerTests`.
 
-**Done:** user can search, inspect correct price/stock, calculate distance, and locate on map.
+**Done:** user can search by name or numeric ID, inspect correct price/stock with friendly names,
+calculate distance, locate on map, and see vending price/stock/offer changes as history events.
 
 ## Phase 8 — Smart devices
 

@@ -162,6 +162,29 @@ unsupported collider shapes, server plugins, and custom server restrictions are 
 guessed. The bundled catalogue contains no live server data, authenticated traffic, game meshes, or
 textures.
 
+## External item-name catalogue (not Rust+)
+
+Rust+ never supplies item names, only the numeric `ItemId`/`CurrencyId` on each vending sell order.
+Friendly names shown in the Vending page and in vending offer-change events come from a bundled,
+versioned catalogue (`RustPlusHelper.Application.Vending.ItemCatalog`), not from Rust+ itself.
+
+- Source: [SzyMig/Rust-item-list-JSON](https://github.com/SzyMig/Rust-item-list-JSON), reviewed
+  2026-08-19 by fetching `Rust-Items.json` directly (853,356 bytes; SHA-256 verified against the
+  server's reported `Content-Length` to rule out transcription/transport corruption of the numeric
+  IDs). It aggregates Rust's own bundled `items/*.json` game files.
+- **The upstream repository has no declared license** (`license: null` via the GitHub API). Only
+  factual `id`/`shortName`/`name` triples were extracted — not the aggregator's compiled file or its
+  extra descriptive fields — consistent with this project's existing "used only to identify
+  compatibility" stance toward Facepunch-originated names (see `THIRD-PARTY-NOTICES.md`).
+- 1259 raw entries were deduplicated by `itemid` to 1253 unique items, preferring the dot-delimited
+  shortname form (Rust's real convention, e.g. `rifle.ak`) over a stray space-delimited duplicate.
+  Spot-checked against independently known stable IDs (`wood` → `-151838493`,
+  `scrap` → `-932201673`, `rifle.ak` → `1545779598`).
+- An `ItemId`/`CurrencyId` with no catalogue entry (a new game item, or one the source hasn't picked
+  up yet) always falls back to displaying the raw numeric ID — it is never guessed or hidden.
+- The catalogue can drift from the live game after a Rust update; `ItemCatalog.CatalogueVersion`
+  records which reviewed snapshot is bundled so drift is at least attributable.
+
 ## Direct versus derived behavior
 
 | Behavior | Evidence status |
@@ -173,7 +196,7 @@ textures.
 | Current cargo/CH47/patrol-heli/crate/explosion marker | Direct Rust+ response |
 | Marker appeared/disappeared event | Derived by comparing snapshots |
 | Oil-rig activation | Community heuristic, not an explicit protocol event |
-| Vending offer/stock change | Derived by comparing marker sell orders |
+| Vending price/stock/offer-slot change | Derived by comparing marker sell orders, keyed by item/currency/blueprint |
 | Vending grid/distance | Derived locally from direct marker/team coordinates and map size |
 | WebSocket lost/restored | Transport event; restored requires a successful authenticated check |
 

@@ -78,6 +78,21 @@ sanitized catalogue derived from its 0.4.0 published no-build metadata is embedd
 24181174. It contains prefab IDs, paths, and circle/rectangle collider geometry only; it does not
 contain original game meshes or textures. The upstream MIT license is retained beside that data.
 
+## Rust item ID/name catalogue
+
+- Project: https://github.com/SzyMig/Rust-item-list-JSON
+- Reviewed version: repository state on 2026-08-19
+- License: none declared by the repository (`license: null` via the GitHub API)
+
+Rust-item-list-JSON aggregates Rust's own bundled `items/*.json` game files into one JSON file. It is
+not executed by RustPlusHelper and none of its file or descriptive fields are bundled. Only factual
+`itemid`/`shortname`/`name` triples were extracted and deduplicated into
+`src/RustPlusHelper.Application/Vending/rust-items.json`, used solely to resolve Rust+'s numeric
+vending item/currency IDs to Facepunch's own official item names, consistent with this project's
+"used only to identify compatibility" stance toward other Rust/Rust+ brand data above. Because the
+source has no declared license, nothing beyond these bare facts (numeric IDs and official item names)
+is reproduced.
+
 ## SQLitePCLRaw and bundled SQLite
 
 - SQLite bundle: `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12

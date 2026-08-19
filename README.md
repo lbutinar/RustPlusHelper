@@ -58,8 +58,11 @@ Implemented:
 - snapshot-derived team grid-crossing events with a one-minute per-member anti-spam cooldown;
 - a toggleable team-death hotspot layer that groups locally recorded death-snapshot positions by
   Rust grid and scales each red hotspot by its recent death count;
-- vending search over direct machine names and numeric item/currency IDs, with derived grid and
-  nearest-online-teammate distance while a versioned friendly-name catalogue remains pending;
+- vending search over machine names, catalogue-resolved friendly item/currency names, and numeric
+  item/currency IDs, with derived grid and nearest-online-teammate distance; an unresolved ID always
+  falls back to the raw number rather than a guess;
+- vending price/stock/offer-slot-added/removed history events, derived by comparing each machine's
+  sell orders across polls;
 - native import of Rust `.map` files using the documented version-10, legacy-LZ4, protobuf format;
 - automatic discovery through Steam libraries, with a server-to-world match from Rust's client log
   or an exact documented procedural size+seed filename; ambiguous same-size files are never guessed;
