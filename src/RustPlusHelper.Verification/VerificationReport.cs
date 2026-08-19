@@ -35,6 +35,19 @@ public sealed record MarkerVerificationSummary(
     int VendingOrderCount);
 
 /// <summary>
+/// Only populated when <c>--camera</c> was passed. <see cref="Code"/> is echoed back so the summary
+/// is self-describing; it is a user-entered in-game camera identifier, not a credential.
+/// </summary>
+public sealed record CameraVerificationSummary(
+    string Code,
+    int? Width,
+    int? Height,
+    bool? IsStaticCamera,
+    bool? IsPtzCamera,
+    bool? IsAutoTurret,
+    bool? IsDrone);
+
+/// <summary>
 /// Deliberately aggregate-only report. It excludes endpoint, credentials, Steam IDs, player names,
 /// chat bodies, coordinates, vending names, and server branding.
 /// </summary>
@@ -49,6 +62,7 @@ public sealed record VerificationReport(
     MapVerificationSummary? Map,
     TeamVerificationSummary? Team,
     ChatVerificationSummary? Chat,
-    MarkerVerificationSummary? Markers);
+    MarkerVerificationSummary? Markers,
+    CameraVerificationSummary? Camera = null);
 
 public sealed record VerificationRunResult(VerificationReport Report, byte[] MapJpeg);

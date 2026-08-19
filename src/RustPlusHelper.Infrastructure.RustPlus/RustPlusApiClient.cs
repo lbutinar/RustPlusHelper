@@ -149,9 +149,9 @@ public sealed class RustPlusApiClient : IRustPlusClient
                 .ConfigureAwait(false);
             if (!response.IsSuccess || response.Data is null)
             {
-                var code = response.Error?.Code.ToString() ?? "unknown_error";
-                var message = SecretRedactor.Redact(response.Error?.Message ?? "Rust+ returned no data.", _tokenText);
-                return RustPlusResult<CameraInfoSnapshot>.Failure(code, message);
+                var errorCode = response.Error?.Code ?? RustPlusErrorCode.Unknown;
+                var rawMessage = SecretRedactor.Redact(response.Error?.Message ?? "Rust+ returned no data.", _tokenText);
+                return RustPlusResult<CameraInfoSnapshot>.Failure(errorCode.ToString(), DescribeInitialSubscribeError(errorCode, rawMessage));
             }
 
             _cameraController = response.Data;
@@ -353,7 +353,35 @@ public sealed class RustPlusApiClient : IRustPlusClient
             this,
             new RustPlusError(
                 error.Code.ToString(),
-                SecretRedactor.Redact(error.Message ?? "Camera subscription renewal failed.", _tokenText)));
+                DescribeCameraError(
+                    error.Code,
+                    SecretRedactor.Redact(error.Message ?? "Camera subscription renewal failed.", _tokenText))));
+
+    /// <summary>Overrides a handful of camera keep-alive-renewal error codes with an accurate
+    /// explanation — most notably <see cref="RustPlusErrorCode.NoPlayer"/>, whose own doc comment in
+    /// the pinned package flags it as confusingly named: it's observed specifically when a
+    /// previously-subscribed camera entity was destroyed in-game between renewals, not anything about
+    /// the paired player. See docs/protocol-evidence.md. Only valid for the renewal path — a camera
+    /// that was successfully streaming before this failure really did exist a moment ago.</summary>
+    private static string DescribeCameraError(RustPlusErrorCode code, string rawMessage) => code switch
+    {
+        RustPlusErrorCode.NoPlayer => "This camera no longer exists in Rust — it may have been destroyed.",
+        _ => rawMessage
+    };
+
+    /// <summary>Describes a failure from the very first subscribe attempt to a camera code. Unlike
+    /// <see cref="DescribeCameraError"/>, there's no prior successful subscribe to compare against, so
+    /// <see cref="RustPlusErrorCode.NoPlayer"/> here can't be narrated as "it was destroyed" — that
+    /// explanation is only documented for the renewal path. The same raw error also covers a
+    /// never-existed or mistyped code, a monument the current map doesn't have, or (plausibly,
+    /// unconfirmed) not currently being connected in-game on this server.</summary>
+    private static string DescribeInitialSubscribeError(RustPlusErrorCode code, string rawMessage) => code switch
+    {
+        RustPlusErrorCode.NoPlayer =>
+            "No camera found with that code. Double-check the spelling/case, confirm this map actually " +
+            "has that camera, and make sure your character is currently online in this Rust server.",
+        _ => rawMessage
+    };
 
     private void HandleEntityChanged(object? sender, EntityChangedEventArg args) =>
         EntityStateChanged?.Invoke(this, RustPlusApiMapper.Map(args));

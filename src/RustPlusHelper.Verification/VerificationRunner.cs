@@ -7,7 +7,8 @@ public sealed class VerificationRunner(IRustPlusClient client)
 {
     public async Task<VerificationRunResult> RunAsync(
         RustPlusConnectionOptions connection,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? cameraCode = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
@@ -17,6 +18,7 @@ public sealed class VerificationRunner(IRustPlusClient client)
         TeamVerificationSummary? teamSummary = null;
         ChatVerificationSummary? chatSummary = null;
         MarkerVerificationSummary? markerSummary = null;
+        CameraVerificationSummary? cameraSummary = null;
         byte[] mapJpeg = [];
 
         await client.ConnectAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -88,13 +90,30 @@ public sealed class VerificationRunner(IRustPlusClient client)
                         .ToArray(),
                     markerData.Markers.Sum(marker => marker.VendingOrders?.Count ?? 0));
             }
+
+            if (cameraCode is not null)
+            {
+                var camera = await client.SubscribeToCameraAsync(cameraCode, cancellationToken).ConfigureAwait(false);
+                statuses["camera"] = Status(camera);
+                cameraSummary = camera.Data is { } cameraData
+                    ? new CameraVerificationSummary(
+                        cameraCode,
+                        cameraData.Width,
+                        cameraData.Height,
+                        cameraData.IsStaticCamera,
+                        cameraData.IsPtzCamera,
+                        cameraData.IsAutoTurret,
+                        cameraData.IsDrone)
+                    : new CameraVerificationSummary(cameraCode, null, null, null, null, null, null);
+            }
         }
         finally
         {
             await client.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
-        var success = statuses.Count == 5 && statuses.Values.All(status => status.Success);
+        var expectedRequestCount = cameraCode is null ? 5 : 6;
+        var success = statuses.Count == expectedRequestCount && statuses.Values.All(status => status.Success);
         var report = new VerificationReport(
             1,
             DateTimeOffset.UtcNow,
@@ -106,7 +125,8 @@ public sealed class VerificationRunner(IRustPlusClient client)
             mapSummary,
             teamSummary,
             chatSummary,
-            markerSummary);
+            markerSummary,
+            cameraSummary);
 
         return new VerificationRunResult(report, mapJpeg);
     }

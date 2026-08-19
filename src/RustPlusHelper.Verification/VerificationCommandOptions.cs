@@ -7,7 +7,8 @@ public sealed record VerificationCommandOptions(
     bool AllowInsecureDirect,
     string? OutputDirectory,
     int TimeoutSeconds,
-    bool ShowHelp)
+    bool ShowHelp,
+    string? CameraCode = null)
 {
     public const string Usage = """
         RustPlusHelper Phase 0 verification
@@ -20,6 +21,8 @@ public sealed record VerificationCommandOptions(
           --fake                    Use deterministic fake Rust+ data (default).
           --live                    Connect to the configured live Rust+ server.
           --allow-insecure-direct   Required when RustPlus:UseFacepunchProxy is false.
+          --camera <code>           Also subscribe to this camera code and report the raw result
+                                    (error code/message included) alongside the other checks.
           --output <directory>      Artifact directory. Defaults under artifacts/verification/.
           --timeout-seconds <n>     Whole-run timeout from 5 to 300 seconds. Default: 60.
           --help                    Show this help.
@@ -35,6 +38,7 @@ public sealed record VerificationCommandOptions(
         var allowInsecureDirect = false;
         var showHelp = false;
         string? output = null;
+        string? cameraCode = null;
         var timeoutSeconds = 60;
 
         for (var index = 0; index < args.Count; index++)
@@ -56,6 +60,9 @@ public sealed record VerificationCommandOptions(
                 case "--output":
                     output = RequireValue(args, ref index, "--output");
                     break;
+                case "--camera":
+                    cameraCode = RequireValue(args, ref index, "--camera");
+                    break;
                 case "--timeout-seconds":
                     var text = RequireValue(args, ref index, "--timeout-seconds");
                     if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out timeoutSeconds)
@@ -75,7 +82,7 @@ public sealed record VerificationCommandOptions(
             throw new ArgumentException("Choose either --live or --fake, not both.");
         }
 
-        return new VerificationCommandOptions(live, allowInsecureDirect, output, timeoutSeconds, showHelp);
+        return new VerificationCommandOptions(live, allowInsecureDirect, output, timeoutSeconds, showHelp, cameraCode);
     }
 
     private static string RequireValue(IReadOnlyList<string> args, ref int index, string option)

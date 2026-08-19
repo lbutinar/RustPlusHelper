@@ -52,7 +52,7 @@ public static class Program
             Console.WriteLine($"Transport: {(connection.UseFacepunchProxy ? "Facepunch secure proxy" : "direct ws:// (explicitly allowed)")}");
 
             var runner = new VerificationRunner(client);
-            var result = await runner.RunAsync(connection, timeout.Token).ConfigureAwait(false);
+            var result = await runner.RunAsync(connection, timeout.Token, command.CameraCode).ConfigureAwait(false);
             var outputDirectory = await VerificationArtifactWriter.WriteAsync(
                 command.OutputDirectory,
                 result.Report,
@@ -66,6 +66,13 @@ public static class Program
             if (result.MapJpeg.Length > 0)
             {
                 Console.WriteLine($"Map image: {Path.Combine(outputDirectory, "map.jpg")}");
+            }
+
+            if (command.CameraCode is not null && result.Report.Requests.TryGetValue("camera", out var cameraStatus))
+            {
+                Console.WriteLine(cameraStatus.Success
+                    ? $"Camera '{command.CameraCode}': subscribed successfully."
+                    : $"Camera '{command.CameraCode}': failed — code={cameraStatus.ErrorCode}, message={cameraStatus.ErrorMessage}");
             }
 
             Console.WriteLine(result.Report.Success

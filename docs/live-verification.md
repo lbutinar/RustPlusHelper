@@ -32,6 +32,13 @@ Run:
 dotnet run --project $project -- --live --timeout-seconds 90
 ```
 
+To also test a camera code (raw error code/message printed to the console, no game client
+required), add `--camera <code>`:
+
+```powershell
+dotnet run --project $project -- --live --timeout-seconds 90 --camera DOME1
+```
+
 ## Option B: process environment
 
 ```powershell
