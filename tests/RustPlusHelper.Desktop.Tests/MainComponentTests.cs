@@ -1,8 +1,10 @@
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using RustPlusHelper.Application.Diagnostics;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.Notifications;
@@ -14,6 +16,7 @@ using RustPlusHelper.Application.Testing;
 using RustPlusHelper.Desktop;
 using RustPlusHelper.Desktop.Components;
 using RustPlusHelper.Desktop.Services;
+using RustPlusHelper.Infrastructure.Storage.Diagnostics;
 
 namespace RustPlusHelper.Desktop.Tests;
 
@@ -25,6 +28,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly PlayerIdentityManager _identityManager;
     private readonly RustPlusConnectionManager _connections;
     private readonly InMemoryPairedEntityRepository _pairedEntities;
+    private readonly RecordingDiagnosticsExportFilePicker _diagnosticsExportFilePicker;
 
     public MainComponentTests()
     {
@@ -106,6 +110,15 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
         Services.AddSingleton<IStartupRegistration>(new InMemoryStartupRegistration());
         Services.AddSingleton(new NotificationPreferencesStore(applicationSecrets));
+
+        _diagnosticsExportFilePicker = new RecordingDiagnosticsExportFilePicker();
+        Services.AddSingleton<IDiagnosticsExportFilePicker>(_diagnosticsExportFilePicker);
+        Services.AddSingleton(new DiagnosticsExportService(
+            [new InMemoryHealthCheck("Fake check", HealthStatus.Healthy, "All good.")],
+            _serverRepository,
+            TimeProvider.System,
+            "test-version",
+            Path.Combine(Path.GetTempPath(), "RustPlusHelper.Desktop.Tests.NoLogsHere", Guid.NewGuid().ToString("N"))));
     }
 
     private sealed class UnavailablePairingProvider : IRustPlusPairingProvider
@@ -141,6 +154,34 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public void GridSearchFocusesTheRequestedCellAndRejectsAnInvalidReference()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.WaitForAssertion(() =>
+            Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "rustPlusMap.render"));
+
+        component.Find("[data-testid='grid-search-input']").Input("A0");
+        component.Find("[data-testid='grid-search-submit']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            var focus = Assert.Single(
+                JSInterop.Invocations,
+                invocation => invocation.Identifier == "rustPlusMap.focusPixel");
+            Assert.IsType<double>(focus.Arguments[1]);
+            Assert.IsType<double>(focus.Arguments[2]);
+        });
+        Assert.DoesNotContain("data-testid=\"grid-search-error\"", component.Markup, StringComparison.Ordinal);
+
+        component.Find("[data-testid='grid-search-input']").Input("ZZ999");
+        component.Find("[data-testid='grid-search-submit']").Click();
+
+        component.WaitForAssertion(() =>
+            Assert.Contains("isn't a valid grid reference", component.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void UsesRustPlusBrandAssetAndMaterialNavigationIcons()
     {
         var component = Render<Main>();
@@ -153,7 +194,7 @@ public sealed class MainComponentTests : BunitContext
 
             var icons = component.FindAll(".nav-icon").Select(icon => icon.TextContent.Trim()).ToArray();
             Assert.Equal(
-                ["map", "chat_bubble", "notifications_active", "storefront", "lightbulb", "dns", "settings"],
+                ["map", "chat_bubble", "notifications_active", "storefront", "lightbulb", "dns", "settings", "health_and_safety"],
                 icons);
             Assert.All(component.FindAll(".nav-icon"), icon =>
                 Assert.Contains("material-icons", icon.ClassList));
@@ -678,6 +719,33 @@ public sealed class MainComponentTests : BunitContext
         Assert.True(preferencesStore.Get().AlarmEvents, "Toggling one category must not affect another.");
     }
 
+    [Fact]
+    public void DiagnosticsPageShowsHealthChecksAndExportsToThePickedLocation()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Diagnostics", StringComparison.Ordinal))
+            .Click();
+        component.WaitForElement("[data-testid='health-check-row']");
+
+        Assert.Contains("Fake check", component.Find("[data-testid='health-check-row']").TextContent, StringComparison.Ordinal);
+
+        var exportPath = Path.Combine(Path.GetTempPath(), $"rustplushelper-diagnostics-test-{Guid.NewGuid():N}.zip");
+        _diagnosticsExportFilePicker.NextPath = exportPath;
+        try
+        {
+            component.Find("[data-testid='export-diagnostics']").Click();
+            component.WaitForAssertion(() =>
+                Assert.Contains(exportPath, component.Find("[data-testid='export-result']").TextContent, StringComparison.Ordinal));
+            Assert.True(File.Exists(exportPath));
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
     private sealed class FakeClientFactory : IRustPlusClientFactory
     {
         public IRustPlusClient Create() => new FakeRustPlusClient();
@@ -688,5 +756,12 @@ public sealed class MainComponentTests : BunitContext
         public bool IsEnabled { get; private set; }
 
         public void SetEnabled(bool enabled) => IsEnabled = enabled;
+    }
+
+    private sealed class RecordingDiagnosticsExportFilePicker : IDiagnosticsExportFilePicker
+    {
+        public string? NextPath { get; set; }
+
+        public Task<string?> PickSaveLocationAsync(string suggestedFileName) => Task.FromResult(NextPath);
     }
 }

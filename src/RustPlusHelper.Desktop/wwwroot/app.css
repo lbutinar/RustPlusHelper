@@ -561,6 +561,46 @@ button {
     font-size: 19px;
 }
 
+.grid-search {
+    display: flex;
+    gap: 0;
+}
+
+.grid-search input {
+    width: 84px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: none;
+    border-radius: 9px 0 0 9px;
+    background: rgba(17, 22, 20, 0.9);
+    color: var(--text);
+    font-size: 12px;
+    padding: 0 10px;
+    text-transform: uppercase;
+}
+
+.grid-search input:focus {
+    outline: none;
+    border-color: var(--rust);
+}
+
+.grid-search button {
+    border-radius: 0 9px 9px 0 !important;
+}
+
+.grid-search-error {
+    position: absolute;
+    z-index: 700;
+    top: 60px;
+    left: 16px;
+    max-width: 260px;
+    border: 1px solid rgba(236, 143, 137, 0.32);
+    border-radius: 9px;
+    padding: 7px 10px;
+    background: rgba(236, 143, 137, 0.12);
+    color: #ec8f89;
+    font-size: 10px;
+}
+
 .map-legend {
     position: absolute;
     z-index: 700;
@@ -1850,6 +1890,24 @@ button {
 
 .setting-row.disabled {
     opacity: 0.5;
+}
+
+.setting-value.status-ok {
+    border-color: rgba(94, 173, 122, 0.32);
+    background: rgba(94, 173, 122, 0.09);
+    color: var(--green);
+}
+
+.setting-value.status-issue {
+    border-color: rgba(236, 143, 137, 0.32);
+    background: rgba(236, 143, 137, 0.09);
+    color: #ec8f89;
+}
+
+.diagnostics-export-message {
+    margin: 0 24px 18px;
+    color: var(--muted);
+    font-size: 10px;
 }
 
 .setting-toggle input[type="checkbox"] {

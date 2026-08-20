@@ -35,8 +35,11 @@ The database is not globally encrypted. Server addresses and names are local per
 credentials. Secret values are individually protected with Windows DPAPI `CurrentUser`; another
 Windows account or machine should not be able to decrypt copied ciphertext.
 
-Do not send the database as a diagnostic attachment. A future diagnostics exporter must allowlist
-non-sensitive fields rather than copying database rows.
+Do not send the database as a diagnostic attachment. The diagnostics exporter
+(`RustPlusHelper.Infrastructure.Storage.Diagnostics.DiagnosticsExportService`, Phase 11) follows this:
+it never opens or copies the SQLite file. Its `servers.txt` entry is allowlisted to display name, port,
+and transport (secure proxy vs. direct) per saved server — host/IP and player ID are deliberately
+omitted, since a diagnostics zip may end up pasted into a public bug report.
 
 ## Recovery
 

@@ -1,0 +1,79 @@
+@using RustPlusHelper.Application.Diagnostics
+@inject RustPlusHelper.Infrastructure.Storage.Diagnostics.DiagnosticsExportService Diagnostics
+@inject RustPlusHelper.Desktop.Services.IDiagnosticsExportFilePicker ExportFilePicker
+
+<section class="content-page">
+    <div class="page-heading">
+        <div>
+            <span class="eyebrow">LOCAL APPLICATION</span>
+            <h1>Diagnostics</h1>
+            <p>Local health checks and a redacted export for troubleshooting. The export never includes
+                server addresses, player IDs, or secrets.</p>
+        </div>
+        <button class="primary-button"
+                type="button"
+                data-testid="export-diagnostics"
+                disabled="@_isExporting"
+                @onclick="ExportAsync">
+            @(_isExporting ? "Exporting…" : "Export diagnostics")
+        </button>
+    </div>
+
+    <div class="surface-card settings-card">
+        @foreach (var result in _results)
+        {
+            <div class="setting-row" data-testid="health-check-row">
+                <div><strong>@result.Name</strong><p>@result.Detail</p></div>
+                <span class="setting-value @(result.Status == HealthStatus.Healthy ? "status-ok" : "status-issue")">
+                    @(result.Status == HealthStatus.Healthy ? "OK" : "ISSUE")
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (_exportMessage is not null)
+    {
+        <p class="diagnostics-export-message" data-testid="export-result">@_exportMessage</p>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<HealthCheckResult> _results = [];
+    private bool _isExporting;
+    private string? _exportMessage;
+
+    protected override void OnInitialized()
+    {
+        _results = Diagnostics.RunHealthChecks();
+    }
+
+    private async Task ExportAsync()
+    {
+        _isExporting = true;
+        _exportMessage = null;
+        try
+        {
+            var fileName = $"rustplushelper-diagnostics-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.zip";
+            var path = await ExportFilePicker.PickSaveLocationAsync(fileName);
+            if (path is null)
+            {
+                return;
+            }
+
+            await using (var stream = System.IO.File.Create(path))
+            {
+                Diagnostics.ExportTo(stream);
+            }
+
+            _exportMessage = $"Saved to {path}";
+        }
+        catch (Exception ex)
+        {
+            _exportMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+}

@@ -1,0 +1,37 @@
+<Project Sdk="WixToolset.Sdk">
+  <PropertyGroup>
+    <OutputName>RustPlusHelperSetup</OutputName>
+    <Platform>x64</Platform>
+    <DefineConstants>PublishDir=$(MSBuildThisFileDirectory)publish\</DefineConstants>
+    <!-- Bump on every release; the fixed UpgradeCode in Package.wxs is what makes MSI upgrade an
+         existing install instead of installing side-by-side. -->
+    <ProductVersion>1.0.0</ProductVersion>
+    <DefineConstants>$(DefineConstants);ProductVersion=$(ProductVersion)</DefineConstants>
+    <SuppressPdbOutput>true</SuppressPdbOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" />
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+
+  <!--
+    Publishes the desktop app as a self-contained win-x64 build before WiX harvests its output.
+    Self-contained so a normal user does not need the .NET runtime installed separately (only the
+    WebView2 runtime, which the Diagnostics health check already verifies) — see docs/development-plan.md
+    Phase 11.
+  -->
+  <PropertyGroup>
+    <!--
+      BeforeTargets="Build" is not early enough: WiX's own CoreCompile target (which does the actual
+      harvest/compile/link/bind) runs as a dependency of Build, so it already executes before a plain
+      BeforeTargets="Build" hook fires. Prepending to CoreCompileDependsOn here — evaluated before
+      wix.targets appends its own chain via "...;$(CoreCompileDependsOn)" — runs this ahead of it.
+    -->
+    <CoreCompileDependsOn>PublishDesktopApp;$(CoreCompileDependsOn)</CoreCompileDependsOn>
+  </PropertyGroup>
+
+  <Target Name="PublishDesktopApp">
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\..\src\RustPlusHelper.Desktop\RustPlusHelper.Desktop.csproj&quot; -c $(Configuration) -r win-x64 --self-contained true -p:PublishSingleFile=false -o &quot;$(MSBuildThisFileDirectory)publish\&quot;" />
+  </Target>
+</Project>

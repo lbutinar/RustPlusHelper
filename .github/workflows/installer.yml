@@ -1,0 +1,44 @@
+name: Build installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    # Release-time build only -- not part of the CI workflow that runs on every push. See
+    # docs/development-plan.md Phase 11 and README.md's "Building the Windows installer".
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build installer
+        run: dotnet build installer/RustPlusHelper.Setup/RustPlusHelper.Setup.wixproj -c Release
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RustPlusHelperSetup
+          path: installer/RustPlusHelper.Setup/bin/x64/Release/RustPlusHelperSetup.msi
+
+      # Only on an actual "vX.Y.Z" tag push (not workflow_dispatch, which has no tag to attach to):
+      # attach the MSI to a GitHub Release so it's downloadable without cloning the repo or being
+      # signed into GitHub. The MSI is still unsigned -- see docs/development-plan.md Phase 11.
+      - name: Attach to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/RustPlusHelper.Setup/bin/x64/Release/RustPlusHelperSetup.msi
+          generate_release_notes: true

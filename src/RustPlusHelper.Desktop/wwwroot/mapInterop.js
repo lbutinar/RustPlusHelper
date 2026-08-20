@@ -434,10 +434,20 @@
         marker.openTooltip();
     }
 
+    function focusPixel(elementId, pixelX, pixelY) {
+        const entry = entries.get(elementId);
+        if (!entry) {
+            return;
+        }
+
+        entry.map.setView([entry.height - pixelY, pixelX], Math.max(entry.map.getZoom(), 1.5), { animate: true });
+    }
+
     window.rustPlusMap = {
         render,
         setLayerVisibility,
         focusItem,
+        focusPixel,
         destroy: destroyEntry,
         fitActive
     };

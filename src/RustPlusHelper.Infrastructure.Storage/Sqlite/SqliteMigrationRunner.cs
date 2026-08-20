@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    private const int LatestVersion = 12;
+    internal const int LatestVersion = 12;
 
     private const string InitialSchema = """
         CREATE TABLE servers (

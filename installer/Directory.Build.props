@@ -1,0 +1,4 @@
+<Project>
+  <!-- Intentionally empty: shadows the repo-root Directory.Build.props (net10.0 TargetFramework,
+       Nullable, etc.) so those C#-project-only settings don't leak into the WiX installer project. -->
+</Project>

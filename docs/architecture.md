@@ -52,13 +52,18 @@ boundary. That makes a library upgrade, fork, or eventual protocol replacement l
 - `RustPlusHelper.Infrastructure.RustPlus`: the pinned RustPlusApi adapter and mapper.
 - `RustPlusHelper.Infrastructure.Map`: bounded version-10 Rust `.map` reader plus conservative Steam
   cache/log discovery; outputs only application-owned matches and display data.
-- `RustPlusHelper.Infrastructure.Storage`: SQLite migrations/repositories and Windows DPAPI secret
-  protection.
+- `RustPlusHelper.Infrastructure.Storage`: SQLite migrations/repositories, Windows DPAPI secret
+  protection, a dependency-free rolling file logger (`Logging.FileLoggerProvider`), and diagnostics
+  export/health checks (`Diagnostics.DiagnosticsExportService`/`DatabaseHealthCheck`) built on top of
+  the `IHealthCheck` contract defined in `RustPlusHelper.Application`.
 - `RustPlusHelper.Verification`: opt-in read-only protocol verification command.
 - `RustPlusHelper.Desktop`: WPF host, Blazor map-first shell, and local Leaflet assets.
 - `RustPlusHelper.Tests`: focused unit and adapter-mapping tests.
 - `RustPlusHelper.Desktop.Tests`: bUnit component and interaction tests.
 - `RustPlusHelper.Infrastructure.Storage.Tests`: real temporary-SQLite and current-user DPAPI tests.
+- `installer/RustPlusHelper.Setup`: a WiX Toolset v5 project producing the per-machine MSI installer.
+  Deliberately outside `RustPlusHelper.slnx` (release-time build, not part of the everyday build/test
+  loop) — see `docs/development-plan.md` Phase 11 and `README.md`.
 
 The desktop composition root references the application boundary plus the Rust+ and storage
 infrastructure projects. Third-party types remain contained inside the Rust+ adapter. It retains a

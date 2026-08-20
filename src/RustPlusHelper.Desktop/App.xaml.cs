@@ -1,7 +1,10 @@
+using System.Reflection;
 using System.Windows;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using RustPlusHelper.Application.Diagnostics;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.Notifications;
@@ -14,7 +17,9 @@ using RustPlusHelper.Desktop.Services;
 using RustPlusHelper.Infrastructure.Map;
 using RustPlusHelper.Infrastructure.RustPlus;
 using RustPlusHelper.Infrastructure.Storage;
+using RustPlusHelper.Infrastructure.Storage.Diagnostics;
 using RustPlusHelper.Infrastructure.Storage.Identity;
+using RustPlusHelper.Infrastructure.Storage.Logging;
 using RustPlusHelper.Infrastructure.Storage.Map;
 using RustPlusHelper.Infrastructure.Storage.RustPlus;
 using RustPlusHelper.Infrastructure.Storage.Security;
@@ -40,6 +45,8 @@ public partial class App : System.Windows.Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var builder = Host.CreateApplicationBuilder();
+        var logsDirectory = ApplicationDataPaths.GetLogsDirectory();
+        builder.Logging.AddProvider(new FileLoggerProvider(logsDirectory, TimeProvider.System));
         builder.Services.AddWpfBlazorWebView();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
@@ -91,6 +98,18 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<TrayIconService>();
         builder.Services.AddSingleton<IDesktopNotifier>(sp => sp.GetRequiredService<TrayIconService>());
         builder.Services.AddSingleton<NotificationDispatcher>();
+
+        builder.Services.AddSingleton<IHealthCheck>(new DatabaseHealthCheck(database));
+        builder.Services.AddSingleton<IHealthCheck>(sp => new SecretProtectorHealthCheck(sp.GetRequiredService<ISecretProtector>()));
+        builder.Services.AddSingleton<IHealthCheck, WebView2HealthCheck>();
+        var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+        builder.Services.AddSingleton(sp => new DiagnosticsExportService(
+            sp.GetServices<IHealthCheck>(),
+            sp.GetRequiredService<IServerRepository>(),
+            sp.GetRequiredService<TimeProvider>(),
+            appVersion,
+            logsDirectory));
+        builder.Services.AddSingleton<IDiagnosticsExportFilePicker, WindowsDiagnosticsExportFilePicker>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();

@@ -1,14 +1,19 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using RustPlusHelper.Application.Diagnostics;
 using RustPlusHelper.Application.Identity;
 using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.Pairing;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
+using RustPlusHelper.Application.Testing;
+using RustPlusHelper.Infrastructure.Storage.Diagnostics;
 using RustPlusHelper.Infrastructure.Storage.Security;
 using RustPlusHelper.Infrastructure.Storage.Identity;
+using RustPlusHelper.Infrastructure.Storage.Logging;
 using RustPlusHelper.Infrastructure.Storage.Map;
 using RustPlusHelper.Infrastructure.Storage.RustPlus;
 using RustPlusHelper.Infrastructure.Storage.Servers;
@@ -527,6 +532,77 @@ public sealed class StorageTests
         }
     }
 
+    [Fact]
+    public void DatabaseHealthCheckIsHealthyForAFreshlyInitializedDatabase()
+    {
+        using var temporary = new TemporaryDatabase();
+        temporary.Database.Initialize();
+        var check = new DatabaseHealthCheck(temporary.Database);
+
+        var result = check.Check();
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+    }
+
+    [Fact]
+    public void DatabaseHealthCheckIsUnhealthyWhenSchemaVersionIsBehindLatest()
+    {
+        using var temporary = new TemporaryDatabase();
+        temporary.Database.Initialize();
+        using (var connection = temporary.Database.OpenConnection())
+        {
+            Execute(connection, "DELETE FROM schema_migrations WHERE version = (SELECT MAX(version) FROM schema_migrations);");
+        }
+
+        var result = new DatabaseHealthCheck(temporary.Database).Check();
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("does not match", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiagnosticsExportProducesAZipWithSummaryServersAndRedactedLogsButNoHostOrPlayerId()
+    {
+        using var temporary = new TemporaryDatabase();
+        temporary.Database.Initialize();
+        new SqliteServerRepository(temporary.Database).Upsert(CreateProfile(playerId: 76561198000000123));
+
+        using var logsDirectory = new TemporaryDirectory();
+        File.WriteAllText(
+            Path.Combine(logsDirectory.Path, "app-20260817.log"),
+            "2026-08-17T00:00:00Z [Information] Test: player_token=super-secret-value should be redacted");
+
+        var exportService = new DiagnosticsExportService(
+            [new InMemoryHealthCheck("Fake check", HealthStatus.Healthy, "All good.")],
+            new SqliteServerRepository(temporary.Database),
+            new FixedTimeProvider(FixedUtc),
+            "1.2.3.4",
+            logsDirectory.Path);
+
+        using var zipStream = new MemoryStream();
+        exportService.ExportTo(zipStream);
+
+        zipStream.Position = 0;
+        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        var summary = ReadEntry(archive, "summary.txt");
+        var servers = ReadEntry(archive, "servers.txt");
+        var log = ReadEntry(archive, "logs/app-20260817.log");
+
+        Assert.Contains("1.2.3.4", summary, StringComparison.Ordinal);
+        Assert.Contains("Fake check", summary, StringComparison.Ordinal);
+        Assert.Contains("EU Main", servers, StringComparison.Ordinal);
+        Assert.DoesNotContain("companion.example.invalid", servers, StringComparison.Ordinal);
+        Assert.DoesNotContain("76561198000000123", servers, StringComparison.Ordinal);
+        Assert.DoesNotContain("super-secret-value", log, StringComparison.Ordinal);
+    }
+
+    private static string ReadEntry(ZipArchive archive, string entryName)
+    {
+        var entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException($"Missing entry {entryName}.");
+        using var reader = new StreamReader(entry.Open());
+        return reader.ReadToEnd();
+    }
+
     private static ServerProfile CreateProfile(ulong? playerId = null, Guid? rustPlusServerId = null) => new(
         Guid.Parse("349b4e9a-215f-4388-ad24-4df8fa572f1c"),
         "EU Main",
@@ -578,6 +654,28 @@ public sealed class StorageTests
             if (Directory.Exists(_directory))
             {
                 Directory.Delete(_directory, recursive: true);
+            }
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "RustPlusHelper.Storage.Tests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
             }
         }
     }

@@ -160,8 +160,28 @@
             return;
         }
 
-        await JavaScript.InvokeVoidAsync("rustPlusMap.focusItem", ElementId, request.ItemId);
+        if (request.ItemId.StartsWith("pixel:", StringComparison.Ordinal)
+            && TryParsePixelTarget(request.ItemId, out var pixelX, out var pixelY))
+        {
+            await JavaScript.InvokeVoidAsync("rustPlusMap.focusPixel", ElementId, pixelX, pixelY);
+        }
+        else
+        {
+            await JavaScript.InvokeVoidAsync("rustPlusMap.focusItem", ElementId, request.ItemId);
+        }
+
         _handledFocusSequence = request.Sequence;
+    }
+
+    /// <summary>Parses the "pixel:x,y" convention used by grid-reference search — see MapPage.razor.</summary>
+    private static bool TryParsePixelTarget(string itemId, out double pixelX, out double pixelY)
+    {
+        pixelX = 0;
+        pixelY = 0;
+        var parts = itemId["pixel:".Length..].Split(',');
+        return parts.Length == 2
+            && double.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out pixelX)
+            && double.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out pixelY);
     }
 
     private static bool LayerVisibilityEquals(

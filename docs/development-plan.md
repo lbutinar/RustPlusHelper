@@ -79,6 +79,14 @@ a network request, and refresh explicitly. The current centered Facepunch grid f
 player-facing grid references, and monument token/name/glyph catalogue are implemented. A final live
 golden alignment comparison remains.
 
+A grid-reference search box was added on 2026-08-20 (the map toolbar's search field): typing a label
+like `H14` and submitting parses it with `MapGrid.TryParseCellCenter` — the inverse of the same
+bijective-base-26 column naming (`ColumnName`/`ColumnIndex`) and the same left/top/right/bottom pixel
+bounds already used to draw the visible grid lines, so a search result always lines up with what's on
+screen — and reuses the existing marker-focus plumbing (`MapFocusRequest`, `MapCanvas`) via a new
+`"pixel:x,y"` convention and a corresponding `rustPlusMap.focusPixel` interop function, rather than a
+separate focus mechanism.
+
 **Modules:** map/session services, coordinate projector, grid service, map repositories.
 
 **Risks/tests:** ocean margin, custom maps, grid formula; live golden alignment with official app.
@@ -273,3 +281,53 @@ the full evidence trail.
 
 **Done:** a normal Windows user can install, pair, use, upgrade, diagnose, and uninstall without a
 development environment.
+
+**Status:** Diagnostics export, health checks, a first end-user guide, and a WiX MSI installer
+implemented on 2026-08-20. [`docs/user-guide.md`](user-guide.md) documents every implemented feature
+(pairing, map, team/events, vending, devices/cameras, settings, tray behavior, and the Diagnostics
+page) in non-developer language.
+
+The installer (`installer/RustPlusHelper.Setup`, WiX Toolset v5) publishes the desktop app
+self-contained `win-x64` and packages it as a per-machine MSI: `dotnet build` on that project alone
+runs `dotnet publish` for `RustPlusHelper.Desktop` first (wired via `CoreCompileDependsOn`, not
+`BeforeTargets="Build"` — WiX's own harvest/compile work is itself a dependency of `Build`, so it had
+already run by the time a plain `BeforeTargets="Build"` hook fired) and then harvests every published
+file into MSI components with WiX v5's `<Files Include="...">` shorthand, avoiding a hand-maintained
+file list that would drift from what `dotnet publish` actually produces. It installs per-machine
+(`Scope="perMachine"`, the WiX default) rather than per-user: a per-user MSI requires every single
+harvested file component to carry an HKCU registry keypath instead of a file keypath (ICE38), which
+the `<Files>` shorthand does not generate, so per-user was self-inflicted complexity with no real
+benefit here. A fixed `UpgradeCode` plus `<MajorUpgrade>` makes reinstalling a newer `ProductVersion`
+replace the old install rather than installing side-by-side; that version must be bumped by hand for
+every release. The installer project deliberately sits outside `RustPlusHelper.slnx` — self-contained
+publish plus MSI harvesting is a slow, release-time build, not part of the everyday edit/build/test
+loop — see [`README.md`](../README.md#building-the-windows-installer) for the exact command.
+
+`.github/workflows/ci.yml` now builds and tests the main solution on `windows-latest` for every push
+and pull request against `main` (WPF/SQLite/DPAPI all require a real Windows runner, so this cannot
+run on `ubuntu-latest`). `.github/workflows/installer.yml` builds the MSI and uploads it as a workflow artifact on a `v*` tag
+push or manual dispatch, kept separate from the main CI job since it is a slower, release-time build.
+On an actual tag push it also attaches the MSI to a GitHub Release, so it is downloadable without
+cloning the repo or signing into GitHub.
+
+**Remaining for this phase:** the MSI is unsigned (SmartScreen will warn on install until a
+code-signing certificate is obtained), and it has not been exercised on a clean VM (install/upgrade/
+uninstall) — that still needs a human with a real or virtual Windows machine. There was previously no logging framework in the app at
+all (only `Debug.WriteLine`/`Console.WriteLine`), so a minimal dependency-free `FileLoggerProvider`
+(`RustPlusHelper.Infrastructure.Storage.Logging`) was added first — a daily rolling file under
+`%LOCALAPPDATA%\RustPlusHelper\logs`, capped at 14 days, redacted line-by-line through the existing
+`SecretRedactor` as it is written. `IHealthCheck`/`HealthCheckResult` (`RustPlusHelper.Application.
+Diagnostics`) is a small pluggable contract; the current checks are `DatabaseHealthCheck` (schema
+version against `SqliteMigrationRunner.LatestVersion` plus `PRAGMA integrity_check`),
+`SecretProtectorHealthCheck` (round-trips a throwaway value through DPAPI — never touches a real
+stored secret), and `WebView2HealthCheck` (`CoreWebView2Environment.GetAvailableBrowserVersionString`).
+`DiagnosticsExportService` (`RustPlusHelper.Infrastructure.Storage.Diagnostics`) runs every registered
+check and zips a `summary.txt` (app/OS version, health-check results), a `servers.txt` listing saved
+servers by display name/port/transport only (host and player ID are deliberately omitted, consistent
+with `docs/local-storage.md`'s existing allowlist constraint), and the redacted log files — never the
+SQLite file itself. A new "Diagnostics" page/nav item exposes this with a live health-check list and an
+"Export diagnostics" button backed by a standard Windows save dialog
+(`IDiagnosticsExportFilePicker`/`WindowsDiagnosticsExportFilePicker`, mirroring the existing
+`IMapFilePicker` pattern). `WebView2HealthCheck` is not unit-tested — like `RustPlusApiClient`, it
+wraps a native Windows runtime check that isn't practical to fake — and is covered by manual
+verification instead.

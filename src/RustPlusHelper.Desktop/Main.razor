@@ -100,6 +100,9 @@
                 case AppSection.Settings:
                     <SettingsPage />
                     break;
+                case AppSection.Diagnostics:
+                    <DiagnosticsPage />
+                    break;
             }
         }
     </main>
@@ -114,7 +117,8 @@
         new(AppSection.Vending, "Vending", "storefront"),
         new(AppSection.Devices, "Devices & Cameras", "lightbulb"),
         new(AppSection.Servers, "Servers", "dns"),
-        new(AppSection.Settings, "Settings", "settings")
+        new(AppSection.Settings, "Settings", "settings"),
+        new(AppSection.Diagnostics, "Diagnostics", "health_and_safety")
     ];
 
     private MapDashboardState State => Dashboard.Current;
@@ -215,6 +219,7 @@
         Vending,
         Devices,
         Servers,
-        Settings
+        Settings,
+        Diagnostics
     }
 }

@@ -49,7 +49,7 @@
 
     <div class="map-workspace">
         <div class="map-stage">
-            <MapCanvas State="State" FocusRequest="FocusRequest" />
+            <MapCanvas State="State" FocusRequest="_effectiveFocusRequest" />
 
             <div class="map-toolbar" aria-label="Map tools">
                 <button type="button" title="Fit the map" @onclick="FitMap">⌖</button>
@@ -58,7 +58,23 @@
                         class="material-icons"
                         title="@(IsGridVisible ? "Hide map grid" : "Show map grid")"
                         @onclick="ToggleGrid">grid_on</button>
+                <form class="grid-search" @onsubmit="SearchGrid" @onsubmit:preventDefault>
+                    <input data-testid="grid-search-input"
+                           placeholder="Grid e.g. H14"
+                           maxlength="6"
+                           autocomplete="off"
+                           spellcheck="false"
+                           @bind="_gridQuery"
+                           @bind:event="oninput" />
+                    <button type="submit" data-testid="grid-search-submit" title="Go to grid reference">
+                        <span class="material-icons" aria-hidden="true">search</span>
+                    </button>
+                </form>
             </div>
+            @if (_gridSearchError is not null)
+            {
+                <div class="grid-search-error" data-testid="grid-search-error" role="alert">@_gridSearchError</div>
+            }
 
             <div class="map-legend">
                 <span><i class="legend-dot team"></i>Team</span>
@@ -225,6 +241,46 @@
 
     [Parameter]
     public EventCallback OnTopologyImportRequested { get; set; }
+
+    private MapFocusRequest? _lastExternalFocusRequest;
+    private MapFocusRequest? _effectiveFocusRequest;
+    private long _focusSequence;
+    private string _gridQuery = string.Empty;
+    private string? _gridSearchError;
+
+    protected override void OnParametersSet()
+    {
+        // FocusRequest (from Main.razor, e.g. "locate this vending machine") and the grid search box
+        // below both want to drive the same MapCanvas focus target; re-stamping whichever changed with
+        // a page-local sequence lets MapCanvas's single "did the sequence change" check keep working
+        // regardless of which source produced the request.
+        if (FocusRequest is not null && !ReferenceEquals(FocusRequest, _lastExternalFocusRequest))
+        {
+            _lastExternalFocusRequest = FocusRequest;
+            _effectiveFocusRequest = FocusRequest with { Sequence = ++_focusSequence };
+        }
+    }
+
+    private void SearchGrid()
+    {
+        _gridSearchError = null;
+        var grid = MapRenderModelFactory.Create(State)?.Grid;
+        if (grid is null)
+        {
+            _gridSearchError = "The map hasn't finished loading yet.";
+            return;
+        }
+
+        if (!MapGrid.TryParseCellCenter(_gridQuery, grid, out var pixelX, out var pixelY))
+        {
+            _gridSearchError = $"\"{_gridQuery}\" isn't a valid grid reference for this map.";
+            return;
+        }
+
+        _effectiveFocusRequest = new MapFocusRequest(
+            $"pixel:{pixelX.ToString(System.Globalization.CultureInfo.InvariantCulture)},{pixelY.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            ++_focusSequence);
+    }
 
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 

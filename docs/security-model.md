@@ -84,8 +84,14 @@ the map-image hash. Reports and map JPEGs are written to ignored `artifacts/`.
 
 ## Logging policy
 
-Future structured logging uses allowlisted properties. Never log entire connection records, requests,
+Structured logging uses allowlisted properties. Never log entire connection records, requests,
 responses, pairing notifications, configuration providers, or database rows containing ciphertext.
+
+**Implementation (Phase 11):** `RustPlusHelper.Infrastructure.Storage.Logging.FileLoggerProvider` is a
+dependency-free `ILoggerProvider` writing a daily rolling file under
+`%LOCALAPPDATA%\RustPlusHelper\logs`, purged after 14 days. Every line is passed through the existing
+`SecretRedactor` before it touches disk, and the diagnostics exporter redacts a second time defensively
+when it copies log files into an export zip.
 
 Required security tests include connection-string formatting, known-secret redaction, key-based
 redaction, aggregate-report privacy, and staged-repository secret scans.

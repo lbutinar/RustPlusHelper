@@ -1,5 +1,7 @@
 # RustPlusHelper
 
+[![CI](https://github.com/lbutinar/RustPlusHelper/actions/workflows/ci.yml/badge.svg)](https://github.com/lbutinar/RustPlusHelper/actions/workflows/ci.yml)
+
 RustPlusHelper is a Windows-first Rust+ companion dashboard under active development. Its central
 feature will be an interactive Rust map with team positions, map notes, vending machines, world-event
 markers, supported smart devices, cameras, notifications, and locally recorded history.
@@ -97,6 +99,10 @@ dotnet build .\RustPlusHelper.slnx --no-restore
 dotnet test .\RustPlusHelper.slnx --no-build
 ```
 
+The same three commands run in CI on `windows-latest` for every push/PR against `main`
+(`.github/workflows/ci.yml`); it must run on Windows since WPF, SQLite, and DPAPI have no
+`ubuntu-latest` equivalent here.
+
 Run the deterministic verification without credentials:
 
 ```powershell
@@ -127,6 +133,24 @@ file and its full path are not copied into app storage.
 
 Generated reports and map images are written below `artifacts/`, which Git ignores.
 
+## Building the Windows installer
+
+`installer/RustPlusHelper.Setup` is a [WiX Toolset](https://wixtoolset.org/) v5 project that publishes
+a self-contained `win-x64` build of the desktop app and packages it as a per-machine MSI (Start Menu
+shortcut, upgrade-aware via a fixed `UpgradeCode`, uninstalls cleanly through Windows' own
+Apps/Settings). It is intentionally not part of `RustPlusHelper.slnx` — it is a slower, release-time
+build, not part of the everyday edit/build/test loop — so build it directly:
+
+```powershell
+dotnet build .\installer\RustPlusHelper.Setup\RustPlusHelper.Setup.wixproj -c Release
+```
+
+The resulting `RustPlusHelperSetup.msi` lands under
+`installer\RustPlusHelper.Setup\bin\x64\Release\`. It is unsigned, so installing it will show a
+Windows SmartScreen warning until it is code-signed. Bump `ProductVersion` in
+`RustPlusHelper.Setup.wixproj` for every release so the major-upgrade logic replaces the previous
+install instead of refusing to reinstall the same version.
+
 ## Live verification
 
 Credentials are deliberately not accepted as command-line options. Follow
@@ -135,6 +159,7 @@ environment variables and run the read-only check.
 
 ## Documents
 
+- [User guide](docs/user-guide.md) (for people running the app, not developers)
 - [Architecture](docs/architecture.md)
 - [Protocol evidence](docs/protocol-evidence.md)
 - [Capability matrix](docs/capability-matrix.md)

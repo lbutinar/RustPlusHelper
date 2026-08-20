@@ -83,4 +83,41 @@ public sealed class MapProjectionTests
         Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
             MapProjection.WorldToImage(0, 0, mapSize, width, height, margin));
     }
+
+    [Theory]
+    [InlineData("A0", 65, 65)]
+    [InlineData("a0", 65, 65)]
+    [InlineData(" AD29 ", 935, 935)]
+    [InlineData("B1", 95, 95)]
+    public void ParsesGridSearchInputToTheCenterOfThatCell(string query, double expectedX, double expectedY)
+    {
+        var grid = MapGrid.CreateDefinition(4500, 1000, 1000, 50);
+
+        var found = MapGrid.TryParseCellCenter(query, grid, out var pixelX, out var pixelY);
+
+        Assert.True(found);
+        Assert.Equal(expectedX, pixelX, 6);
+        Assert.Equal(expectedY, pixelY, 6);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("14")]
+    [InlineData("AD")]
+    [InlineData("AE0")]
+    [InlineData("A30")]
+    [InlineData("A-1")]
+    [InlineData("A1X")]
+    public void RejectsGridSearchInputThatIsNotAValidCellOnThisMap(string? query)
+    {
+        var grid = MapGrid.CreateDefinition(4500, 1000, 1000, 50);
+
+        var found = MapGrid.TryParseCellCenter(query, grid, out var pixelX, out var pixelY);
+
+        Assert.False(found);
+        Assert.Equal(0, pixelX);
+        Assert.Equal(0, pixelY);
+    }
 }
