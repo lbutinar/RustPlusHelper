@@ -23,53 +23,45 @@ public sealed class RustPlusApiAlarmListenerProvider : IRustPlusAlarmListenerPro
         Action<string> onPersistentIdReceived,
         CancellationToken cancellationToken = default)
     {
-        var serialized = Encoding.UTF8.GetString(credentials.Span);
-        var parsed = CredentialsStore.Deserialize(serialized);
-        var persistentIds = new HashSet<string>(seedPersistentIds);
-        using var fcm = new RustPlusFcm(parsed, persistentIds);
-        var androidFcmRegister = new AndroidFcmRegister(null);
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        void OnAlarmTriggered(object? sender, AlarmNotification? notification)
-        {
-            if (notification is null)
+        _ = await FcmSessionRunner.RunAsync<bool>(
+            credentials,
+            seedPersistentIds,
+            (fcm, completion) =>
             {
-                return;
-            }
+                void OnAlarmTriggered(object? sender, AlarmNotification? notification)
+                {
+                    if (notification is null)
+                    {
+                        return;
+                    }
 
-            onAlarmTriggered(new AlarmTriggeredCapture(
-                notification.ServerId,
-                notification.Title,
-                notification.Message,
-                notification.PersistentId));
-        }
+                    onAlarmTriggered(new AlarmTriggeredCapture(
+                        notification.ServerId,
+                        notification.Title,
+                        notification.Message,
+                        notification.PersistentId));
+                }
 
-        void OnPersistentIdReceived(object? sender, string id) => onPersistentIdReceived(id);
+                void OnPersistentIdReceived(object? sender, string id) => onPersistentIdReceived(id);
 
-        // Both a clean disconnect and the socket's own inactivity-timeout self-detection surface
-        // here — either way, this attempt is over and the caller decides whether/when to retry.
-        void OnDisconnected(object? sender, EventArgs e) => completion.TrySetResult();
-        void OnError(object? sender, Exception exception) => completion.TrySetException(exception);
+                // Both a clean disconnect and the socket's own inactivity-timeout self-detection
+                // surface here — either way, this attempt is over and the caller decides whether/when
+                // to retry.
+                void OnDisconnected(object? sender, EventArgs e) => completion.TrySetResult(true);
+                void OnError(object? sender, Exception exception) => completion.TrySetException(exception);
 
-        using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
-
-        fcm.OnAlarmTriggered += OnAlarmTriggered;
-        fcm.PersistentIdReceived += OnPersistentIdReceived;
-        fcm.Disconnected += OnDisconnected;
-        fcm.ErrorOccurred += OnError;
-        try
-        {
-            await androidFcmRegister.CheckInAsync(parsed.Gcm, cancellationToken).ConfigureAwait(false);
-            await fcm.ConnectAsync(cancellationToken).ConfigureAwait(false);
-            await completion.Task.ConfigureAwait(false);
-        }
-        finally
-        {
-            fcm.OnAlarmTriggered -= OnAlarmTriggered;
-            fcm.PersistentIdReceived -= OnPersistentIdReceived;
-            fcm.Disconnected -= OnDisconnected;
-            fcm.ErrorOccurred -= OnError;
-            fcm.Disconnect();
-        }
+                fcm.OnAlarmTriggered += OnAlarmTriggered;
+                fcm.PersistentIdReceived += OnPersistentIdReceived;
+                fcm.Disconnected += OnDisconnected;
+                fcm.ErrorOccurred += OnError;
+                return () =>
+                {
+                    fcm.OnAlarmTriggered -= OnAlarmTriggered;
+                    fcm.PersistentIdReceived -= OnPersistentIdReceived;
+                    fcm.Disconnected -= OnDisconnected;
+                    fcm.ErrorOccurred -= OnError;
+                };
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 }

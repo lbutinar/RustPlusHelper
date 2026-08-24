@@ -160,14 +160,8 @@ public sealed class RustPlusAlarmNotificationListenerTests
         TimeSpan.FromSeconds(1),
         [TimeSpan.FromMilliseconds(5)]);
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!condition())
-        {
-            await Task.Delay(5, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 
     private sealed class NeverConnectingClientFactory : IRustPlusClientFactory
     {
@@ -278,14 +272,8 @@ public sealed class NotificationDispatcherTests
         Assert.Single(notifier.Shown, shown => shown.Title == "Unknown alarm");
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!condition())
-        {
-            await Task.Delay(5, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 
     private static ServerManager CreateServerManager()
     {

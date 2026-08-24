@@ -28,16 +28,8 @@ public sealed class SqliteMapCacheRepository(SqliteDatabase database) : IMapCach
             return null;
         }
 
-        MapCacheMetadata metadata;
-        try
-        {
-            metadata = JsonSerializer.Deserialize<MapCacheMetadata>(reader.GetString(1), JsonOptions)
-                ?? throw new InvalidDataException("The cached Rust+ map metadata is invalid.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("The cached Rust+ map metadata is invalid.", exception);
-        }
+        var metadata = SqliteJsonMetadata.DeserializeOrThrow<MapCacheMetadata>(
+            reader.GetString(1), JsonOptions, "The cached Rust+ map metadata is invalid.");
         var image = (byte[])reader.GetValue(2);
         return new CachedServerMap(
             serverId,

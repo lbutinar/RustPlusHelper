@@ -28,16 +28,8 @@ public sealed class SqliteMapTopologyRepository(SqliteDatabase database) : IMapT
             return null;
         }
 
-        MapTopologyMetadata metadata;
-        try
-        {
-            metadata = JsonSerializer.Deserialize<MapTopologyMetadata>(reader.GetString(1), JsonOptions)
-                ?? throw new InvalidDataException("The saved map topology metadata is invalid.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("The saved map topology metadata is invalid.", exception);
-        }
+        var metadata = SqliteJsonMetadata.DeserializeOrThrow<MapTopologyMetadata>(
+            reader.GetString(1), JsonOptions, "The saved map topology metadata is invalid.");
 
         var imported = new ImportedMapTopology(
             metadata.SourceFileName,

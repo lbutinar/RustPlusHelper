@@ -392,14 +392,8 @@ public sealed class MainComponentTests : BunitContext
             Assert.Contains("Off", component.Markup, StringComparison.Ordinal));
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!condition())
-        {
-            await Task.Delay(5, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 
     [Fact]
     public void LayerToggleUpdatesApplicationState()

@@ -16,6 +16,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
     private readonly string _directory;
     private readonly TimeProvider _timeProvider;
     private readonly object _writeLock = new();
+    private DateOnly _lastPurgeDate;
 
     public FileLoggerProvider(string directory, TimeProvider timeProvider)
     {
@@ -25,6 +26,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
         _directory = directory;
         _timeProvider = timeProvider;
         Directory.CreateDirectory(_directory);
+        _lastPurgeDate = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
         PurgeExpiredFiles();
     }
 
@@ -44,9 +46,16 @@ public sealed class FileLoggerProvider : ILoggerProvider
         }
 
         var path = Path.Combine(_directory, $"app-{now:yyyyMMdd}.log");
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
         lock (_writeLock)
         {
             File.AppendAllText(path, line + Environment.NewLine);
+
+            if (today != _lastPurgeDate)
+            {
+                _lastPurgeDate = today;
+                PurgeExpiredFiles();
+            }
         }
     }
 
@@ -62,9 +71,9 @@ public sealed class FileLoggerProvider : ILoggerProvider
                     File.Delete(file);
                 }
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                // Best-effort cleanup; a locked or already-removed file is not fatal at startup.
+                // Best-effort cleanup; a locked or already-removed file is not fatal.
             }
         }
     }

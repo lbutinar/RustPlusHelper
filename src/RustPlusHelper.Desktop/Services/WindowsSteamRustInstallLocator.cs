@@ -62,8 +62,10 @@ public static class WindowsSteamRustInstallLocator
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
+            // Best-effort discovery; a malformed or inaccessible libraryfolders.vdf should not
+            // prevent the app from starting up.
             return [];
         }
     }

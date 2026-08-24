@@ -83,8 +83,7 @@ public static class VendingMarketplace
                     Member = member,
                     Distance = Math.Sqrt(Math.Pow(member.X - x, 2) + Math.Pow(member.Y - y, 2))
                 })
-                .OrderBy(candidate => candidate.Distance)
-                .FirstOrDefault()
+                .MinBy(candidate => candidate.Distance)
             : null;
         var grid = hasPosition && mapSize is { } size
             ? MapGrid.WorldToGrid(x, y, size)?.Label

@@ -175,7 +175,7 @@ public sealed class RustPlusLiveSessionManager(
                             var status = resolution.FailureStatus == RustPlusConnectionStatus.PairingRequired
                                 ? RustPlusLiveSessionStatus.PairingRequired
                                 : RustPlusLiveSessionStatus.Reconnecting;
-                            SetState(Current with
+                            UpdateState(current => current with
                             {
                                 Status = status,
                                 Label = resolution.FailureLabel ?? "Connection unavailable",
@@ -190,7 +190,7 @@ public sealed class RustPlusLiveSessionManager(
                             continue;
                         }
 
-                        SetState(Current with
+                        UpdateState(current => current with
                         {
                             Status = hasConnected
                                 ? RustPlusLiveSessionStatus.Reconnecting
@@ -210,7 +210,7 @@ public sealed class RustPlusLiveSessionManager(
                         {
                             if (IsAuthenticationRejected(info.Error))
                             {
-                                SetState(Current with
+                                UpdateState(current => current with
                                 {
                                     Status = RustPlusLiveSessionStatus.AuthenticationRejected,
                                     Label = "Pairing rejected",
@@ -229,7 +229,7 @@ public sealed class RustPlusLiveSessionManager(
                         AddEvent(serverId, eventKind, CompanionEventSource.Transport, eventTitle);
                         hasConnected = true;
                         reconnectAttempt = 0;
-                        SetState(Current with
+                        UpdateState(current => current with
                         {
                             Status = RustPlusLiveSessionStatus.Connected,
                             Label = "Live monitoring connected",
@@ -269,7 +269,7 @@ public sealed class RustPlusLiveSessionManager(
                             "Rust+ connection lost");
                     }
 
-                    SetState(Current with
+                    UpdateState(current => current with
                     {
                         Status = RustPlusLiveSessionStatus.Reconnecting,
                         Label = "Rust+ connection lost",
@@ -375,16 +375,36 @@ public sealed class RustPlusLiveSessionManager(
                 nextMarkers = now + RetryInterval(result.Error, pollingOptions.MarkerInterval);
             }
 
-            SetState(updated with
+            // Events is re-read from `current` inside UpdateState rather than carried over from the
+            // `updated` snapshot taken at the top of this loop iteration: a companion event (e.g. an
+            // alarm push via RecordExternalEvent) can be appended to Current.Events on another thread
+            // during any of the awaited requests above, and reading it outside the same lock as this
+            // write would risk silently dropping that append.
+            UpdateState(current => updated with
             {
                 Status = RustPlusLiveSessionStatus.Connected,
                 Label = errors.Count == 0 ? "Live monitoring connected" : "Live monitoring partially available",
                 LastRefreshUtc = now,
                 Error = errors.Count == 0 ? null : string.Join(" ", errors),
-                Events = Current.Events
+                Events = current.Events
             });
 
-            var nextDue = new[] { nextInfo, nextTeam, nextChat, nextMarkers }.Min();
+            var nextDue = nextInfo;
+            if (nextTeam < nextDue)
+            {
+                nextDue = nextTeam;
+            }
+
+            if (nextChat < nextDue)
+            {
+                nextDue = nextChat;
+            }
+
+            if (nextMarkers < nextDue)
+            {
+                nextDue = nextMarkers;
+            }
+
             var delay = nextDue - timeProvider.GetUtcNow();
             if (delay < TimeSpan.Zero)
             {
@@ -701,11 +721,16 @@ public sealed class RustPlusLiveSessionManager(
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        var readTasks = entities
+            .Select(entity => ReadEntityStateAsync(client, entity, cancellationToken))
+            .ToArray();
+        var readResults = await Task.WhenAll(readTasks).ConfigureAwait(false);
+
         var states = new Dictionary<ulong, PairedEntityLiveState>();
-        foreach (var entity in entities)
+        for (var i = 0; i < entities.Count; i++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            states[entity.EntityId] = await ReadEntityStateAsync(client, entity, cancellationToken).ConfigureAwait(false);
+            states[entities[i].EntityId] = readResults[i];
         }
 
         lock (_stateLock)
@@ -942,24 +967,33 @@ public sealed class RustPlusLiveSessionManager(
         eventRepository.Append(item, EventLimit, timeProvider.GetUtcNow() - EventRetentionAge);
         if (updateCurrent)
         {
-            lock (_stateLock)
-            {
-                Current = Current with { Events = [item, .. Current.Events.Take(EventLimit - 1)] };
-            }
+            UpdateState(current => current with { Events = [item, .. current.Events.Take(EventLimit - 1)] });
         }
 
         EventRecorded?.Invoke(this, item);
-        if (updateCurrent)
-        {
-            StateChanged?.Invoke(this, EventArgs.Empty);
-        }
     }
 
-    private void SetState(RustPlusLiveSessionState state)
+    /// <summary>
+    /// Overwrites the state outright. Only safe when <paramref name="state"/> does not derive any of
+    /// its fields from <see cref="Current"/> — otherwise use <see cref="UpdateState"/> so the read of
+    /// the prior state and the write of the new one happen atomically under <see cref="_stateLock"/>
+    /// relative to every other writer (in particular <see cref="PersistAndPublish"/>, which can run
+    /// from an unrelated FCM callback thread via <see cref="RecordExternalEvent"/>).
+    /// </summary>
+    private void SetState(RustPlusLiveSessionState state) => UpdateState(_ => state);
+
+    /// <summary>
+    /// Atomically reads <see cref="Current"/>, computes the next state from it via
+    /// <paramref name="updater"/>, and stores the result under <see cref="_stateLock"/> — use this
+    /// instead of <c>SetState(Current with {...})</c> any time the new state is derived from the old
+    /// one, so a concurrent writer can't compute from the same now-stale snapshot and silently
+    /// clobber this change (or have this change clobber theirs).
+    /// </summary>
+    private void UpdateState(Func<RustPlusLiveSessionState, RustPlusLiveSessionState> updater)
     {
         lock (_stateLock)
         {
-            Current = state;
+            Current = updater(Current);
         }
 
         StateChanged?.Invoke(this, EventArgs.Empty);
@@ -1009,8 +1043,7 @@ public sealed class RustPlusLiveSessionManager(
     }
 
     private static bool IsAuthenticationRejected(RustPlusError? error) =>
-        error?.Code.Equals("AccessDenied", StringComparison.OrdinalIgnoreCase) == true
-        || error?.Code.Equals("access_denied", StringComparison.OrdinalIgnoreCase) == true;
+        RustPlusErrorClassification.IsAccessDenied(error?.Code);
 
     private static void ThrowIfTransportFailure(string operation, RustPlusError? error)
     {

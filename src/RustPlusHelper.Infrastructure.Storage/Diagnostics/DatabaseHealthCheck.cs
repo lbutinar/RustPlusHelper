@@ -11,6 +11,8 @@ public sealed class DatabaseHealthCheck(SqliteDatabase database) : IHealthCheck
     {
         try
         {
+            database.Initialize();
+
             using var connection = database.OpenConnection();
 
             using var versionCommand = connection.CreateCommand();

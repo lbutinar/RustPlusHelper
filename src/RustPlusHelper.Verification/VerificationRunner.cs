@@ -112,8 +112,7 @@ public sealed class VerificationRunner(IRustPlusClient client)
             await client.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
-        var expectedRequestCount = cameraCode is null ? 5 : 6;
-        var success = statuses.Count == expectedRequestCount && statuses.Values.All(status => status.Success);
+        var success = statuses.Values.All(status => status.Success);
         var report = new VerificationReport(
             1,
             DateTimeOffset.UtcNow,

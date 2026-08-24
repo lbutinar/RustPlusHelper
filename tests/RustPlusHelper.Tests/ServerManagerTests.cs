@@ -185,22 +185,8 @@ public sealed class ServerManagerTests
         Assert.Equal(76561198000000000UL, identity.Current?.SteamId);
     }
 
-    private static void AssertToken(InMemorySecretStore secrets, Guid serverId, string expected)
-    {
-        var restored = secrets.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
-        try
-        {
-            Assert.NotNull(restored);
-            Assert.Equal(expected, Encoding.UTF8.GetString(restored));
-        }
-        finally
-        {
-            if (restored is not null)
-            {
-                CryptographicOperations.ZeroMemory(restored);
-            }
-        }
-    }
+    private static void AssertToken(InMemorySecretStore secrets, Guid serverId, string expected) =>
+        SecretAssertions.AssertToken(secrets, serverId, expected);
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
     {

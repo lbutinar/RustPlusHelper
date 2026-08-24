@@ -15,6 +15,8 @@ public sealed class TrayIconService : IDesktopNotifier, IDisposable
     private const string IconResourceName = "RustPlusHelper.Desktop.Assets.rustplus-tray-icon.ico";
 
     private readonly System.Windows.Forms.NotifyIcon _notifyIcon;
+    private readonly System.Drawing.Icon _icon;
+    private readonly System.Windows.Threading.Dispatcher _dispatcher;
 
     public event EventHandler? OpenRequested;
 
@@ -22,13 +24,19 @@ public sealed class TrayIconService : IDesktopNotifier, IDisposable
 
     public TrayIconService()
     {
+        // The NotifyIcon's native window is created on whichever thread constructs it (the WPF UI
+        // thread, via DI). Notifications are triggered from background poll/FCM callbacks, so calls
+        // into the WinForms control must be marshaled back here — WinForms controls are not thread-safe.
+        _dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Open RustPlusHelper", null, (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("Exit", null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty));
 
+        _icon = LoadIcon();
         _notifyIcon = new System.Windows.Forms.NotifyIcon
         {
-            Icon = LoadIcon(),
+            Icon = _icon,
             Text = "RustPlusHelper",
             ContextMenuStrip = menu,
             Visible = true
@@ -36,8 +44,17 @@ public sealed class TrayIconService : IDesktopNotifier, IDisposable
         _notifyIcon.DoubleClick += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Show(string title, string message) =>
-        _notifyIcon.ShowBalloonTip(10_000, title, message, System.Windows.Forms.ToolTipIcon.Info);
+    public void Show(string title, string message)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            _notifyIcon.ShowBalloonTip(10_000, title, message, System.Windows.Forms.ToolTipIcon.Info);
+            return;
+        }
+
+        _dispatcher.BeginInvoke(() =>
+            _notifyIcon.ShowBalloonTip(10_000, title, message, System.Windows.Forms.ToolTipIcon.Info));
+    }
 
     private static System.Drawing.Icon LoadIcon()
     {
@@ -50,5 +67,6 @@ public sealed class TrayIconService : IDesktopNotifier, IDisposable
     {
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _icon.Dispose();
     }
 }

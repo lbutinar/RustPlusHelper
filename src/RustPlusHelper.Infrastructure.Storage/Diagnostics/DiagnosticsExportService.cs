@@ -26,7 +26,7 @@ public sealed class DiagnosticsExportService(
         ArgumentNullException.ThrowIfNull(destination);
 
         using var archive = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
-        WriteSummary(archive);
+        WriteSummary(archive, RunHealthChecks());
         WriteServers(archive);
         WriteLogs(archive);
     }
@@ -43,7 +43,7 @@ public sealed class DiagnosticsExportService(
         }
     }
 
-    private void WriteSummary(ZipArchive archive)
+    private void WriteSummary(ZipArchive archive, IReadOnlyList<HealthCheckResult> healthCheckResults)
     {
         var builder = new StringBuilder();
         builder.AppendLine("RustPlusHelper diagnostics export");
@@ -53,7 +53,7 @@ public sealed class DiagnosticsExportService(
             $"OS: {Environment.OSVersion.VersionString} ({(Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit")})");
         builder.AppendLine();
         builder.AppendLine("Health checks:");
-        foreach (var result in RunHealthChecks())
+        foreach (var result in healthCheckResults)
         {
             builder.AppendLine($"  [{result.Status}] {result.Name} - {result.Detail}");
         }

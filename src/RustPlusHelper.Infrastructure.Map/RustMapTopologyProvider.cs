@@ -105,6 +105,24 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         var heightLayer = FindLayer(world, "height");
         var waterLayer = FindLayer(world, "water");
 
+        var topologyOutputResolution = topologyLayer is null ? 0 : Math.Min(topologyResolution, PreviewResolution);
+        var combinedTopologyBits = topologyLayer is null
+            ? null
+            : DownsampleTopologyBits(topologyLayer.Data, topologyResolution, topologyOutputResolution);
+
+        HeightGridSetup? gridSetup = heightLayer is null ? null : CreateHeightGridSetup(heightLayer, waterLayer, world.Size);
+        double[,]? heights = null;
+        double[,]? waterDepths = null;
+        if (heightLayer is not null && gridSetup is not null)
+        {
+            (heights, waterDepths) = ComputeHeightAndWaterDepthGrids(
+                heightLayer,
+                waterLayer,
+                topologyLayer,
+                topologyResolution,
+                gridSetup.Value);
+        }
+
         return new ImportedMapTopology(
             sourceFileName,
             sha256,
@@ -115,20 +133,21 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             world.Prefabs.Count,
             paths,
             CreateBiomeRaster(FindLayer(world, "biome"), topologyResolution),
-            topologyLayer is null ? null : CreateTopologyRaster(topologyLayer.Data, topologyResolution),
-            topologyLayer is null ? null : CreateResourcePotentialRaster(topologyLayer.Data, topologyResolution),
+            combinedTopologyBits is null ? null : ColorizeTopology(combinedTopologyBits, topologyOutputResolution, ResourceMode.AllTopology),
+            combinedTopologyBits is null ? null : ColorizeTopology(combinedTopologyBits, topologyOutputResolution, ResourceMode.ResourcePotential),
             noBuildZones,
             noBuildEvidence,
-            CreateTerrainSlopeRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
+            CreateTerrainSlopeRaster(heightLayer, gridSetup, waterDepths),
             CreateBuildPlanningRaster(
                 heightLayer,
-                waterLayer,
                 topologyLayer,
                 topologyResolution,
+                gridSetup,
+                waterDepths,
                 world,
                 noBuildZones),
-            CreateElevationRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
-            CreateWaterDepthRaster(heightLayer, waterLayer, topologyLayer, topologyResolution, world.Size),
+            CreateElevationRaster(gridSetup, heights, waterDepths),
+            CreateWaterDepthRaster(gridSetup, waterDepths),
             MapTopologyDerivationVersions.BuildPlanning);
     }
 
@@ -167,24 +186,14 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return MapPathKind.Other;
     }
 
-    private static MapRasterSnapshot CreateTopologyRaster(byte[] data, int sourceResolution) =>
-        CreateTopologyRaster(data, sourceResolution, ResourceMode.AllTopology);
-
-    private static MapRasterSnapshot CreateResourcePotentialRaster(byte[] data, int sourceResolution) =>
-        CreateTopologyRaster(data, sourceResolution, ResourceMode.ResourcePotential);
-
-    private static MapRasterSnapshot CreateTopologyRaster(
-        byte[] data,
-        int sourceResolution,
-        ResourceMode mode)
+    private static uint[] DownsampleTopologyBits(byte[] data, int sourceResolution, int outputResolution)
     {
         if (data.Length % 4 != 0)
         {
             throw new InvalidDataException("The topology layer byte count is invalid.");
         }
 
-        var outputResolution = Math.Min(sourceResolution, PreviewResolution);
-        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        var combined = new uint[checked(outputResolution * outputResolution)];
         for (var outputY = 0; outputY < outputResolution; outputY++)
         {
             var sourceTop = sourceResolution - (int)Math.Ceiling((outputY + 1d) * sourceResolution / outputResolution);
@@ -193,25 +202,36 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             {
                 var sourceLeft = (int)Math.Floor(outputX * (double)sourceResolution / outputResolution);
                 var sourceRight = (int)Math.Ceiling((outputX + 1d) * sourceResolution / outputResolution);
-                uint combined = 0;
+                uint combinedValue = 0;
                 for (var sourceY = Math.Max(0, sourceTop); sourceY < Math.Min(sourceResolution, sourceBottom); sourceY++)
                 {
                     for (var sourceX = sourceLeft; sourceX < sourceRight; sourceX++)
                     {
                         var offset = checked(((sourceY * sourceResolution) + sourceX) * 4);
-                        combined |= BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4));
+                        combinedValue |= BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4));
                     }
                 }
 
-                var color = mode == ResourceMode.ResourcePotential
-                    ? ResourceColor(combined)
-                    : TopologyColor(combined);
-                var outputOffset = ((outputY * outputResolution) + outputX) * 4;
-                rgba[outputOffset] = color.R;
-                rgba[outputOffset + 1] = color.G;
-                rgba[outputOffset + 2] = color.B;
-                rgba[outputOffset + 3] = color.A;
+                combined[(outputY * outputResolution) + outputX] = combinedValue;
             }
+        }
+
+        return combined;
+    }
+
+    private static MapRasterSnapshot ColorizeTopology(uint[] combinedBits, int outputResolution, ResourceMode mode)
+    {
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var index = 0; index < combinedBits.Length; index++)
+        {
+            var color = mode == ResourceMode.ResourcePotential
+                ? ResourceColor(combinedBits[index])
+                : TopologyColor(combinedBits[index]);
+            var outputOffset = index * 4;
+            rgba[outputOffset] = color.R;
+            rgba[outputOffset + 1] = color.G;
+            rgba[outputOffset + 2] = color.B;
+            rgba[outputOffset + 3] = color.A;
         }
 
         return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
@@ -269,61 +289,74 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
     }
 
-    private static MapRasterSnapshot? CreateTerrainSlopeRaster(
-        MapData? heightLayer,
-        MapData? waterLayer,
-        MapData? topologyLayer,
-        int topologyResolution,
-        uint worldSize)
+    private static HeightGridSetup CreateHeightGridSetup(MapData heightLayer, MapData? waterLayer, uint worldSize)
     {
-        if (heightLayer is null)
-        {
-            return null;
-        }
-
         var heightResolution = GetInt16Resolution(heightLayer, "height");
         var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
         var outputResolution = Math.Min(heightResolution, PreviewResolution);
         var metresPerSample = worldSize / (double)(heightResolution - 1);
-        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
-        for (var outputY = 0; outputY < outputResolution; outputY++)
-        {
-            var sourceY = Math.Clamp(
-                (int)((outputY + 0.5) * heightResolution / outputResolution),
-                0,
-                heightResolution - 1);
-            for (var outputX = 0; outputX < outputResolution; outputX++)
-            {
-                var sourceX = Math.Clamp(
-                    (int)((outputX + 0.5) * heightResolution / outputResolution),
-                    0,
-                    heightResolution - 1);
-                var left = HeightMetres(heightLayer.Data, heightResolution, Math.Max(0, sourceX - 1), sourceY);
-                var right = HeightMetres(heightLayer.Data, heightResolution, Math.Min(heightResolution - 1, sourceX + 1), sourceY);
-                var bottom = HeightMetres(heightLayer.Data, heightResolution, sourceX, Math.Max(0, sourceY - 1));
-                var top = HeightMetres(heightLayer.Data, heightResolution, sourceX, Math.Min(heightResolution - 1, sourceY + 1));
-                var xSpan = Math.Max(1, Math.Min(heightResolution - 1, sourceX + 1) - Math.Max(0, sourceX - 1));
-                var ySpan = Math.Max(1, Math.Min(heightResolution - 1, sourceY + 1) - Math.Max(0, sourceY - 1));
-                var dx = (right - left) / (xSpan * metresPerSample);
-                var dz = (top - bottom) / (ySpan * metresPerSample);
-                var slopeDegrees = Math.Atan(Math.Sqrt((dx * dx) + (dz * dz))) * 180d / Math.PI;
+        return new HeightGridSetup(heightResolution, waterResolution, outputResolution, metresPerSample);
+    }
 
-                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
-                var isWater = IsWater(
-                    terrainHeight,
+    /// <summary>
+    /// Samples terrain height and resolved water depth once, at the output-resolution grid shared by the
+    /// terrain slope, build planning, elevation, and water depth rasters, so none of them need to
+    /// recompute <see cref="HeightMetres"/>/<see cref="WaterDepthMetres"/> from scratch per pixel.
+    /// </summary>
+    private static (double[,] Heights, double[,] WaterDepths) ComputeHeightAndWaterDepthGrids(
+        MapData heightLayer,
+        MapData? waterLayer,
+        MapData? topologyLayer,
+        int topologyResolution,
+        HeightGridSetup setup)
+    {
+        var heights = new double[setup.OutputResolution, setup.OutputResolution];
+        var waterDepths = new double[setup.OutputResolution, setup.OutputResolution];
+        for (var y = 0; y < setup.OutputResolution; y++)
+        {
+            var sourceY = SampleCoordinate(y, setup.OutputResolution, setup.HeightResolution);
+            for (var x = 0; x < setup.OutputResolution; x++)
+            {
+                var sourceX = SampleCoordinate(x, setup.OutputResolution, setup.HeightResolution);
+                var height = HeightMetres(heightLayer.Data, setup.HeightResolution, sourceX, sourceY);
+                heights[y, x] = height;
+                waterDepths[y, x] = WaterDepthMetres(
+                    height,
                     sourceX,
                     sourceY,
-                    heightResolution,
+                    setup.HeightResolution,
                     waterLayer,
-                    waterResolution,
+                    setup.WaterResolution,
                     topologyLayer,
                     topologyResolution);
-                var color = isWater ? new Rgba(45, 126, 180, 100) : SlopeColor(slopeDegrees);
-                var outputOffset = (((outputResolution - 1 - outputY) * outputResolution) + outputX) * 4;
-                rgba[outputOffset] = color.R;
-                rgba[outputOffset + 1] = color.G;
-                rgba[outputOffset + 2] = color.B;
-                rgba[outputOffset + 3] = color.A;
+            }
+        }
+
+        return (heights, waterDepths);
+    }
+
+    private static MapRasterSnapshot? CreateTerrainSlopeRaster(
+        MapData? heightLayer,
+        HeightGridSetup? setup,
+        double[,]? waterDepths)
+    {
+        if (heightLayer is null || setup is null || waterDepths is null)
+        {
+            return null;
+        }
+
+        var (heightResolution, _, outputResolution, metresPerSample) = setup.Value;
+        var rgba = new byte[checked(outputResolution * outputResolution * 4)];
+        for (var y = 0; y < outputResolution; y++)
+        {
+            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
+            var displayY = outputResolution - 1 - y;
+            for (var x = 0; x < outputResolution; x++)
+            {
+                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
+                var slopeDegrees = SlopeDegrees(heightLayer.Data, heightResolution, sourceX, sourceY, metresPerSample);
+                var color = waterDepths[y, x] > 0.1 ? new Rgba(45, 126, 180, 100) : SlopeColor(slopeDegrees);
+                WritePixel(rgba, outputResolution, x, displayY, color);
             }
         }
 
@@ -332,40 +365,29 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
 
     private static MapRasterSnapshot? CreateBuildPlanningRaster(
         MapData? heightLayer,
-        MapData? waterLayer,
         MapData? topologyLayer,
         int topologyResolution,
+        HeightGridSetup? setup,
+        double[,]? waterDepths,
         WorldData world,
         IReadOnlyList<MapNoBuildZoneSnapshot> noBuildZones)
     {
-        if (heightLayer is null)
+        if (heightLayer is null || setup is null || waterDepths is null)
         {
             return null;
         }
 
-        var heightResolution = GetInt16Resolution(heightLayer, "height");
-        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
-        var outputResolution = Math.Min(heightResolution, PreviewResolution);
-        var metresPerSample = world.Size / (double)(heightResolution - 1);
+        var (heightResolution, _, outputResolution, metresPerSample) = setup.Value;
         var blocked = CreateKnownBlockedMask(world, noBuildZones, outputResolution);
         var rgba = new byte[checked(outputResolution * outputResolution * 4)];
-        for (var outputY = 0; outputY < outputResolution; outputY++)
+        for (var y = 0; y < outputResolution; y++)
         {
-            var sourceY = SampleCoordinate(outputY, outputResolution, heightResolution);
-            var displayY = outputResolution - 1 - outputY;
-            for (var outputX = 0; outputX < outputResolution; outputX++)
+            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
+            var displayY = outputResolution - 1 - y;
+            for (var x = 0; x < outputResolution; x++)
             {
-                var sourceX = SampleCoordinate(outputX, outputResolution, heightResolution);
-                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
-                var depth = WaterDepthMetres(
-                    terrainHeight,
-                    sourceX,
-                    sourceY,
-                    heightResolution,
-                    waterLayer,
-                    waterResolution,
-                    topologyLayer,
-                    topologyResolution);
+                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
+                var depth = waterDepths[y, x];
                 var slope = SlopeDegrees(heightLayer.Data, heightResolution, sourceX, sourceY, metresPerSample);
                 var topology = TopologyAt(
                     sourceX,
@@ -373,7 +395,7 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
                     heightResolution,
                     topologyLayer,
                     topologyResolution);
-                var knownBlocked = blocked[(displayY * outputResolution) + outputX]
+                var knownBlocked = blocked[(displayY * outputResolution) + x]
                     || HasAny(topology, 11, 21);
                 var color = depth > 0.1
                     ? new Rgba(45, 126, 180, 115)
@@ -382,7 +404,7 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
                         : slope > 5
                             ? new Rgba(214, 197, 68, 140)
                             : new Rgba(53, 194, 111, 135);
-                WritePixel(rgba, outputResolution, outputX, displayY, color);
+                WritePixel(rgba, outputResolution, x, displayY, color);
             }
         }
 
@@ -390,58 +412,32 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
     }
 
     private static MapRasterSnapshot? CreateElevationRaster(
-        MapData? heightLayer,
-        MapData? waterLayer,
-        MapData? topologyLayer,
-        int topologyResolution,
-        uint worldSize)
+        HeightGridSetup? setup,
+        double[,]? heights,
+        double[,]? waterDepths)
     {
-        if (heightLayer is null)
+        if (setup is null || heights is null || waterDepths is null)
         {
             return null;
         }
 
-        var heightResolution = GetInt16Resolution(heightLayer, "height");
-        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
-        var outputResolution = Math.Min(heightResolution, PreviewResolution);
-        var samples = new double[outputResolution, outputResolution];
-        var wet = new bool[outputResolution, outputResolution];
-        for (var y = 0; y < outputResolution; y++)
-        {
-            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
-            for (var x = 0; x < outputResolution; x++)
-            {
-                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
-                var height = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
-                samples[y, x] = height;
-                wet[y, x] = WaterDepthMetres(
-                    height,
-                    sourceX,
-                    sourceY,
-                    heightResolution,
-                    waterLayer,
-                    waterResolution,
-                    topologyLayer,
-                    topologyResolution) > 0.1;
-            }
-        }
-
+        var outputResolution = setup.Value.OutputResolution;
         var rgba = new byte[checked(outputResolution * outputResolution * 4)];
         for (var y = 0; y < outputResolution; y++)
         {
             var displayY = outputResolution - 1 - y;
             for (var x = 0; x < outputResolution; x++)
             {
-                if (wet[y, x])
+                if (waterDepths[y, x] > 0.1)
                 {
                     continue;
                 }
 
-                var height = samples[y, x];
-                var minorContour = (x > 0 && ContourBand(samples[y, x - 1], 25) != ContourBand(height, 25))
-                    || (y > 0 && ContourBand(samples[y - 1, x], 25) != ContourBand(height, 25));
-                var majorContour = (x > 0 && ContourBand(samples[y, x - 1], 100) != ContourBand(height, 100))
-                    || (y > 0 && ContourBand(samples[y - 1, x], 100) != ContourBand(height, 100));
+                var height = heights[y, x];
+                var minorContour = (x > 0 && ContourBand(heights[y, x - 1], 25) != ContourBand(height, 25))
+                    || (y > 0 && ContourBand(heights[y - 1, x], 25) != ContourBand(height, 25));
+                var majorContour = (x > 0 && ContourBand(heights[y, x - 1], 100) != ContourBand(height, 100))
+                    || (y > 0 && ContourBand(heights[y - 1, x], 100) != ContourBand(height, 100));
                 var color = majorContour
                     ? new Rgba(245, 244, 232, 220)
                     : minorContour
@@ -454,57 +450,30 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return new MapRasterSnapshot(outputResolution, outputResolution, rgba);
     }
 
-    private static MapRasterSnapshot? CreateWaterDepthRaster(
-        MapData? heightLayer,
-        MapData? waterLayer,
-        MapData? topologyLayer,
-        int topologyResolution,
-        uint worldSize)
+    private static MapRasterSnapshot? CreateWaterDepthRaster(HeightGridSetup? setup, double[,]? waterDepths)
     {
-        if (heightLayer is null)
+        if (setup is null || waterDepths is null)
         {
             return null;
         }
 
-        var heightResolution = GetInt16Resolution(heightLayer, "height");
-        var waterResolution = waterLayer is null ? 0 : GetInt16Resolution(waterLayer, "water");
-        var outputResolution = Math.Min(heightResolution, PreviewResolution);
-        var depths = new double[outputResolution, outputResolution];
-        for (var y = 0; y < outputResolution; y++)
-        {
-            var sourceY = SampleCoordinate(y, outputResolution, heightResolution);
-            for (var x = 0; x < outputResolution; x++)
-            {
-                var sourceX = SampleCoordinate(x, outputResolution, heightResolution);
-                var terrainHeight = HeightMetres(heightLayer.Data, heightResolution, sourceX, sourceY);
-                depths[y, x] = WaterDepthMetres(
-                    terrainHeight,
-                    sourceX,
-                    sourceY,
-                    heightResolution,
-                    waterLayer,
-                    waterResolution,
-                    topologyLayer,
-                    topologyResolution);
-            }
-        }
-
+        var outputResolution = setup.Value.OutputResolution;
         var rgba = new byte[checked(outputResolution * outputResolution * 4)];
         for (var y = 0; y < outputResolution; y++)
         {
             var displayY = outputResolution - 1 - y;
             for (var x = 0; x < outputResolution; x++)
             {
-                var depth = depths[y, x];
+                var depth = waterDepths[y, x];
                 if (depth <= 0.1)
                 {
                     continue;
                 }
 
-                var shoreline = (x > 0 && depths[y, x - 1] <= 0.1)
-                    || (x + 1 < outputResolution && depths[y, x + 1] <= 0.1)
-                    || (y > 0 && depths[y - 1, x] <= 0.1)
-                    || (y + 1 < outputResolution && depths[y + 1, x] <= 0.1);
+                var shoreline = (x > 0 && waterDepths[y, x - 1] <= 0.1)
+                    || (x + 1 < outputResolution && waterDepths[y, x + 1] <= 0.1)
+                    || (y > 0 && waterDepths[y - 1, x] <= 0.1)
+                    || (y + 1 < outputResolution && waterDepths[y + 1, x] <= 0.1);
                 var color = shoreline
                     ? new Rgba(198, 244, 255, 220)
                     : depth <= 1
@@ -638,38 +607,15 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return Math.Sqrt(((x - nearestX) * (x - nearestX)) + ((y - nearestY) * (y - nearestY)));
     }
 
-    private static bool IsWater(
-        double terrainHeight,
-        int sourceX,
-        int sourceY,
-        int heightResolution,
-        MapData? waterLayer,
-        int waterResolution,
-        MapData? topologyLayer,
-        int topologyResolution)
-    {
-        if (waterLayer is not null)
-        {
-            var waterX = Math.Min(waterResolution - 1, sourceX * waterResolution / heightResolution);
-            var waterY = Math.Min(waterResolution - 1, sourceY * waterResolution / heightResolution);
-            if (HeightMetres(waterLayer.Data, waterResolution, waterX, waterY) > terrainHeight + 0.1)
-            {
-                return true;
-            }
-        }
-
-        if (topologyLayer is null || topologyResolution <= 0 || terrainHeight >= 0)
-        {
-            return false;
-        }
-
-        var topologyX = Math.Min(topologyResolution - 1, sourceX * topologyResolution / heightResolution);
-        var topologyY = Math.Min(topologyResolution - 1, sourceY * topologyResolution / heightResolution);
-        var offset = ((topologyY * topologyResolution) + topologyX) * 4;
-        var topology = BinaryPrimitives.ReadUInt32LittleEndian(topologyLayer.Data.AsSpan(offset, 4));
-        return HasAny(topology, 7, 8);
-    }
-
+    /// <summary>
+    /// The single, shared water-classification lookup: resolves the water surface height for a height-layer
+    /// tile (from the water layer when present, falling back to a "no water" sentinel), lets the topology
+    /// layer's river/lake bits promote that surface to sea level when it is not otherwise known to be wet,
+    /// and returns the resulting depth (0 when dry). Every raster that needs to know whether, or how deeply,
+    /// a tile is underwater (terrain slope, build planning, elevation, water depth) treats
+    /// <c>WaterDepthMetres(...) &gt; 0.1</c> as the single definition of "this tile is water", so they all
+    /// agree on the same tiles.
+    /// </summary>
     private static double WaterDepthMetres(
         double terrainHeight,
         int sourceX,
@@ -864,8 +810,15 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         _ => default
     };
 
-    private static bool HasAny(uint value, params int[] bits) =>
-        bits.Any(bit => (value & (1u << bit)) != 0);
+    private static bool HasAny(uint value, int a) => (value & (1u << a)) != 0;
+
+    private static bool HasAny(uint value, int a, int b) => HasAny(value, a) || HasAny(value, b);
+
+    private static bool HasAny(uint value, int a, int b, int c) =>
+        HasAny(value, a) || HasAny(value, b) || HasAny(value, c);
+
+    private static bool HasAny(uint value, int a, int b, int c, int d) =>
+        HasAny(value, a) || HasAny(value, b) || HasAny(value, c) || HasAny(value, d);
 
     private static MapData? FindLayer(WorldData world, string name) =>
         world.Maps.FirstOrDefault(layer => string.Equals(layer.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -939,4 +892,14 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
     }
 
     private readonly record struct Rgba(byte R, byte G, byte B, byte A);
+
+    /// <summary>
+    /// Resolution/scale parameters shared by the terrain slope, build planning, elevation, and water depth
+    /// rasters, which all sample the same height layer at the same output resolution.
+    /// </summary>
+    private readonly record struct HeightGridSetup(
+        int HeightResolution,
+        int WaterResolution,
+        int OutputResolution,
+        double MetresPerSample);
 }

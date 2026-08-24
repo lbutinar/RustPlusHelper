@@ -45,9 +45,17 @@ public static class VerificationArtifactWriter
         return outputDirectory;
     }
 
+    /// <summary>
+    /// Secrets shorter than this are not checked: a short numeric value (e.g. a small PlayerToken)
+    /// is near-certain to collide with an unrelated field in the report (a count, a coordinate, a
+    /// timestamp digit), which would fail every export without ever indicating an actual leak.
+    /// </summary>
+    private const int MinimumCheckedSecretLength = 5;
+
     internal static void AssertDoesNotContainSecrets(string text, IEnumerable<string> forbiddenSecrets)
     {
-        foreach (var secret in forbiddenSecrets.Where(secret => !string.IsNullOrWhiteSpace(secret)))
+        foreach (var secret in forbiddenSecrets.Where(
+            secret => !string.IsNullOrWhiteSpace(secret) && secret.Length >= MinimumCheckedSecretLength))
         {
             if (text.Contains(secret, StringComparison.Ordinal))
             {

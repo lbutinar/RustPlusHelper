@@ -33,8 +33,7 @@ public sealed class RustPlusPairingManager(
     PlayerIdentityManager identity,
     ServerManager servers) : IDisposable
 {
-    private readonly object _stateLock = new();
-    private CancellationTokenSource? _operationCancellation;
+    private readonly CancellableOperationGate _operationGate = new();
     private bool _isConfigured;
 
     public event EventHandler? StateChanged;
@@ -140,13 +139,7 @@ public sealed class RustPlusPairingManager(
         }
     }
 
-    public void Cancel()
-    {
-        lock (_stateLock)
-        {
-            _operationCancellation?.Cancel();
-        }
-    }
+    public void Cancel() => _operationGate.Cancel();
 
     public void ResetCredentials()
     {
@@ -156,15 +149,7 @@ public sealed class RustPlusPairingManager(
         SetState(RustPlusPairingState.NotConfigured);
     }
 
-    public void Dispose()
-    {
-        lock (_stateLock)
-        {
-            _operationCancellation?.Cancel();
-            _operationCancellation?.Dispose();
-            _operationCancellation = null;
-        }
-    }
+    public void Dispose() => _operationGate.Dispose();
 
     private ServerProfile SaveCapture(CapturedRustPlusPairing capture)
     {
@@ -205,31 +190,12 @@ public sealed class RustPlusPairingManager(
     private CancellationTokenSource BeginOperation(
         RustPlusPairingStatus status,
         string label,
-        string detail)
-    {
-        lock (_stateLock)
-        {
-            if (_operationCancellation is not null)
-            {
-                throw new InvalidOperationException("A Rust+ pairing operation is already in progress.");
-            }
+        string detail) =>
+        _operationGate.Begin(
+            "A Rust+ pairing operation is already in progress.",
+            () => SetState(new(status, label, detail)));
 
-            _operationCancellation = new CancellationTokenSource();
-            SetState(new(status, label, detail));
-            return _operationCancellation;
-        }
-    }
-
-    private void EndOperation(CancellationTokenSource operation)
-    {
-        lock (_stateLock)
-        {
-            if (ReferenceEquals(_operationCancellation, operation))
-            {
-                _operationCancellation = null;
-            }
-        }
-    }
+    private void EndOperation(CancellationTokenSource operation) => _operationGate.End(operation);
 
     private void SetState(RustPlusPairingState state)
     {

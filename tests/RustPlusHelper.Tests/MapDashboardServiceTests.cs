@@ -288,14 +288,8 @@ public sealed class MapDashboardServiceTests
             new InMemoryCompanionEventRepository(),
             new InMemoryPairedEntityRepository());
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(10, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(10));
 
     private sealed class FakeClientFactory : IRustPlusClientFactory
     {

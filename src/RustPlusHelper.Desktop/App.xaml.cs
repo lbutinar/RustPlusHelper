@@ -113,11 +113,23 @@ public partial class App : System.Windows.Application
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();
-        _host.Services.GetRequiredService<PlayerIdentityManager>().Load();
-        _host.Services.GetRequiredService<ServerManager>().Load();
-        _host.Services.GetRequiredService<RustPlusPairingManager>().Load();
-        _host.Services.GetRequiredService<RustPlusEntityPairingManager>().Load();
-        _host.Services.GetRequiredService<RustPlusAlarmNotificationListener>().Load();
+
+        // Each Load() below does its own local SQLite read and is independent of the others (none
+        // reads state the other writes), so running them concurrently instead of back-to-back turns
+        // this part of startup into the slowest single read instead of the sum of all five, shrinking
+        // how long the process shows no window before Show() further down.
+        var playerIdentity = _host.Services.GetRequiredService<PlayerIdentityManager>();
+        var serverManager = _host.Services.GetRequiredService<ServerManager>();
+        var pairingManager = _host.Services.GetRequiredService<RustPlusPairingManager>();
+        var entityPairingManager = _host.Services.GetRequiredService<RustPlusEntityPairingManager>();
+        var alarmListener = _host.Services.GetRequiredService<RustPlusAlarmNotificationListener>();
+        Task.WhenAll(
+            Task.Run(playerIdentity.Load),
+            Task.Run(serverManager.Load),
+            Task.Run(pairingManager.Load),
+            Task.Run(entityPairingManager.Load),
+            Task.Run(alarmListener.Load)).GetAwaiter().GetResult();
+
         _host.Services.GetRequiredService<NotificationDispatcher>(); // materializes and wires subscriptions
 
         PurgeStaleCompanionEvents();
@@ -192,7 +204,21 @@ public partial class App : System.Windows.Application
         if (_host is not null)
         {
             _host.StopAsync().GetAwaiter().GetResult();
-            _host.Dispose();
+
+            // Route through IAsyncDisposable when available: several singletons here (e.g.
+            // RustPlusAlarmNotificationListener) implement both IDisposable and IAsyncDisposable, and
+            // their synchronous Dispose() blocks on an in-flight background task that may be sleeping
+            // through a retry backoff. The generic host's ServiceProvider prefers DisposeAsync when a
+            // service supports it, so disposing asynchronously here avoids blocking this (UI) thread
+            // any longer than the async path already does.
+            if (_host is IAsyncDisposable asyncDisposableHost)
+            {
+                asyncDisposableHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            else
+            {
+                _host.Dispose();
+            }
         }
 
         base.OnExit(e);

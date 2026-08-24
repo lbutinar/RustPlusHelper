@@ -139,18 +139,8 @@ public sealed class RustPlusPairingManagerTests
         return store;
     }
 
-    private static void AssertToken(InMemorySecretStore secrets, Guid serverId, string expected)
-    {
-        var restored = secrets.Retrieve(serverId, SecretKind.RustPlusPlayerToken);
-        try
-        {
-            Assert.Equal(expected, Encoding.UTF8.GetString(restored!));
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(restored!);
-        }
-    }
+    private static void AssertToken(InMemorySecretStore secrets, Guid serverId, string expected) =>
+        SecretAssertions.AssertToken(secrets, serverId, expected);
 
     private sealed class FakePairingProvider : IRustPlusPairingProvider
     {

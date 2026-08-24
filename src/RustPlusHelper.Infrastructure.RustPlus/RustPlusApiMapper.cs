@@ -64,7 +64,7 @@ internal static class RustPlusApiMapper
         $"#{source.Background.ToArgb():X8}",
         source.Monuments?.Select(monument =>
             new MapMonumentSnapshot(monument.Name, monument.X, monument.Y)).ToArray() ?? [],
-        source.JpgImage?.ToArray() ?? []);
+        source.JpgImage ?? []);
 
     internal static TeamSnapshot Map(TeamInfo source) => new(
         source.LeaderSteamId,

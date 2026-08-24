@@ -99,9 +99,13 @@ public sealed class RustPlusConnectionManager(
                     map = ValidateMap(serverInfo, await client.GetMapAsync(token).ConfigureAwait(false));
                 }
 
-                var team = await client.GetTeamAsync(token).ConfigureAwait(false);
-                var chat = await client.GetTeamChatAsync(token).ConfigureAwait(false);
-                var markers = await client.GetMapMarkersAsync(token).ConfigureAwait(false);
+                var teamTask = client.GetTeamAsync(token);
+                var chatTask = client.GetTeamChatAsync(token);
+                var markersTask = client.GetMapMarkersAsync(token);
+                await Task.WhenAll(teamTask, chatTask, markersTask).ConfigureAwait(false);
+                var team = await teamTask.ConfigureAwait(false);
+                var chat = await chatTask.ConfigureAwait(false);
+                var markers = await markersTask.ConfigureAwait(false);
                 var unavailable = DescribeUnavailable(map, team, chat, markers, includeMap);
                 var state = SetState(new RustPlusConnectionState(
                     serverId,
@@ -231,8 +235,7 @@ public sealed class RustPlusConnectionManager(
     private RustPlusConnectionState ClassifyProtocolFailure(Guid serverId, RustPlusError? error)
     {
         var code = error?.Code ?? "unknown_error";
-        if (code.Equals("AccessDenied", StringComparison.OrdinalIgnoreCase)
-            || code.Equals("access_denied", StringComparison.OrdinalIgnoreCase))
+        if (RustPlusErrorClassification.IsAccessDenied(code))
         {
             return new RustPlusConnectionState(
                 serverId,

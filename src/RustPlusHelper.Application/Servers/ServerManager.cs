@@ -13,22 +13,32 @@ public sealed class ServerManager(
     PlayerIdentityManager? playerIdentity = null)
 {
     private readonly object _stateLock = new();
+    private Guid? _selectedServerId;
 
     public event EventHandler? Changed;
 
     public IReadOnlyList<ServerProfile> Profiles { get; private set; } = [];
 
-    public Guid? SelectedServerId => Profiles
-        .Where(profile => profile.LastSelectedUtc is not null)
-        .OrderByDescending(profile => profile.LastSelectedUtc)
-        .Select(profile => (Guid?)profile.Id)
-        .FirstOrDefault();
+    // Cached alongside Profiles instead of resorted on every read: this is read repeatedly during
+    // dashboard initialization, live-session start, and connection resolution, but only actually
+    // changes when Profiles is reassigned below.
+    public Guid? SelectedServerId => _selectedServerId;
+
+    private void SetProfiles(IReadOnlyList<ServerProfile> profiles)
+    {
+        Profiles = profiles;
+        _selectedServerId = profiles
+            .Where(profile => profile.LastSelectedUtc is not null)
+            .OrderByDescending(profile => profile.LastSelectedUtc)
+            .Select(profile => (Guid?)profile.Id)
+            .FirstOrDefault();
+    }
 
     public void Load()
     {
         lock (_stateLock)
         {
-            Profiles = repository.GetAll();
+            SetProfiles(repository.GetAll());
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -69,7 +79,7 @@ public sealed class ServerManager(
                 draft.RustPlusServerId ?? existing?.RustPlusServerId);
 
             repository.Upsert(profile);
-            Profiles = repository.GetAll();
+            SetProfiles(repository.GetAll());
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -164,7 +174,7 @@ public sealed class ServerManager(
                 UpdatedUtc = now,
                 LastSelectedUtc = now
             });
-            Profiles = repository.GetAll();
+            SetProfiles(repository.GetAll());
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -180,7 +190,7 @@ public sealed class ServerManager(
             removed = repository.Remove(id);
             if (removed)
             {
-                Profiles = repository.GetAll();
+                SetProfiles(repository.GetAll());
             }
         }
 

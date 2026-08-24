@@ -292,7 +292,11 @@ public sealed class RustPlusLiveSessionManagerTests
             [Team(online: true, alive: true)],
             [Markers(1)],
             cameraInfo: cameraInfo));
-        await using var manager = CreateManager(servers, secrets, factory);
+        // A manual clock instead of a real Task.Delay: the throttle window is compared against
+        // timeProvider.GetUtcNow(), so advancing this fake clock past it is deterministic, whereas a
+        // real 250ms sleep against a 200ms window leaves only a 50ms margin that CI/GC jitter can eat.
+        var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        await using var manager = CreateManager(servers, secrets, factory, timeProvider: clock);
         await manager.StartAsync(profile.Id);
         await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
         await manager.ViewCameraAsync("CAM01");
@@ -306,10 +310,19 @@ public sealed class RustPlusLiveSessionManagerTests
         client.RaiseCameraFrame(frameB);
         Assert.Same(frameA, manager.CurrentCamera.LatestFrame); // still within the throttle window
 
-        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        clock.Advance(TimeSpan.FromMilliseconds(250));
         var frameC = new CameraFrameSnapshot([3], 65f, DateTimeOffset.UtcNow);
         client.RaiseCameraFrame(frameC);
         Assert.Same(frameC, manager.CurrentCamera.LatestFrame);
+    }
+
+    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan delta) => _now += delta;
     }
 
     [Fact]
@@ -512,11 +525,12 @@ public sealed class RustPlusLiveSessionManagerTests
         ServerManager servers,
         InMemorySecretStore secrets,
         IRustPlusClientFactory factory,
-        IPairedEntityRepository? pairedEntities = null) =>
+        IPairedEntityRepository? pairedEntities = null,
+        TimeProvider? timeProvider = null) =>
         new(
             new RustPlusSavedConnectionResolver(servers, secrets),
             factory,
-            TimeProvider.System,
+            timeProvider ?? TimeProvider.System,
             new RustPlusPollingOptions(
                 TimeSpan.FromMilliseconds(15),
                 TimeSpan.FromMilliseconds(20),
@@ -608,14 +622,8 @@ public sealed class RustPlusLiveSessionManagerTests
     private static VendingOrderSnapshot Offer(int itemId, int currencyId, int cost, int stock) =>
         new(itemId, 1, currencyId, cost, stock, false, false, 1, 1, null, null);
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!condition())
-        {
-            await Task.Delay(5, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 
     private sealed class ScriptedFactory(Func<int, ScriptedClient> create) : IRustPlusClientFactory
     {

@@ -1,3 +1,4 @@
+using RustPlusHelper.Application.Concurrency;
 using RustPlusHelper.Application.RustPlus;
 using RustPlusHelper.Application.Security;
 using RustPlusHelper.Application.Servers;
@@ -27,9 +28,11 @@ public sealed class MapDashboardService(
     private bool _liveSessionSubscribed;
     private bool _disposed;
 
+    private readonly MutableStateBox<MapDashboardState> _state = new(MapDashboardState.NotStarted);
+
     public event EventHandler? StateChanged;
 
-    public MapDashboardState Current { get; private set; } = MapDashboardState.NotStarted;
+    public MapDashboardState Current => _state.Value;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -96,7 +99,7 @@ public sealed class MapDashboardService(
         if (liveSession.Current.ServerId == serverId
             && liveSession.Current.Status != RustPlusLiveSessionStatus.Stopped)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 IsLiveDataRefreshing = true,
                 LiveDataStatus = "Background refresh requested"
@@ -115,14 +118,14 @@ public sealed class MapDashboardService(
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (Current.ServerId is not { } serverId)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 TopologyError = "Save and open a server before importing its Rust .map file."
             });
             return;
         }
 
-        SetState(Current with
+        UpdateState(current => current with
         {
             IsTopologyImporting = true,
             TopologyStatus = "Reading external Rust map",
@@ -140,7 +143,7 @@ public sealed class MapDashboardService(
         }
         catch (OperationCanceledException)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 IsTopologyImporting = false,
                 TopologyStatus = "Map import cancelled"
@@ -150,7 +153,7 @@ public sealed class MapDashboardService(
 
         if (!result.IsSuccess || result.Topology is null)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 IsTopologyImporting = false,
                 TopologyStatus = "Map import failed",
@@ -159,16 +162,16 @@ public sealed class MapDashboardService(
             return;
         }
 
-        SetState(Current with
+        UpdateState(current => current with
         {
             Topology = result.Topology,
             IsTopologyImporting = false,
             TopologyStatus = result.Message,
             TopologyError = null,
             Layers = BuildLiveLayers(
-                Current,
-                Current.Team is not null,
-                Current.Markers is not null,
+                current,
+                current.Team is not null,
+                current.Markers is not null,
                 result.Topology)
         });
     }
@@ -177,13 +180,14 @@ public sealed class MapDashboardService(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var layers = Current.Layers
-            .Select(layer => layer.Kind == kind && layer.IsAvailable
-                ? layer with { IsVisible = isVisible }
-                : layer)
-            .ToArray();
-
-        SetState(Current with { Layers = layers });
+        UpdateState(current => current with
+        {
+            Layers = current.Layers
+                .Select(layer => layer.Kind == kind && layer.IsAvailable
+                    ? layer with { IsVisible = isVisible }
+                    : layer)
+                .ToArray()
+        });
     }
 
     public async ValueTask DisposeAsync()
@@ -271,7 +275,7 @@ public sealed class MapDashboardService(
         if (cached is not null)
         {
             SetCachedState(cached, null);
-            SetState(Current with
+            UpdateState(current => current with
             {
                 IsLiveDataRefreshing = true,
                 LiveDataStatus = includeMap ? "Refreshing map and live data" : "Refreshing live data"
@@ -309,7 +313,7 @@ public sealed class MapDashboardService(
             var failure = result.ConnectionState.Detail ?? result.ConnectionState.Label;
             if (cached is not null)
             {
-                SetState(Current with
+                UpdateState(current => current with
                 {
                     IsLiveDataRefreshing = false,
                     LiveDataStatus = "Live data unavailable",
@@ -323,7 +327,6 @@ public sealed class MapDashboardService(
         }
 
         var map = result.Map?.IsSuccess == true ? result.Map.Data : null;
-        MapDashboardState baseState;
         if (map is not null)
         {
             var retrievedAtUtc = timeProvider.GetUtcNow();
@@ -338,7 +341,7 @@ public sealed class MapDashboardService(
             }
 
             var profile = servers.Profiles.First(profile => profile.Id == serverId);
-            baseState = new MapDashboardState(
+            var baseState = new MapDashboardState(
                 DashboardConnectionState.Ready,
                 profile.UseFacepunchProxy ? "Live Rust+ · secure proxy" : "Live Rust+ · direct",
                 MapDashboardDataSource.Live,
@@ -357,16 +360,20 @@ public sealed class MapDashboardService(
                 MapDashboardState.CreateLiveMapLayers(),
                 cacheWarning);
             baseState = AttachSavedTopology(baseState);
+
+            // baseState here doesn't derive from Current, so a plain (still atomically-written) SetState
+            // is fine — unlike the cached-only branch below, there's no prior-state read to race on.
+            SetState(MergeLiveData(baseState, result));
         }
         else if (cached is not null)
         {
-            baseState = Current with
+            UpdateState(current => MergeLiveData(current with
             {
                 Server = result.ServerInfo,
                 ErrorMessage = includeMap
                     ? $"Live map refresh failed; showing the cached map. {DescribeFailure(result.Map)}"
-                    : Current.ErrorMessage
-            };
+                    : current.ErrorMessage
+            }, result));
         }
         else
         {
@@ -377,7 +384,6 @@ public sealed class MapDashboardService(
             return;
         }
 
-        SetState(MergeLiveData(baseState, result));
         RememberAutoImportKey(serverId, result.ServerInfo);
         await TryAutoImportTopologyAsync(serverId, result.ServerInfo, cancellationToken).ConfigureAwait(false);
         await StartLiveSessionAsync(serverId, cancellationToken).ConfigureAwait(false);
@@ -394,12 +400,14 @@ public sealed class MapDashboardService(
             return;
         }
 
-        SetState(Current with
-        {
-            IsTopologyImporting = true,
-            TopologyStatus = "Checking Rust's local map cache",
-            TopologyError = null
-        });
+        UpdateState(current => current.ServerId != serverId
+            ? current
+            : current with
+            {
+                IsTopologyImporting = true,
+                TopologyStatus = "Checking Rust's local map cache",
+                TopologyError = null
+            });
 
         MapTopologyAutoImportResult result;
         try
@@ -414,44 +422,49 @@ public sealed class MapDashboardService(
         {
             if (!_disposed)
             {
-                SetState(Current with { IsTopologyImporting = false });
+                UpdateState(current => current.ServerId != serverId
+                    ? current
+                    : current with { IsTopologyImporting = false });
             }
 
             throw;
         }
         catch (Exception)
         {
-            if (!_disposed && Current.ServerId == serverId)
+            if (!_disposed)
             {
-                SetState(Current with
-                {
-                    IsTopologyImporting = false,
-                    TopologyStatus = "Automatic map import failed",
-                    TopologyError = "Rust's local map cache could not be processed automatically. Choose a .map file manually."
-                });
+                UpdateState(current => current.ServerId != serverId
+                    ? current
+                    : current with
+                    {
+                        IsTopologyImporting = false,
+                        TopologyStatus = "Automatic map import failed",
+                        TopologyError = "Rust's local map cache could not be processed automatically. Choose a .map file manually."
+                    });
             }
 
             return;
         }
 
-        if (_disposed || Current.ServerId != serverId)
+        if (_disposed)
         {
             return;
         }
 
-        var topology = result.Topology ?? Current.Topology;
-        SetState(Current with
-        {
-            Topology = topology,
-            IsTopologyImporting = false,
-            TopologyStatus = result.Message,
-            TopologyError = result.IsError ? result.Message : null,
-            Layers = BuildLiveLayers(
-                Current,
-                Current.Team is not null,
-                Current.Markers is not null,
-                topology)
-        });
+        UpdateState(current => current.ServerId != serverId
+            ? current
+            : current with
+            {
+                Topology = result.Topology ?? current.Topology,
+                IsTopologyImporting = false,
+                TopologyStatus = result.Message,
+                TopologyError = result.IsError ? result.Message : null,
+                Layers = BuildLiveLayers(
+                    current,
+                    current.Team is not null,
+                    current.Markers is not null,
+                    result.Topology ?? current.Topology)
+            });
     }
 
     private void QueueAutoImportTopology(Guid serverId, ServerInfoSnapshot server)
@@ -532,7 +545,7 @@ public sealed class MapDashboardService(
 
     private async Task LoadDemoAsync(CancellationToken cancellationToken)
     {
-        SetState(Current with
+        UpdateState(current => current with
         {
             ConnectionState = DashboardConnectionState.Loading,
             ConnectionLabel = "Loading demo session",
@@ -551,7 +564,7 @@ public sealed class MapDashboardService(
             var markers = Require(await demoClient.GetMapMarkersAsync(cancellationToken).ConfigureAwait(false), "map markers");
             var now = timeProvider.GetUtcNow();
 
-            SetState(new MapDashboardState(
+            UpdateState(current => new MapDashboardState(
                 DashboardConnectionState.Ready,
                 "Demo connected",
                 MapDashboardDataSource.Fake,
@@ -567,7 +580,7 @@ public sealed class MapDashboardService(
                 chat,
                 markers,
                 [],
-                Current.Layers,
+                current.Layers,
                 null));
         }
         catch (OperationCanceledException)
@@ -576,7 +589,7 @@ public sealed class MapDashboardService(
         }
         catch (Exception exception)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 ConnectionState = DashboardConnectionState.Failed,
                 ConnectionLabel = "Demo unavailable",
@@ -585,31 +598,36 @@ public sealed class MapDashboardService(
         }
     }
 
-    private void SetCachedState(CachedServerMap cached, string? warning)
+    private void SetCachedState(CachedServerMap cached, string? warning) =>
+        UpdateState(current => AttachSavedTopology(ComputeCachedState(current, cached, warning)));
+
+    private static MapDashboardState ComputeCachedState(
+        MapDashboardState current,
+        CachedServerMap cached,
+        string? warning)
     {
-        var preserveLiveState = Current.ServerId == cached.ServerId;
-        var team = preserveLiveState ? Current.Team : null;
-        var chat = preserveLiveState ? Current.Chat : null;
-        var markers = preserveLiveState ? Current.Markers : null;
-        var state = new MapDashboardState(
+        var preserveLiveState = current.ServerId == cached.ServerId;
+        var team = preserveLiveState ? current.Team : null;
+        var chat = preserveLiveState ? current.Chat : null;
+        var markers = preserveLiveState ? current.Markers : null;
+        return new MapDashboardState(
             DashboardConnectionState.Ready,
             "Cached map · refreshing live data",
             MapDashboardDataSource.Cache,
             cached.ServerId,
             cached.RetrievedAtUtc,
-            preserveLiveState ? Current.LiveDataRetrievedAtUtc : null,
-            preserveLiveState && Current.IsLiveDataRefreshing,
-            preserveLiveState ? Current.LiveDataStatus : null,
-            preserveLiveState ? Current.LiveDataError : null,
+            preserveLiveState ? current.LiveDataRetrievedAtUtc : null,
+            preserveLiveState && current.IsLiveDataRefreshing,
+            preserveLiveState ? current.LiveDataStatus : null,
+            preserveLiveState ? current.LiveDataError : null,
             cached.Server,
             cached.Map,
             team,
             chat,
             markers,
-            preserveLiveState ? Current.Events : [],
-            BuildLiveLayers(Current, team is not null, markers is not null),
+            preserveLiveState ? current.Events : [],
+            BuildLiveLayers(current, team is not null, markers is not null),
             warning);
-        SetState(AttachSavedTopology(state));
     }
 
     private void HandleRefreshException(Guid serverId, CachedServerMap? cached, Exception exception)
@@ -617,7 +635,7 @@ public sealed class MapDashboardService(
         var safeMessage = SecretRedactor.Redact(exception.Message);
         if (cached is not null)
         {
-            SetState(Current with
+            UpdateState(current => current with
             {
                 IsLiveDataRefreshing = false,
                 LiveDataStatus = "Live refresh failed",
@@ -640,9 +658,24 @@ public sealed class MapDashboardService(
         });
     }
 
-    private void SetState(MapDashboardState state)
+    /// <summary>
+    /// Overwrites the state outright. Only safe when <paramref name="state"/> does not derive any of
+    /// its fields from <see cref="Current"/> — otherwise use <see cref="UpdateState"/> so the read of
+    /// the prior state and the write of the new one happen atomically relative to every other writer
+    /// (in particular <see cref="HandleLiveSessionStateChanged"/>, which runs on a different thread).
+    /// </summary>
+    private void SetState(MapDashboardState state) => UpdateState(_ => state);
+
+    /// <summary>
+    /// Atomically reads <see cref="Current"/>, computes the next state from it via
+    /// <paramref name="updater"/>, and stores the result — use this instead of
+    /// <c>SetState(Current with {...})</c> any time the new state is derived from the old one, so a
+    /// concurrent updater can't compute from the same now-stale snapshot and silently clobber this
+    /// change (or have this change clobber theirs).
+    /// </summary>
+    private void UpdateState(Func<MapDashboardState, MapDashboardState> updater)
     {
-        Current = state;
+        _state.Update(updater);
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -669,38 +702,57 @@ public sealed class MapDashboardService(
         _liveSessionSubscribed = true;
     }
 
+    // The one place this class historically raced against itself: this fires from
+    // RustPlusLiveSessionManager.StateChanged, which runs on whatever thread the live-session poll
+    // loop or FCM listener is currently on — never the thread driving InitializeAsync/LoadServerAsync.
+    // Both sides read-then-write Current, so the read (of live.ServerId vs Current.ServerId) and the
+    // write must happen as one atomic step via UpdateState, or a concurrent LoadServerCoreAsync write
+    // sandwiched between this method's read and its write would get silently discarded.
     private void HandleLiveSessionStateChanged(object? sender, EventArgs args)
     {
         var live = liveSession.Current;
-        if (_disposed || live.ServerId is null || live.ServerId != Current.ServerId)
+        if (_disposed || live.ServerId is null)
         {
             return;
         }
 
-        var team = live.Team ?? Current.Team;
-        var chat = live.Chat ?? Current.Chat;
-        var markers = live.Markers ?? Current.Markers;
-        SetState(Current with
+        UpdateState(current =>
         {
-            ConnectionLabel = live.Label,
-            Server = live.Server ?? Current.Server,
-            Team = team,
-            Chat = chat,
-            Markers = markers,
-            LiveDataRetrievedAtUtc = live.LastRefreshUtc ?? Current.LiveDataRetrievedAtUtc,
-            IsLiveDataRefreshing = live.Status is RustPlusLiveSessionStatus.Connecting
-                or RustPlusLiveSessionStatus.Reconnecting,
-            LiveDataStatus = live.Label,
-            LiveDataError = live.Error,
-            Events = live.Events,
-            Layers = BuildLiveLayers(
-                Current with { Events = live.Events },
-                team is not null,
-                markers is not null,
-                Current.Topology)
+            if (live.ServerId != current.ServerId)
+            {
+                return current;
+            }
+
+            var team = live.Team ?? current.Team;
+            var chat = live.Chat ?? current.Chat;
+            var markers = live.Markers ?? current.Markers;
+            return current with
+            {
+                ConnectionLabel = live.Label,
+                Server = live.Server ?? current.Server,
+                Team = team,
+                Chat = chat,
+                Markers = markers,
+                LiveDataRetrievedAtUtc = live.LastRefreshUtc ?? current.LiveDataRetrievedAtUtc,
+                IsLiveDataRefreshing = live.Status is RustPlusLiveSessionStatus.Connecting
+                    or RustPlusLiveSessionStatus.Reconnecting,
+                LiveDataStatus = live.Label,
+                LiveDataError = live.Error,
+                Events = live.Events,
+                Layers = BuildLiveLayers(
+                    current with { Events = live.Events },
+                    team is not null,
+                    markers is not null,
+                    current.Topology)
+            };
         });
 
-        if (live.Status == RustPlusLiveSessionStatus.Connected && live.Server is not null)
+        // Re-checked against the post-update value rather than reusing the pre-update guard above:
+        // if the update no-opped because the server had already changed, this must not queue an
+        // auto-import against the now-stale live.ServerId either.
+        if (live.Status == RustPlusLiveSessionStatus.Connected
+            && live.Server is not null
+            && Current.ServerId == live.ServerId)
         {
             QueueAutoImportTopology(live.ServerId.Value, live.Server);
         }

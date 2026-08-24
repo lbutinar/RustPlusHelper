@@ -45,8 +45,7 @@ public sealed class RustPlusEntityPairingManager(
     IPairedEntityRepository entities,
     TimeProvider timeProvider) : IDisposable
 {
-    private readonly Lock _stateLock = new();
-    private CancellationTokenSource? _operationCancellation;
+    private readonly CancellableOperationGate _operationGate = new();
 
     public event EventHandler? StateChanged;
 
@@ -102,23 +101,9 @@ public sealed class RustPlusEntityPairingManager(
         }
     }
 
-    public void Cancel()
-    {
-        lock (_stateLock)
-        {
-            _operationCancellation?.Cancel();
-        }
-    }
+    public void Cancel() => _operationGate.Cancel();
 
-    public void Dispose()
-    {
-        lock (_stateLock)
-        {
-            _operationCancellation?.Cancel();
-            _operationCancellation?.Dispose();
-            _operationCancellation = null;
-        }
-    }
+    public void Dispose() => _operationGate.Dispose();
 
     private PairedEntity SaveCapture(Guid serverId, CapturedEntityPairing capture)
     {
@@ -156,31 +141,12 @@ public sealed class RustPlusEntityPairingManager(
         _ => "Paired device"
     };
 
-    private CancellationTokenSource BeginOperation(string label, string detail)
-    {
-        lock (_stateLock)
-        {
-            if (_operationCancellation is not null)
-            {
-                throw new InvalidOperationException("A device pairing operation is already in progress.");
-            }
+    private CancellationTokenSource BeginOperation(string label, string detail) =>
+        _operationGate.Begin(
+            "A device pairing operation is already in progress.",
+            () => SetState(new(EntityPairingStatus.Listening, label, detail)));
 
-            _operationCancellation = new CancellationTokenSource();
-            SetState(new(EntityPairingStatus.Listening, label, detail));
-            return _operationCancellation;
-        }
-    }
-
-    private void EndOperation(CancellationTokenSource operation)
-    {
-        lock (_stateLock)
-        {
-            if (ReferenceEquals(_operationCancellation, operation))
-            {
-                _operationCancellation = null;
-            }
-        }
-    }
+    private void EndOperation(CancellationTokenSource operation) => _operationGate.End(operation);
 
     private void SetState(EntityPairingState state)
     {

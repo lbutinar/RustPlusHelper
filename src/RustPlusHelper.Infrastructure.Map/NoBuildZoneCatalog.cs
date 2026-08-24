@@ -108,8 +108,8 @@ internal static class NoBuildZoneCatalog
         var position = prefab.Position!;
         var half = worldSize / 2d;
         return new(
-            checked((float)(ry.X + position.X + half)),
-            checked((float)(ry.Z + position.Z + half)));
+            (float)(ry.X + position.X + half),
+            (float)(ry.Z + position.Z + half));
     }
 
     private static Vector3 RotateX(Vector3 value, double angle) => new(

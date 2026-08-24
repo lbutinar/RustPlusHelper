@@ -20,14 +20,13 @@ public sealed class WindowsMapFilePicker : IMapFilePicker
             RestoreDirectory = true
         };
 
-        var defaultDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            "Steam",
-            "steamapps",
-            "common",
-            "Rust",
-            "maps");
-        if (Directory.Exists(defaultDirectory))
+        // Reuse the same Steam-library discovery the map cache uses, rather than assuming the
+        // default Program Files install location — Rust is large enough that many players install
+        // it on a different drive/library.
+        var defaultDirectory = WindowsSteamRustInstallLocator.FindInstallations()
+            .Select(installation => Path.Combine(installation, "maps"))
+            .FirstOrDefault(Directory.Exists);
+        if (defaultDirectory is not null)
         {
             dialog.InitialDirectory = defaultDirectory;
         }
