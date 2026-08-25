@@ -127,6 +127,15 @@
                             <span><i class="water-deep"></i>&gt; 20 m</span>
                         </div>
                     }
+                    @if (IsLayerVisible(MapLayerKind.ResourcePotential))
+                    {
+                        <div class="terrain-analysis-legend" aria-label="Resource potential colors">
+                            <strong>Resource potential · topology only</strong>
+                            <span><i class="resource-ore-high"></i>Ore potential (high)</span>
+                            <span><i class="resource-ore-moderate"></i>Ore potential (moderate)</span>
+                            <span><i class="resource-sulfur"></i>Sulfur potential</span>
+                        </div>
+                    }
                 </div>
             }
         </div>
@@ -290,7 +299,8 @@
     private bool IsAnyTerrainAnalysisVisible => IsLayerVisible(MapLayerKind.TerrainSlope)
         || IsLayerVisible(MapLayerKind.BuildPlanning)
         || IsLayerVisible(MapLayerKind.Elevation)
-        || IsLayerVisible(MapLayerKind.WaterDepth);
+        || IsLayerVisible(MapLayerKind.WaterDepth)
+        || IsLayerVisible(MapLayerKind.ResourcePotential);
 
     private bool IsLayerVisible(MapLayerKind kind) => State.Layers.FirstOrDefault(layer => layer.Kind == kind)
         is { IsVisible: true, IsAvailable: true };

@@ -694,6 +694,9 @@ button {
 .water-shallow { background: rgb(48, 158, 204); }
 .water-medium { background: rgb(34, 104, 174); }
 .water-deep { background: rgb(25, 55, 118); }
+.resource-ore-high { background: rgb(255, 116, 38); }
+.resource-ore-moderate { background: rgb(255, 202, 58); }
+.resource-sulfur { background: rgb(198, 209, 71); }
 
 .layer-panel {
     min-height: 0;
