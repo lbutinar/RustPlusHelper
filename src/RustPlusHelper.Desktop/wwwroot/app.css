@@ -1085,14 +1085,33 @@ button {
     line-height: 1.5;
 }
 
-.future-input {
+.chat-compose {
+    display: flex;
+    gap: 8px;
     margin: 0 16px 16px;
-    border: 1px dashed var(--line);
+}
+
+.chat-compose input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 10px;
-    color: var(--muted-2);
+    padding: 10px 11px;
+    outline: 0;
+    background: #111513;
+    color: var(--text);
+    font: inherit;
+    font-size: 10px;
+}
+
+.chat-compose input[type="text"]:disabled {
+    opacity: 0.6;
+}
+
+.chat-compose-error {
+    margin: 0 16px 16px;
+    color: var(--red);
     font-size: 9px;
-    text-align: center;
 }
 
 .event-page-card,

@@ -148,6 +148,17 @@ public sealed class RustPlusApiClient : IRustPlusClient
             RustPlusApiMapper.Map,
             cancellationToken);
 
+    public Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        return ExecuteAsync(
+            client => client.SendTeamMessageAsync(message, cancellationToken),
+            RustPlusApiMapper.Map,
+            cancellationToken);
+    }
+
     public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync(
             client => client.GetMapMarkersAsync(cancellationToken),

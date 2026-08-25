@@ -149,6 +149,12 @@ minute. Alive-to-dead transitions retain the detecting snapshot's position, and 
 bounded local records by Rust grid into a derived team-death hotspot layer. It does not infer cause
 or current enemy presence. Sampled movement trails remain deferred.
 
+Team chat gained a compose/send action on 2026-08-25 (`RustPlusLiveSessionManager.SendTeamMessageAsync`,
+`RustPlusApiClient.SendTeamMessageAsync`, wired into the Team page) — the app's first write action
+against a live server outside device control. On success the echoed message is appended to live chat
+state immediately, ahead of the next poll; see `docs/protocol-evidence.md` for what remains unverified
+(message length/rate limits, send-specific rejection codes).
+
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 
 **Risks/tests:** request budget, duplicates, movement spam; deterministic scenario transitions.

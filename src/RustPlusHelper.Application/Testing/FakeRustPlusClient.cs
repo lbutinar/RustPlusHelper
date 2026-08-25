@@ -18,6 +18,15 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
 
     private bool _cameraSubscribed;
     private bool _fakeSwitchValue = true;
+    private readonly List<TeamChatMessageSnapshot> _fakeChatMessages =
+    [
+        new TeamChatMessageSnapshot(
+            ulong.MaxValue - 42,
+            "Kakec",
+            "Fake message: heading to launch site",
+            "#FFFFFFFF",
+            FixedUtc.AddMinutes(-5))
+    ];
 
     public bool IsConnected { get; private set; }
 
@@ -105,14 +114,24 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
             new MapPositionSnapshot(1675, 2100)), cancellationToken);
 
     public Task<RustPlusResult<TeamChatSnapshot>> GetTeamChatAsync(CancellationToken cancellationToken = default) =>
-        ConnectedResult(new TeamChatSnapshot([
-            new TeamChatMessageSnapshot(
-                ulong.MaxValue - 42,
-                "Kakec",
-                "Fake message: heading to launch site",
-                "#FFFFFFFF",
-                FixedUtc.AddMinutes(-5))
-        ]), cancellationToken);
+        ConnectedResult(new TeamChatSnapshot(_fakeChatMessages.ToArray()), cancellationToken);
+
+    public Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsConnected)
+        {
+            return Task.FromResult(
+                RustPlusResult<TeamChatMessageSnapshot>.Failure("not_connected", "The fake Rust+ client is not connected."));
+        }
+
+        var sent = new TeamChatMessageSnapshot(ulong.MaxValue - 42, "Kakec", message, "#FFFFFFFF", DateTimeOffset.UtcNow);
+        _fakeChatMessages.Add(sent);
+        return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Success(sent));
+    }
 
     public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
         ConnectedResult(new MapMarkersSnapshot([

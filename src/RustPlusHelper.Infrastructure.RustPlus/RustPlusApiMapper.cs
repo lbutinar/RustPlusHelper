@@ -93,6 +93,13 @@ internal static class RustPlusApiMapper
             $"#{message.Color.ToArgb():X8}",
             ToUtc(message.Time))).ToArray() ?? []);
 
+    internal static TeamChatMessageSnapshot Map(TeamMessage source) => new(
+        source.SteamId,
+        source.Name,
+        source.Message,
+        $"#{source.Color.ToArgb():X8}",
+        ToUtc(source.Time));
+
     internal static MapMarkersSnapshot Map(MapMarkers source)
     {
         var markers = new List<MapMarkerSnapshot>();

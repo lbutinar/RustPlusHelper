@@ -126,6 +126,11 @@ public sealed class VerificationTests
         public Task<RustPlusResult<TeamChatSnapshot>> GetTeamChatAsync(CancellationToken cancellationToken = default) =>
             inner.GetTeamChatAsync(cancellationToken);
 
+        public Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default) =>
+            inner.SendTeamMessageAsync(message, cancellationToken);
+
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
             inner.GetMapMarkersAsync(cancellationToken);
 

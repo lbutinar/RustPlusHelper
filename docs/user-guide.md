@@ -90,7 +90,9 @@ Grid squares and monument names match the labels used in the official Rust+ app.
 ## Team and events
 
 - **Team** shows your team roster with live online/alive state and positions, refreshed automatically
-  while a server is open.
+  while a server is open. The chat panel shows recent team chat and lets you send a message from the
+  box at the bottom — type and press Enter or click **Send**. A sent message appears immediately; if
+  it fails to send, an error appears below the box instead.
 - **Events** is a running history of what RustPlusHelper has actually observed for this server:
   connection lost/restored, teammates coming online, dying, or crossing into a new grid square, world
   markers appearing or disappearing, and (see below) vending and Smart Alarm changes. This history is

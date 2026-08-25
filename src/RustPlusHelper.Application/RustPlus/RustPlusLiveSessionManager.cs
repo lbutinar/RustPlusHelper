@@ -670,6 +670,34 @@ public sealed class RustPlusLiveSessionManager(
         CancellationToken cancellationToken = default) =>
         ExecuteCameraCommandAsync(client => client.MoveCameraAsync(direction, cancellationToken));
 
+    /// <summary>Sends a message to the connected server's team chat. On success, the sent message is
+    /// appended to <see cref="Current"/>'s chat immediately rather than waiting for the next poll.</summary>
+    public async Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        var client = GetActiveClient();
+        if (client is null)
+        {
+            return RustPlusResult<TeamChatMessageSnapshot>.Failure(
+                "not_connected", "The live Rust+ connection is not ready.");
+        }
+
+        var result = await client.SendTeamMessageAsync(message, cancellationToken).ConfigureAwait(false);
+        if (result.IsSuccess && result.Data is { } sent)
+        {
+            UpdateState(current => current with
+            {
+                Chat = new TeamChatSnapshot([.. current.Chat?.Messages ?? [], sent])
+            });
+        }
+
+        return result;
+    }
+
     public Task<RustPlusResult<SmartDeviceStateSnapshot>> SetSmartSwitchAsync(
         ulong entityId,
         bool value,

@@ -57,7 +57,27 @@
                     </article>
                 }
             </div>
-            <div class="future-input">Sending chat is intentionally deferred beyond the read-only skeleton.</div>
+            <div class="chat-compose">
+                <input type="text"
+                       data-testid="chat-compose-input"
+                       placeholder="Message your team…"
+                       maxlength="256"
+                       disabled="@_isSendingChat"
+                       @bind="_draftMessage"
+                       @bind:event="oninput"
+                       @onkeydown="HandleComposeKeyDownAsync" />
+                <button type="button"
+                        class="ghost-button"
+                        data-testid="chat-compose-send"
+                        disabled="@(_isSendingChat || string.IsNullOrWhiteSpace(_draftMessage))"
+                        @onclick="SendChatMessageAsync">
+                    Send
+                </button>
+            </div>
+            @if (_chatSendError is not null)
+            {
+                <div class="chat-compose-error" role="alert">@_chatSendError</div>
+            }
         </div>
     </div>
 </section>
@@ -65,6 +85,13 @@
 @code {
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    [Inject]
+    private RustPlusHelper.Application.RustPlus.RustPlusLiveSessionManager LiveSession { get; set; } = null!;
+
+    private string _draftMessage = string.Empty;
+    private bool _isSendingChat;
+    private string? _chatSendError;
 
     private static string Initial(string? name) => string.IsNullOrWhiteSpace(name)
         ? "?"
@@ -79,4 +106,34 @@
         : "DIRECT LIVE RUST+ SNAPSHOT";
 
     private string DataBadge => State.DataSource == MapDashboardDataSource.Fake ? "DEMO" : "LIVE";
+
+    private async Task SendChatMessageAsync()
+    {
+        var message = _draftMessage.Trim();
+        if (message.Length == 0 || _isSendingChat)
+        {
+            return;
+        }
+
+        _isSendingChat = true;
+        _chatSendError = null;
+        var result = await LiveSession.SendTeamMessageAsync(message);
+        _isSendingChat = false;
+        if (result.IsSuccess)
+        {
+            _draftMessage = string.Empty;
+        }
+        else
+        {
+            _chatSendError = result.Error?.Message ?? "The message could not be sent.";
+        }
+    }
+
+    private async Task HandleComposeKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SendChatMessageAsync();
+        }
+    }
 }

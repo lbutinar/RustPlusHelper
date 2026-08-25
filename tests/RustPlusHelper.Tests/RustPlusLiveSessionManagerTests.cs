@@ -483,6 +483,38 @@ public sealed class RustPlusLiveSessionManagerTests
     }
 
     [Fact]
+    public async Task SendTeamMessageAsyncAppendsTheSentMessageToLiveChatState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var result = await manager.SendTeamMessageAsync("heading to launch site");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("heading to launch site", result.Data!.Message);
+        Assert.Contains(factory.Clients[0].SentTeamMessages, message => message == "heading to launch site");
+        Assert.Contains(manager.Current.Chat!.Messages, message => message.Message == "heading to launch site");
+    }
+
+    [Fact]
+    public async Task SendTeamMessageAsyncFailsWhenNotConnected()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        var result = await manager.SendTeamMessageAsync("hello");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("not_connected", result.Error?.Code);
+    }
+
+    [Fact]
     public async Task RecordExternalEventUpdatesLiveStateOnlyForTheActiveServerButAlwaysPersists()
     {
         using var secrets = new InMemorySecretStore();
@@ -796,6 +828,30 @@ public sealed class RustPlusLiveSessionManagerTests
             Task.FromResult(IsConnected
                 ? RustPlusResult<TeamChatSnapshot>.Success(new TeamChatSnapshot([]))
                 : RustPlusResult<TeamChatSnapshot>.Failure("not_connected", "Disconnected."));
+
+        public List<string> SentTeamMessages { get; } = [];
+
+        /// <summary>Test hook: makes the next/every <see cref="SendTeamMessageAsync"/> call fail.</summary>
+        public bool FailSendTeamMessage { get; set; }
+
+        public Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsConnected)
+            {
+                return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Failure("not_connected", "Disconnected."));
+            }
+
+            if (FailSendTeamMessage)
+            {
+                return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Failure("send_failed", "Test-configured failure."));
+            }
+
+            SentTeamMessages.Add(message);
+            return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Success(
+                new TeamChatMessageSnapshot(111, "Tester", message, "#FFFFFFFF", DateTimeOffset.UnixEpoch)));
+        }
 
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default)
         {

@@ -27,6 +27,10 @@ public interface IRustPlusClient : IAsyncDisposable
 
     Task<RustPlusResult<TeamChatSnapshot>> GetTeamChatAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Sends a message to team chat. Returns the message Rust+ echoes back (including its
+    /// assigned timestamp), so callers can show it immediately without waiting for the next poll.</summary>
+    Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(string message, CancellationToken cancellationToken = default);
+
     Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Subscribes to a camera's ray stream, replacing any previous subscription (the

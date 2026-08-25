@@ -63,6 +63,7 @@ The pinned C# adapter currently wraps only read operations needed for Phase 0:
 | `GetTeamAsync` | `GetTeamInfoAsync` | leader, members, notes, death position |
 | `GetTeamChatAsync` | `GetTeamChatAsync` | recent team chat |
 | `GetMapMarkersAsync` | `GetMapMarkersAsync` | known marker groups and unknown raw marker types |
+| `SendTeamMessageAsync` | `SendTeamMessageAsync` | the sent message echoed back with its assigned Steam64 ID/name/colour/timestamp |
 
 Connection authentication is represented by server, companion port, Steam64 player ID, signed
 32-bit player token, and optional Facepunch proxy flag. RustPlusApi places these into its authenticated
@@ -82,6 +83,13 @@ reconnect on a UI timer. The selected-server supervisor now keeps one persistent
 team every 5 seconds, chat/markers every 10 seconds, and info every 30 seconds (about 0.43 tokens/sec).
 The five-token map is never polled. `NoTeam` backs chat off to one minute, and reconnects use bounded
 2/5/10/30-second delays.
+
+Sending team chat (`SendTeamMessageAsync`, added 2026-08-25) is the app's first write action against
+the live server outside device control. No documented Rust+ message-length limit, send-specific
+token cost, or send-specific rejection code has been observed; the app imposes only a 256-character
+client-side field limit as a sanity cap, not a claimed protocol constant, and otherwise surfaces
+whatever error Rust+ returns. On success the app appends the echoed message to its own in-memory chat
+state immediately rather than waiting for the next 10-second chat poll.
 
 ## Source-verified fields retained by the adapter
 
@@ -431,3 +439,4 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Killer, weapon, and cause of death | Not present in verified team structures | Requires server/plugin evidence before modelling |
 | Same-size `.map` wipe identity | Rust+ exposes no map checksum | User confirmation or a future authoritative external fingerprint source |
 | No-build catalogue/server build match | `.map` files contain no Rust build ID; bundled geometry is from build 24181174 | Build-identifying map metadata or a matching locally installed Rust build |
+| Team chat send length/rate limit and rejection codes | Unverified; no length limit, send-specific token cost, or rejection code is documented | Live send attempts against a real server, including an intentionally long message |

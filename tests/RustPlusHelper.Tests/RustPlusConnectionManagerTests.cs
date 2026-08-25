@@ -260,6 +260,15 @@ public sealed class RustPlusConnectionManagerTests
             return Task.FromResult(chatResult ?? RustPlusResult<TeamChatSnapshot>.Success(new TeamChatSnapshot([])));
         }
 
+        public Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(
+                RustPlusResult<TeamChatMessageSnapshot>.Failure("not_configured", "No send result configured."));
+        }
+
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();

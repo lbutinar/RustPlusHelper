@@ -392,6 +392,35 @@ public sealed class MainComponentTests : BunitContext
             Assert.Contains("Off", component.Markup, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task TeamPageSendsAChatMessageThroughTheLiveSession()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<TeamPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.Find("[data-testid='chat-compose-input']").Input("Heading to launch site");
+        component.Find("[data-testid='chat-compose-send']").Click();
+
+        await WaitUntilAsync(() => liveSession.Current.Chat?.Messages.Any(
+            message => message.Message == "Heading to launch site") == true);
+
+        component.WaitForAssertion(() =>
+        {
+            var input = component.Find("[data-testid='chat-compose-input']");
+            Assert.Equal(string.Empty, input.GetAttribute("value") ?? string.Empty);
+        });
+    }
+
     private static Task WaitUntilAsync(Func<bool> condition) =>
         AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 
