@@ -185,9 +185,25 @@
                 {
                     @if (LiveSession.CurrentCamera.LatestFrame is { } frame)
                     {
-                        <img class="camera-frame"
+                        <img class="camera-frame @(_isDraggingLook ? "dragging" : null)"
                              alt="Live camera view"
-                             src="@($"data:image/png;base64,{Convert.ToBase64String(frame.PngImage)}")" />
+                             data-testid="camera-frame"
+                             tabindex="0"
+                             src="@($"data:image/png;base64,{Convert.ToBase64String(frame.PngImage)}")"
+                             @onpointerdown="OnCameraPointerDown"
+                             @onpointermove="OnCameraPointerMoveAsync"
+                             @onpointerup="OnCameraPointerUp"
+                             @onpointerleave="OnCameraPointerUp"
+                             @onpointercancel="OnCameraPointerUp"
+                             @onkeydown="OnCameraKeyDownAsync"
+                             @onkeyup="OnCameraKeyUp" />
+                        @if (!info.IsStaticCamera || info.IsDrone)
+                        {
+                            <p class="camera-hint">
+                                @(!info.IsStaticCamera ? "Drag the image to look around." : null)
+                                @(info.IsDrone ? "Hold W/A/S/D to fly, E to ascend, Q to descend." : null)
+                            </p>
+                        }
                     }
                     else
                     {
@@ -231,8 +247,30 @@
     private const float LookStep = 10f;
     private static readonly TimeSpan StrobeDuration = TimeSpan.FromSeconds(3);
 
+    // Coalesces high-frequency pointermove deltas into one LookCameraAsync call per interval instead
+    // of one per pixel of mouse movement — the same "accumulate but throttle publish" idea already
+    // used for camera frames (see RustPlusLiveSessionManager's CameraFrameThrottle), applied here to
+    // an outgoing command instead of an incoming one.
+    private static readonly TimeSpan LookSendInterval = TimeSpan.FromMilliseconds(120);
+
+    // A held W/A/S/D/E/Q key re-sends the discrete move command on a timer for as long as the key
+    // stays down. Only one direction at a time is supported — no diagonal combination — since the
+    // app-layer CameraMoveDirection is a single discrete value, not a combinable bitmask.
+    private static readonly TimeSpan MoveRepeatInterval = TimeSpan.FromMilliseconds(400);
+
     private string _newCode = string.Empty;
     private string _newNickname = string.Empty;
+
+    private bool _isDraggingLook;
+    private bool _suppressNextRender;
+    private double _lastPointerX;
+    private double _lastPointerY;
+    private double _pendingLookDeltaX;
+    private double _pendingLookDeltaY;
+    private DateTimeOffset _lastLookSentUtc = DateTimeOffset.MinValue;
+
+    private CameraMoveDirection? _heldMoveDirection;
+    private CancellationTokenSource? _moveRepeatCancellation;
 
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
@@ -252,10 +290,147 @@
         EntityPairing.StateChanged += HandleStateChanged;
     }
 
+    // Pointermove fires on every pixel of mouse movement during a drag; nothing rendered here depends
+    // on the drag position itself (only the "dragging" CSS class, toggled on pointerdown/up, which
+    // this does not suppress), so skipping the render entirely avoids re-rendering the whole page at
+    // mouse-move frequency — the same freeze class already fixed for map layer toggles (see AGENTS.md).
+    protected override bool ShouldRender()
+    {
+        if (_suppressNextRender)
+        {
+            _suppressNextRender = false;
+            return false;
+        }
+
+        return true;
+    }
+
     public void Dispose()
     {
         LiveSession.StateChanged -= HandleStateChanged;
         EntityPairing.StateChanged -= HandleStateChanged;
+        StopHeldMove();
+    }
+
+    private void OnCameraPointerDown(PointerEventArgs args)
+    {
+        if (LiveSession.CurrentCamera.Info is not { IsStaticCamera: false })
+        {
+            return;
+        }
+
+        _isDraggingLook = true;
+        _lastPointerX = args.ClientX;
+        _lastPointerY = args.ClientY;
+        _pendingLookDeltaX = 0;
+        _pendingLookDeltaY = 0;
+    }
+
+    private async Task OnCameraPointerMoveAsync(PointerEventArgs args)
+    {
+        if (!_isDraggingLook)
+        {
+            return;
+        }
+
+        _suppressNextRender = true;
+        _pendingLookDeltaX += args.ClientX - _lastPointerX;
+        _pendingLookDeltaY += args.ClientY - _lastPointerY;
+        _lastPointerX = args.ClientX;
+        _lastPointerY = args.ClientY;
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastLookSentUtc < LookSendInterval)
+        {
+            return;
+        }
+
+        var deltaX = (float)_pendingLookDeltaX;
+        var deltaY = (float)_pendingLookDeltaY;
+        _pendingLookDeltaX = 0;
+        _pendingLookDeltaY = 0;
+        _lastLookSentUtc = now;
+        if (deltaX != 0 || deltaY != 0)
+        {
+            await LiveSession.LookCameraAsync(deltaX, deltaY);
+        }
+    }
+
+    private void OnCameraPointerUp(PointerEventArgs args)
+    {
+        _isDraggingLook = false;
+        _pendingLookDeltaX = 0;
+        _pendingLookDeltaY = 0;
+    }
+
+    private Task OnCameraKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Repeat || LiveSession.CurrentCamera.Info is not { IsDrone: true })
+        {
+            return Task.CompletedTask;
+        }
+
+        var direction = ToMoveDirection(args.Key);
+        if (direction is null || direction == _heldMoveDirection)
+        {
+            return Task.CompletedTask;
+        }
+
+        StartHeldMove(direction.Value);
+        return Task.CompletedTask;
+    }
+
+    private void OnCameraKeyUp(KeyboardEventArgs args)
+    {
+        var direction = ToMoveDirection(args.Key);
+        if (direction is not null && direction == _heldMoveDirection)
+        {
+            StopHeldMove();
+        }
+    }
+
+    private static CameraMoveDirection? ToMoveDirection(string key) => key switch
+    {
+        "w" or "W" or "ArrowUp" => CameraMoveDirection.Forward,
+        "s" or "S" or "ArrowDown" => CameraMoveDirection.Backward,
+        "a" or "A" or "ArrowLeft" => CameraMoveDirection.Left,
+        "d" or "D" or "ArrowRight" => CameraMoveDirection.Right,
+        "e" or "E" => CameraMoveDirection.Ascend,
+        "q" or "Q" => CameraMoveDirection.Descend,
+        _ => null
+    };
+
+    private void StartHeldMove(CameraMoveDirection direction)
+    {
+        StopHeldMove();
+        _heldMoveDirection = direction;
+        var cancellation = new CancellationTokenSource();
+        _moveRepeatCancellation = cancellation;
+        _ = RepeatMoveWhileHeldAsync(direction, cancellation.Token);
+    }
+
+    private void StopHeldMove()
+    {
+        _heldMoveDirection = null;
+        _moveRepeatCancellation?.Cancel();
+        _moveRepeatCancellation?.Dispose();
+        _moveRepeatCancellation = null;
+    }
+
+    private async Task RepeatMoveWhileHeldAsync(CameraMoveDirection direction, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await LiveSession.MoveCameraAsync(direction, cancellationToken);
+                await Task.Delay(MoveRepeatInterval, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the key is released or the component is disposed.
+        }
     }
 
     private Task ListenForDevicePairing() => ServerId is { } serverId ? EntityPairing.ListenAsync(serverId) : Task.CompletedTask;
@@ -300,7 +475,12 @@
 
     private Task ViewCamera(string code) => LiveSession.ViewCameraAsync(code);
 
-    private Task StopViewing() => LiveSession.StopViewingCameraAsync();
+    private Task StopViewing()
+    {
+        StopHeldMove();
+        _isDraggingLook = false;
+        return LiveSession.StopViewingCameraAsync();
+    }
 
     private void HandleStateChanged(object? sender, EventArgs args) => InvokeAsync(StateHasChanged);
 }

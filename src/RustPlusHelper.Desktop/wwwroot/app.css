@@ -1312,6 +1312,25 @@ button {
     border-radius: 8px;
     border: 1px solid var(--line);
     image-rendering: pixelated;
+    touch-action: none;
+    cursor: grab;
+}
+
+.camera-frame:focus-visible {
+    outline: 2px solid var(--line);
+    outline-offset: 2px;
+}
+
+.camera-frame.dragging {
+    cursor: grabbing;
+}
+
+.camera-hint {
+    display: flex;
+    flex-direction: column;
+    margin: 6px 0 0;
+    color: var(--muted-2);
+    font-size: 9px;
 }
 
 .camera-controls {

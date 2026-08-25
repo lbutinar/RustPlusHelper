@@ -16,8 +16,18 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
         + "cQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcRcjCuDt"
         + "LJZNjgAAAABJRU5ErkJggg==");
 
+    private readonly bool _cameraIsDrone;
     private bool _cameraSubscribed;
     private bool _fakeSwitchValue = true;
+
+    /// <param name="cameraIsDrone">When true, the fake camera reports itself as a drone (move
+    /// succeeds, zoom/shoot/reload are refused) instead of the default fake PTZ camera (zoom/look
+    /// succeed, shoot/reload/move are refused) — lets held-key move behavior be tested without
+    /// changing every other test's default fixture.</param>
+    public FakeRustPlusClient(bool cameraIsDrone = false)
+    {
+        _cameraIsDrone = cameraIsDrone;
+    }
     private readonly List<TeamChatMessageSnapshot> _fakeChatMessages =
     [
         new TeamChatMessageSnapshot(
@@ -159,12 +169,15 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
                 RustPlusResult<CameraInfoSnapshot>.Failure("not_connected", "The fake Rust+ client is not connected."));
         }
 
-        // A fake PTZ camera: zoom/look succeed, shoot/reload/move are refused, exactly like a real
-        // PTZ camera would refuse turret/drone-only actions.
+        // A fake PTZ camera (the default): zoom/look succeed, shoot/reload/move are refused, exactly
+        // like a real PTZ camera would refuse turret/drone-only actions. When constructed with
+        // cameraIsDrone: true, this instead reports a fake drone: move succeeds, zoom/shoot/reload
+        // are refused.
         _cameraSubscribed = true;
         CameraFrameReceived?.Invoke(this, new CameraFrameSnapshot(FakeCameraPng, VerticalFov: 65f, DateTimeOffset.UtcNow));
-        return Task.FromResult(RustPlusResult<CameraInfoSnapshot>.Success(new CameraInfoSnapshot(
-            160, 90, 0.1f, 200f, IsStaticCamera: false, IsPtzCamera: true, IsAutoTurret: false, IsDrone: false)));
+        return Task.FromResult(RustPlusResult<CameraInfoSnapshot>.Success(_cameraIsDrone
+            ? new CameraInfoSnapshot(160, 90, 0.1f, 200f, IsStaticCamera: false, IsPtzCamera: false, IsAutoTurret: false, IsDrone: true)
+            : new CameraInfoSnapshot(160, 90, 0.1f, 200f, IsStaticCamera: false, IsPtzCamera: true, IsAutoTurret: false, IsDrone: false)));
     }
 
     public Task<RustPlusResult<bool>> ZoomCameraAsync(CancellationToken cancellationToken = default) =>
@@ -176,16 +189,28 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
     public Task<RustPlusResult<bool>> ReloadCameraAsync(CancellationToken cancellationToken = default) =>
         FakeCameraRefusedAsync("reload is an auto-turret action; the fake camera is a PTZ camera");
 
+    public List<(float DeltaX, float DeltaY)> LookCalls { get; } = [];
+
     public Task<RustPlusResult<bool>> LookCameraAsync(
         float deltaX,
         float deltaY,
-        CancellationToken cancellationToken = default) =>
-        FakeCameraCommandAsync();
+        CancellationToken cancellationToken = default)
+    {
+        LookCalls.Add((deltaX, deltaY));
+        return FakeCameraCommandAsync();
+    }
+
+    public List<CameraMoveDirection> MoveCalls { get; } = [];
 
     public Task<RustPlusResult<bool>> MoveCameraAsync(
         CameraMoveDirection direction,
-        CancellationToken cancellationToken = default) =>
-        FakeCameraRefusedAsync("movement is a drone action; the fake camera is a PTZ camera");
+        CancellationToken cancellationToken = default)
+    {
+        MoveCalls.Add(direction);
+        return _cameraIsDrone
+            ? FakeCameraCommandAsync()
+            : FakeCameraRefusedAsync("movement is a drone action; the fake camera is a PTZ camera");
+    }
 
     public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default)
     {

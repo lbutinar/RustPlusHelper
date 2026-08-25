@@ -2,6 +2,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Bunit;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using RustPlusHelper.Application.Diagnostics;
@@ -29,6 +30,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly RustPlusConnectionManager _connections;
     private readonly InMemoryPairedEntityRepository _pairedEntities;
     private readonly RecordingDiagnosticsExportFilePicker _diagnosticsExportFilePicker;
+    private readonly FakeClientFactory _liveSessionClientFactory;
 
     public MainComponentTests()
     {
@@ -59,13 +61,15 @@ public sealed class MainComponentTests : BunitContext
             new FakeClientFactory(),
             TimeProvider.System);
         _pairedEntities = new InMemoryPairedEntityRepository();
+        _liveSessionClientFactory = new FakeClientFactory();
         var liveSession = new RustPlusLiveSessionManager(
             new RustPlusSavedConnectionResolver(serverManager, _secretStore),
-            new FakeClientFactory(),
+            _liveSessionClientFactory,
             TimeProvider.System,
             RustPlusPollingOptions.Default,
             new InMemoryCompanionEventRepository(),
-            _pairedEntities);
+            _pairedEntities,
+            new InMemoryMovementTrailRepository());
         var entityPairing = new RustPlusEntityPairingManager(
             new UnavailablePairingProvider(),
             applicationSecrets,
@@ -358,6 +362,110 @@ public sealed class MainComponentTests : BunitContext
         component.Find("[data-testid='stop-viewing-camera']").Click();
         component.WaitForAssertion(() =>
             Assert.DoesNotContain("VIEWING", component.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DraggingTheCameraFrameSendsThrottledLookCommands()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.Find("[data-testid='camera-code-input']").Input("CAM01");
+        component.Find("[data-testid='camera-nickname-input']").Input("Front gate");
+        component.Find("form.camera-add-form").Submit();
+        component.Find("[data-testid='view-camera']").Click();
+        component.WaitForElement("[data-testid='camera-frame']");
+
+        var frame = component.Find("[data-testid='camera-frame']");
+        frame.TriggerEvent("onpointerdown", new PointerEventArgs { ClientX = 100, ClientY = 100 });
+        frame.TriggerEvent("onpointermove", new PointerEventArgs { ClientX = 130, ClientY = 100 });
+        frame.TriggerEvent("onpointerup", new PointerEventArgs { ClientX = 130, ClientY = 100 });
+
+        var client = _liveSessionClientFactory.Clients[^1];
+        var call = Assert.Single(client.LookCalls);
+        Assert.Equal(30, call.DeltaX);
+        Assert.Equal(0, call.DeltaY);
+    }
+
+    [Fact]
+    public async Task HeldKeyDoesNotMoveANonDroneCamera()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.Find("[data-testid='camera-code-input']").Input("CAM01");
+        component.Find("[data-testid='camera-nickname-input']").Input("Front gate");
+        component.Find("form.camera-add-form").Submit();
+        component.Find("[data-testid='view-camera']").Click();
+        component.WaitForElement("[data-testid='camera-frame']");
+
+        var frame = component.Find("[data-testid='camera-frame']");
+        frame.TriggerEvent("onkeydown", new KeyboardEventArgs { Key = "w" });
+        await Task.Delay(50);
+        frame.TriggerEvent("onkeyup", new KeyboardEventArgs { Key = "w" });
+
+        var client = _liveSessionClientFactory.Clients[^1];
+        Assert.Empty(client.MoveCalls);
+    }
+
+    [Fact]
+    public async Task HoldingAMoveKeyRepeatsTheMoveCommandUntilKeyUp()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        _liveSessionClientFactory.NextClientIsDrone = true;
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.Find("[data-testid='camera-code-input']").Input("DRONE1");
+        component.Find("[data-testid='camera-nickname-input']").Input("Drone");
+        component.Find("form.camera-add-form").Submit();
+        component.Find("[data-testid='view-camera']").Click();
+        component.WaitForElement("[data-testid='camera-frame']");
+
+        var frame = component.Find("[data-testid='camera-frame']");
+        frame.TriggerEvent("onkeydown", new KeyboardEventArgs { Key = "w" });
+
+        var client = _liveSessionClientFactory.Clients[^1];
+        await AsyncTestHelpers.WaitUntilAsync(
+            () => client.MoveCalls.Count(direction => direction == CameraMoveDirection.Forward) >= 2,
+            TimeSpan.FromSeconds(3),
+            TimeSpan.FromMilliseconds(10));
+
+        frame.TriggerEvent("onkeyup", new KeyboardEventArgs { Key = "w" });
+        var countAtKeyUp = client.MoveCalls.Count;
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        Assert.Equal(countAtKeyUp, client.MoveCalls.Count);
+        Assert.All(client.MoveCalls, direction => Assert.Equal(CameraMoveDirection.Forward, direction));
     }
 
     [Fact]
@@ -771,7 +879,18 @@ public sealed class MainComponentTests : BunitContext
 
     private sealed class FakeClientFactory : IRustPlusClientFactory
     {
-        public IRustPlusClient Create() => new FakeRustPlusClient();
+        public List<FakeRustPlusClient> Clients { get; } = [];
+
+        /// <summary>Test hook: the next created client reports a drone camera instead of the default
+        /// fake PTZ camera. Set before starting a live session, not mid-session.</summary>
+        public bool NextClientIsDrone { get; set; }
+
+        public IRustPlusClient Create()
+        {
+            var client = new FakeRustPlusClient(NextClientIsDrone);
+            Clients.Add(client);
+            return client;
+        }
     }
 
     private sealed class InMemoryStartupRegistration : IStartupRegistration
