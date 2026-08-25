@@ -36,6 +36,31 @@ public sealed class NotificationPreferencesTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RoundTripsPlaySoundIndependently(bool playSound)
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        var store = new NotificationPreferencesStore(secrets);
+
+        store.Save(NotificationPreferences.Default with { PlaySound = playSound });
+
+        Assert.Equal(playSound, store.Get().PlaySound);
+    }
+
+    [Fact]
+    public void PreferencesSavedBeforePlaySoundExistedDefaultToSoundOn()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        // The 5 original category flags packed with no 6th (mute) bit — simulates a byte saved by a
+        // version of the app that predates the sound feature.
+        secrets.Store(ApplicationSecretKind.NotificationPreferences, [0x1F]);
+        var store = new NotificationPreferencesStore(secrets);
+
+        Assert.True(store.Get().PlaySound);
+    }
+
+    [Theory]
     [InlineData(CompanionEventKind.ConnectionEstablished, true)]
     [InlineData(CompanionEventKind.TeamMemberDied, true)]
     [InlineData(CompanionEventKind.MarkerAppeared, false)]
@@ -255,6 +280,24 @@ public sealed class NotificationDispatcherTests
     }
 
     [Fact]
+    public void PassesThePlaySoundPreferenceThroughToTheNotifier()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        var preferencesStore = new NotificationPreferencesStore(secrets);
+        preferencesStore.Save(NotificationPreferences.Default with { PlaySound = false });
+        var servers = CreateServerManager();
+        var liveSession = CreateLiveSession(servers);
+        using var alarmListener = new RustPlusAlarmNotificationListener(
+            new NoopAlarmListenerProvider(), secrets, servers, liveSession, PollingOptions());
+        var notifier = new RecordingNotifier();
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier);
+
+        liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.ConnectionEstablished, "Connected");
+
+        Assert.False(Assert.Single(notifier.Shown).PlaySound);
+    }
+
+    [Fact]
     public async Task UnattributedAlarmNotifiesOnceWithoutADuplicateFromEventRecorded()
     {
         using var secrets = new InMemoryApplicationSecretStore();
@@ -346,8 +389,8 @@ public sealed class NotificationDispatcherTests
 
     private sealed class RecordingNotifier : IDesktopNotifier
     {
-        public List<(string Title, string Message)> Shown { get; } = [];
+        public List<(string Title, string Message, bool PlaySound)> Shown { get; } = [];
 
-        public void Show(string title, string message) => Shown.Add((title, message));
+        public void Show(string title, string message, bool playSound = false) => Shown.Add((title, message, playSound));
     }
 }

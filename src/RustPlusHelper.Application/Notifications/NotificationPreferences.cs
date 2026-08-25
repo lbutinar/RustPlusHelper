@@ -9,7 +9,9 @@ public sealed record NotificationPreferences(
     bool TeamEvents = true,
     bool MarkerEvents = true,
     bool VendingEvents = true,
-    bool AlarmEvents = true)
+    bool AlarmEvents = true,
+    /// <summary>Global, not per-category: whether a shown notification also plays a sound.</summary>
+    bool PlaySound = true)
 {
     public static NotificationPreferences Default { get; } = new();
 
@@ -49,6 +51,11 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
     private const byte VendingFlag = 0x08;
     private const byte AlarmFlag = 0x10;
 
+    /// <summary>Stores "muted", not "play sound": the default is sound ON, and a byte saved before
+    /// this flag existed has this bit unset — treating unset as "not muted" keeps that default for
+    /// users who saved preferences before this feature shipped, instead of silently muting them.</summary>
+    private const byte MuteSoundFlag = 0x20;
+
     public NotificationPreferences Get()
     {
         var stored = secrets.Retrieve(ApplicationSecretKind.NotificationPreferences);
@@ -63,7 +70,8 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
             (flags & TeamFlag) != 0,
             (flags & MarkerFlag) != 0,
             (flags & VendingFlag) != 0,
-            (flags & AlarmFlag) != 0);
+            (flags & AlarmFlag) != 0,
+            (flags & MuteSoundFlag) == 0);
     }
 
     public void Save(NotificationPreferences preferences)
@@ -92,6 +100,11 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
         if (preferences.AlarmEvents)
         {
             flags |= AlarmFlag;
+        }
+
+        if (!preferences.PlaySound)
+        {
+            flags |= MuteSoundFlag;
         }
 
         secrets.Store(ApplicationSecretKind.NotificationPreferences, [flags]);

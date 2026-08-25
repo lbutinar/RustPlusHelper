@@ -4,5 +4,5 @@ namespace RustPlusHelper.Application.Notifications;
 /// <c>System.Windows.Forms.NotifyIcon</c> out of the Application layer entirely.</summary>
 public interface IDesktopNotifier
 {
-    void Show(string title, string message);
+    void Show(string title, string message, bool playSound = false);
 }

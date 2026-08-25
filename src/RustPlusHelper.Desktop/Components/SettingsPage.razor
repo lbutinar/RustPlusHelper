@@ -89,6 +89,15 @@
                        @onchange="@(e => SavePreferences(Preferences with { AlarmEvents = (bool)e.Value! }))" />
             </label>
         </div>
+        <div class="setting-row">
+            <div><strong>Play a sound</strong><p>Applies to every enabled category above.</p></div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-sound"
+                       checked="@Preferences.PlaySound"
+                       @onchange="@(e => SavePreferences(Preferences with { PlaySound = (bool)e.Value! }))" />
+            </label>
+        </div>
     </div>
 </section>
 

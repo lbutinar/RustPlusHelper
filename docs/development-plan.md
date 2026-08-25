@@ -343,6 +343,13 @@ older than 30 days (in addition to the existing 200-row-per-server cap), with an
 startup covering servers whose live session hasn't run recently. See `docs/protocol-evidence.md` for
 the full evidence trail.
 
+A global "play a sound" toggle was added on 2026-08-25 (`NotificationPreferences.PlaySound`,
+`IDesktopNotifier.Show`'s new `playSound` parameter, `TrayIconService` playing the Windows system
+asterisk sound via `System.Media.SystemSounds`). It is packed as a *mute* bit rather than a *play* bit
+in `NotificationPreferencesStore`'s existing single-byte encoding: a preferences byte saved by an
+older build has that bit unset, and treating unset as "not muted" keeps sound on by default for
+existing users instead of silently muting them on upgrade.
+
 ## Phase 11 — Packaging and hardening
 
 **Goal:** Distribute a supportable Windows application.

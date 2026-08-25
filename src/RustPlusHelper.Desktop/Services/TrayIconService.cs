@@ -44,8 +44,14 @@ public sealed class TrayIconService : IDesktopNotifier, IDisposable
         _notifyIcon.DoubleClick += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Show(string title, string message)
+    public void Show(string title, string message, bool playSound = false)
     {
+        if (playSound)
+        {
+            // Not WinForms-control state, so no dispatcher marshaling needed unlike the balloon below.
+            System.Media.SystemSounds.Asterisk.Play();
+        }
+
         if (_dispatcher.CheckAccess())
         {
             _notifyIcon.ShowBalloonTip(10_000, title, message, System.Windows.Forms.ToolTipIcon.Info);

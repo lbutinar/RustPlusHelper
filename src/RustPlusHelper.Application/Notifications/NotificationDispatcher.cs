@@ -33,12 +33,13 @@ public sealed class NotificationDispatcher : IDisposable
 
     private void HandleEventRecorded(object? sender, CompanionEvent item)
     {
-        if (!_preferencesStore.Get().IsEnabled(item.Kind))
+        var preferences = _preferencesStore.Get();
+        if (!preferences.IsEnabled(item.Kind))
         {
             return;
         }
 
-        _notifier.Show(item.Title, item.Detail ?? "Rust+ companion event.");
+        _notifier.Show(item.Title, item.Detail ?? "Rust+ companion event.", preferences.PlaySound);
     }
 
     private void HandleAlarmTriggered(object? sender, AlarmToastNotification notification)
@@ -51,12 +52,13 @@ public sealed class NotificationDispatcher : IDisposable
             return;
         }
 
-        if (!_preferencesStore.Get().AlarmEvents)
+        var preferences = _preferencesStore.Get();
+        if (!preferences.AlarmEvents)
         {
             return;
         }
 
-        _notifier.Show(notification.Title, notification.Message);
+        _notifier.Show(notification.Title, notification.Message, preferences.PlaySound);
     }
 
     public void Dispose()

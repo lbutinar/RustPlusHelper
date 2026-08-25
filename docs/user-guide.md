@@ -143,6 +143,8 @@ it — Rust+ only allows one active subscription per connection.
 - **Start with Windows** launches RustPlusHelper minimized to the tray when you sign in.
 - Each notification category (connection, team, markers, vending, Smart Alarms) has its own toggle,
   so you can, for example, keep alarm notifications on while muting vending price chatter.
+- **Play a sound** plays the Windows system asterisk sound alongside every notification from an
+  enabled category above; turn it off to keep notifications silent.
 
 ## Staying minimized
 

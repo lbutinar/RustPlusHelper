@@ -880,6 +880,11 @@ public sealed class MainComponentTests : BunitContext
         component.Find("[data-testid='notify-markers']").Change(false);
         Assert.False(preferencesStore.Get().MarkerEvents);
         Assert.True(preferencesStore.Get().AlarmEvents, "Toggling one category must not affect another.");
+
+        Assert.True(preferencesStore.Get().PlaySound);
+        component.Find("[data-testid='notify-sound']").Change(false);
+        Assert.False(preferencesStore.Get().PlaySound);
+        Assert.False(preferencesStore.Get().MarkerEvents, "Toggling sound must not affect a category.");
     }
 
     [Fact]
