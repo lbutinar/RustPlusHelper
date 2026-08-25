@@ -14,7 +14,7 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, display_name, host, port, use_facepunch_proxy, player_id,
-                   created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id
+                   created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id, wipe_cycle
             FROM servers
             ORDER BY last_selected_utc_ms DESC NULLS LAST, display_name COLLATE NOCASE, id;
             """;
@@ -36,7 +36,7 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, display_name, host, port, use_facepunch_proxy, player_id,
-                   created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id
+                   created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id, wipe_cycle
             FROM servers
             WHERE id = $id;
             """;
@@ -55,10 +55,10 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
         command.CommandText = """
             INSERT INTO servers(
                 id, display_name, host, port, use_facepunch_proxy, player_id,
-                created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id)
+                created_utc_ms, updated_utc_ms, last_selected_utc_ms, rust_plus_server_id, wipe_cycle)
             VALUES (
                 $id, $displayName, $host, $port, $useFacepunchProxy, $playerId,
-                $createdUtcMs, $updatedUtcMs, $lastSelectedUtcMs, $rustPlusServerId)
+                $createdUtcMs, $updatedUtcMs, $lastSelectedUtcMs, $rustPlusServerId, $wipeCycle)
             ON CONFLICT(id) DO UPDATE SET
                 display_name = excluded.display_name,
                 host = excluded.host,
@@ -67,7 +67,8 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
                 player_id = excluded.player_id,
                 updated_utc_ms = excluded.updated_utc_ms,
                 last_selected_utc_ms = excluded.last_selected_utc_ms,
-                rust_plus_server_id = excluded.rust_plus_server_id;
+                rust_plus_server_id = excluded.rust_plus_server_id,
+                wipe_cycle = excluded.wipe_cycle;
             """;
         command.Parameters.AddWithValue("$id", profile.Id.ToString("D"));
         command.Parameters.AddWithValue("$displayName", profile.DisplayName);
@@ -85,6 +86,7 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
         command.Parameters.AddWithValue("$rustPlusServerId", profile.RustPlusServerId is null
             ? DBNull.Value
             : profile.RustPlusServerId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$wipeCycle", (int)profile.WipeCycle);
         command.ExecuteNonQuery();
     }
 
@@ -109,6 +111,7 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
         Guid? rustPlusServerId = reader.IsDBNull(9)
             ? null
             : Guid.ParseExact(reader.GetString(9), "D");
+        var wipeCycle = reader.IsDBNull(10) ? WipeCycle.Unknown : (WipeCycle)reader.GetInt32(10);
 
         return new ServerProfile(
             Guid.ParseExact(reader.GetString(0), "D"),
@@ -120,6 +123,7 @@ public sealed class SqliteServerRepository(SqliteDatabase database) : IServerRep
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(6)),
             DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(7)),
             lastSelected,
-            rustPlusServerId);
+            rustPlusServerId,
+            wipeCycle);
     }
 }

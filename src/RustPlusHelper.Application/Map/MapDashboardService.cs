@@ -18,6 +18,7 @@ public sealed class MapDashboardService(
     RustPlusLiveSessionManager liveSession,
     IMapCacheRepository mapCache,
     MapTopologyManager topologyManager,
+    IPersonalMapPinRepository personalPins,
     TimeProvider timeProvider) : IDisposable, IAsyncDisposable
 {
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
@@ -191,6 +192,34 @@ public sealed class MapDashboardService(
         });
     }
 
+    public void AddPersonalPin(float worldX, float worldY, string note)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Current.ServerId is not { } serverId)
+        {
+            return;
+        }
+
+        var pin = new PersonalMapPin(Guid.NewGuid(), serverId, worldX, worldY, note, timeProvider.GetUtcNow());
+        personalPins.Add(pin);
+        UpdateState(current => current.ServerId != serverId
+            ? current
+            : current with { PersonalPins = [.. current.PersonalPins ?? [], pin] });
+    }
+
+    public void RemovePersonalPin(Guid id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Current.ServerId is not { } serverId || !personalPins.Remove(serverId, id))
+        {
+            return;
+        }
+
+        UpdateState(current => current.ServerId != serverId
+            ? current
+            : current with { PersonalPins = (current.PersonalPins ?? []).Where(pin => pin.Id != id).ToArray() });
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -361,6 +390,7 @@ public sealed class MapDashboardService(
                 MapDashboardState.CreateLiveMapLayers(),
                 cacheWarning);
             baseState = AttachSavedTopology(baseState);
+            baseState = AttachPersonalPins(baseState);
 
             // baseState here doesn't derive from Current, so a plain (still atomically-written) SetState
             // is fine — unlike the cached-only branch below, there's no prior-state read to race on.
@@ -606,7 +636,7 @@ public sealed class MapDashboardService(
     }
 
     private void SetCachedState(CachedServerMap cached, string? warning) =>
-        UpdateState(current => AttachSavedTopology(ComputeCachedState(current, cached, warning)));
+        UpdateState(current => AttachPersonalPins(AttachSavedTopology(ComputeCachedState(current, cached, warning))));
 
     private static MapDashboardState ComputeCachedState(
         MapDashboardState current,
@@ -857,6 +887,11 @@ public sealed class MapDashboardService(
                 topology)
         };
     }
+
+    private MapDashboardState AttachPersonalPins(MapDashboardState state) =>
+        state.ServerId is { } serverId
+            ? state with { PersonalPins = personalPins.GetAll(serverId) }
+            : state;
 
     private static T Require<T>(RustPlusResult<T> result, string operation)
     {

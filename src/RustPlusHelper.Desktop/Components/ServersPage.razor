@@ -3,6 +3,9 @@
 @inject ServerManager Servers
 @inject RustPlusConnectionManager Connections
 @inject RustPlusPairingManager Pairing
+@inject RustPlusHelper.Application.Map.IMapCacheRepository MapCache
+@inject RustPlusHelper.Application.RustPlus.ICompanionEventRepository EventHistory
+@inject TimeProvider Clock
 @inject ILogger<ServersPage> Logger
 
 <section class="content-page servers-page">
@@ -67,6 +70,41 @@
                                 <span class="server-transport">
                                     @(profile.UseFacepunchProxy ? "Facepunch secure proxy" : "Explicit direct plaintext transport")
                                 </span>
+                                <div class="server-status-summary" data-testid="server-status-summary">
+                                    @{
+                                        var summary = StatusSummary(profile);
+                                    }
+                                    @if (summary is null)
+                                    {
+                                        <span class="muted-note">No cached data yet — open this server's map once to populate this.</span>
+                                    }
+                                    else
+                                    {
+                                        @if (summary.Population is not null)
+                                        {
+                                            <span>@summary.Population</span>
+                                        }
+                                        @if (summary.WipeSummary is not null)
+                                        {
+                                            <span>@summary.WipeSummary</span>
+                                        }
+                                        @if (summary.LastEventSummary is not null)
+                                        {
+                                            <span>@summary.LastEventSummary</span>
+                                        }
+                                    }
+                                    <label class="wipe-cycle-picker">
+                                        <span>Wipe cycle estimate</span>
+                                        <select data-testid="server-wipe-cycle"
+                                                value="@profile.WipeCycle"
+                                                @onchange="@(e => SetWipeCycle(profile.Id, Enum.Parse<WipeCycle>((string)e.Value!)))">
+                                            <option value="Unknown">Unknown</option>
+                                            <option value="Weekly">Weekly</option>
+                                            <option value="Biweekly">Biweekly</option>
+                                            <option value="Monthly">Monthly</option>
+                                        </select>
+                                    </label>
+                                </div>
                             </div>
                             <div class="server-actions">
                                 <span class="status-pill @(hasPairing ? "paired" : "unpaired")">
@@ -531,6 +569,86 @@
         serverInfo.PlayerCount is { } players && serverInfo.MaxPlayerCount is { } maximum
             ? $" · {players} / {maximum} players"
             : string.Empty;
+
+    private sealed record ServerStatusSummary(string? Population, string? WipeSummary, string? LastEventSummary);
+
+    /// <summary>Built entirely from locally cached data — the last successful map fetch and event
+    /// history for this server — so it works for every saved server, not only the one currently
+    /// connected. It is therefore "as of last connection", never live, for any server other than the
+    /// one actually open right now.</summary>
+    private ServerStatusSummary? StatusSummary(ServerProfile profile)
+    {
+        var cached = MapCache.Get(profile.Id);
+        if (cached is null)
+        {
+            return null;
+        }
+
+        var population = cached.Server.PlayerCount is { } players && cached.Server.MaxPlayerCount is { } maximum
+            ? $"{players} / {maximum} players as of {FormatAge(cached.RetrievedAtUtc)}"
+            : null;
+
+        string? wipeSummary = null;
+        if (cached.Server.WipeTimeUtc is { } wipeTimeUtc)
+        {
+            wipeSummary = $"Wiped {FormatAge(wipeTimeUtc)}";
+            if (CycleLength(profile.WipeCycle) is { } cycleLength)
+            {
+                var remaining = wipeTimeUtc + cycleLength - Clock.GetUtcNow();
+                wipeSummary += remaining > TimeSpan.Zero
+                    ? $" · next wipe in ~{FormatDuration(remaining)} (your estimate)"
+                    : " · your estimated next wipe has already passed";
+            }
+        }
+
+        var lastEvent = EventHistory.GetRecent(profile.Id, 1).FirstOrDefault();
+        var lastEventSummary = lastEvent is not null
+            ? $"Last event: {lastEvent.Title} ({FormatAge(lastEvent.OccurredAtUtc)})"
+            : null;
+
+        return new ServerStatusSummary(population, wipeSummary, lastEventSummary);
+    }
+
+    private void SetWipeCycle(Guid serverId, WipeCycle cycle)
+    {
+        try
+        {
+            Servers.SetWipeCycle(serverId, cycle);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to update the wipe-cycle estimate for {ServerId}.", serverId);
+            _errorMessage = "The wipe-cycle estimate could not be saved.";
+        }
+    }
+
+    /// <summary>A user-entered guess, not a Rust+-reported schedule — see <see cref="WipeCycle"/>.</summary>
+    private static TimeSpan? CycleLength(WipeCycle cycle) => cycle switch
+    {
+        WipeCycle.Weekly => TimeSpan.FromDays(7),
+        WipeCycle.Biweekly => TimeSpan.FromDays(14),
+        WipeCycle.Monthly => TimeSpan.FromDays(30),
+        _ => null
+    };
+
+    private string FormatAge(DateTimeOffset pastUtc) => $"{FormatDuration(Clock.GetUtcNow() - pastUtc)} ago";
+
+    private static string FormatDuration(TimeSpan span)
+    {
+        if (span < TimeSpan.Zero)
+        {
+            span = -span;
+        }
+
+        if (span.TotalDays >= 1)
+        {
+            return $"{(int)span.TotalDays}d";
+        }
+
+        return span.TotalHours >= 1
+            ? $"{(int)span.TotalHours}h"
+            : $"{Math.Max(1, (int)span.TotalMinutes)}m";
+    }
 
     private static string Monogram(string name)
     {

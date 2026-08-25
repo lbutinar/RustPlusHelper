@@ -98,6 +98,33 @@
                        @onchange="@(e => SavePreferences(Preferences with { PlaySound = (bool)e.Value! }))" />
             </label>
         </div>
+        <div class="setting-row">
+            <div>
+                <strong>Quiet hours</strong>
+                <p>Suppress the toast/sound during this local time window. Events are still recorded to history either way.</p>
+            </div>
+            <label class="setting-toggle">
+                <input type="checkbox"
+                       data-testid="notify-quiet-hours-enabled"
+                       checked="@Preferences.QuietHoursEnabled"
+                       @onchange="@(e => SavePreferences(Preferences with { QuietHoursEnabled = (bool)e.Value! }))" />
+            </label>
+        </div>
+        @if (Preferences.QuietHoursEnabled)
+        {
+            <div class="setting-row quiet-hours-window">
+                <div><strong>From</strong></div>
+                <input type="time"
+                       data-testid="notify-quiet-hours-start"
+                       value="@Preferences.QuietHoursStart.ToString("HH:mm")"
+                       @onchange="@(e => SavePreferences(Preferences with { QuietHoursStart = TimeOnly.Parse((string)e.Value!) }))" />
+                <div><strong>Until</strong></div>
+                <input type="time"
+                       data-testid="notify-quiet-hours-end"
+                       value="@Preferences.QuietHoursEnd.ToString("HH:mm")"
+                       @onchange="@(e => SavePreferences(Preferences with { QuietHoursEnd = TimeOnly.Parse((string)e.Value!) }))" />
+            </div>
+        }
     </div>
 </section>
 

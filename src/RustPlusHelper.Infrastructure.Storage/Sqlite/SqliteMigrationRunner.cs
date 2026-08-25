@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    internal const int LatestVersion = 13;
+    internal const int LatestVersion = 15;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -143,6 +143,28 @@ internal static class SqliteMigrationRunner
             ON movement_trail_points(server_id, steam_id, sampled_utc_ms DESC);
         """;
 
+    /// <summary>A user-entered guess, not a Rust+-reported schedule — see
+    /// <see cref="RustPlusHelper.Application.Servers.WipeCycle"/>. Stored as the enum's int value;
+    /// NULL (an unset column on a pre-existing row) reads back as <c>WipeCycle.Unknown</c> (0).</summary>
+    private const string ServerWipeCycleSchema = """
+        ALTER TABLE servers ADD COLUMN wipe_cycle INTEGER NULL;
+        """;
+
+    private const string PersonalMapPinSchema = """
+        CREATE TABLE personal_map_pins (
+            id TEXT NOT NULL PRIMARY KEY,
+            server_id TEXT NOT NULL,
+            world_x REAL NOT NULL,
+            world_y REAL NOT NULL,
+            note TEXT NOT NULL CHECK(length(trim(note)) BETWEEN 1 AND 200),
+            created_utc_ms INTEGER NOT NULL,
+            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX ix_personal_map_pins_server
+            ON personal_map_pins(server_id);
+        """;
+
     private const string PairedEntitySchema = """
         CREATE TABLE paired_entities (
             id TEXT NOT NULL PRIMARY KEY,
@@ -205,6 +227,8 @@ internal static class SqliteMigrationRunner
             11 => ("paired smart devices", PairedEntitySchema),
             12 => ("server rust+ id capture", ServerRustPlusIdSchema),
             13 => ("bounded movement trail history", MovementTrailSchema),
+            14 => ("server wipe cycle estimate", ServerWipeCycleSchema),
+            15 => ("personal map pins", PersonalMapPinSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

@@ -83,6 +83,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ICompanionEventRepository, SqliteCompanionEventRepository>();
         builder.Services.AddSingleton<IMovementTrailRepository, SqliteMovementTrailRepository>();
         builder.Services.AddSingleton<ISavedCameraRepository, SqliteSavedCameraRepository>();
+        builder.Services.AddSingleton<IPersonalMapPinRepository, SqlitePersonalMapPinRepository>();
         builder.Services.AddSingleton<IPairedEntityRepository, SqlitePairedEntityRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
         builder.Services.AddSingleton<PlayerIdentityManager>();
@@ -111,6 +112,7 @@ public partial class App : System.Windows.Application
             appVersion,
             logsDirectory));
         builder.Services.AddSingleton<IDiagnosticsExportFilePicker, WindowsDiagnosticsExportFilePicker>();
+        builder.Services.AddSingleton<IEventExportFilePicker, WindowsEventExportFilePicker>();
 
         _host = builder.Build();
         _host.StartAsync().GetAwaiter().GetResult();

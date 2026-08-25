@@ -35,7 +35,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(13L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(15L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -75,6 +75,8 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
             Execute(connection, "DROP TABLE movement_trail_points;");
+            Execute(connection, "ALTER TABLE servers DROP COLUMN wipe_cycle;");
+            Execute(connection, "DROP TABLE personal_map_pins;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
@@ -125,6 +127,40 @@ public sealed class StorageTests
 
         Assert.Equal(rustPlusServerId, restored.Single(profile => profile.Id == withId.Id).RustPlusServerId);
         Assert.Null(restored.Single(profile => profile.Id == withoutId.Id).RustPlusServerId);
+    }
+
+    [Fact]
+    public void ServerProfileRoundTripsWipeCycle()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var weekly = CreateProfile(playerId: 1, wipeCycle: WipeCycle.Weekly);
+        servers.Upsert(weekly);
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        var restored = Assert.Single(new SqliteServerRepository(reopenedDatabase).GetAll());
+
+        Assert.Equal(WipeCycle.Weekly, restored.WipeCycle);
+    }
+
+    [Fact]
+    public void ServerProfileTreatsANullWipeCycleColumnAsUnknown()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        servers.Upsert(CreateProfile(playerId: 1, wipeCycle: WipeCycle.Monthly));
+
+        using (var connection = temporary.Database.OpenConnection())
+        {
+            // Simulates a row written before this column existed (NULL), rather than the default
+            // enum value 0 the app itself would have written for "unset".
+            Execute(connection, "UPDATE servers SET wipe_cycle = NULL;");
+        }
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        var restored = Assert.Single(new SqliteServerRepository(reopenedDatabase).GetAll());
+
+        Assert.Equal(WipeCycle.Unknown, restored.WipeCycle);
     }
 
     [Fact]
@@ -200,6 +236,8 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
             Execute(connection, "DROP TABLE movement_trail_points;");
+            Execute(connection, "ALTER TABLE servers DROP COLUMN wipe_cycle;");
+            Execute(connection, "DROP TABLE personal_map_pins;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 
@@ -455,6 +493,27 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PersonalMapPinsRoundTripOrderedByCreationAndCascadeWithServer()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile();
+        servers.Upsert(profile);
+        var repository = new SqlitePersonalMapPinRepository(temporary.Database);
+        var first = new PersonalMapPin(Guid.NewGuid(), profile.Id, 1200.5f, 2400.25f, "Loot stash", FixedUtc.AddMinutes(-1));
+        var second = new PersonalMapPin(Guid.NewGuid(), profile.Id, 800f, 900f, "Ambush spot", FixedUtc);
+
+        repository.Add(first);
+        repository.Add(second);
+
+        Assert.Equal([first, second], repository.GetAll(profile.Id));
+        Assert.True(repository.Remove(profile.Id, first.Id));
+        Assert.Equal([second], repository.GetAll(profile.Id));
+        Assert.True(servers.Remove(profile.Id));
+        Assert.Empty(repository.GetAll(profile.Id));
+    }
+
+    [Fact]
     public void DpapiSecretStoreRoundTripsWithoutPersistingPlaintextAndCascadesOnServerRemoval()
     {
         using var temporary = new TemporaryDatabase();
@@ -644,7 +703,10 @@ public sealed class StorageTests
         return reader.ReadToEnd();
     }
 
-    private static ServerProfile CreateProfile(ulong? playerId = null, Guid? rustPlusServerId = null) => new(
+    private static ServerProfile CreateProfile(
+        ulong? playerId = null,
+        Guid? rustPlusServerId = null,
+        WipeCycle wipeCycle = WipeCycle.Unknown) => new(
         Guid.Parse("349b4e9a-215f-4388-ad24-4df8fa572f1c"),
         "EU Main",
         "companion.example.invalid",
@@ -654,7 +716,8 @@ public sealed class StorageTests
         FixedUtc,
         FixedUtc,
         FixedUtc,
-        rustPlusServerId);
+        rustPlusServerId,
+        wipeCycle);
 
     private static T ExecuteScalar<T>(SqliteConnection connection, string sql)
     {

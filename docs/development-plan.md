@@ -102,6 +102,24 @@ official Rust+ app, only a real paired server. Running the live command now also
 `alignment.html`; opening it and confirming each labelled monument sits on its visible structure in
 the satellite image is the concrete remaining step, and still requires a human with a paired server.
 
+The Servers page gained a per-server status summary and wipe-cycle estimate on 2026-08-25
+(`WipeCycle` enum + `ServerProfile.WipeCycle`, migration 14). Rust+ reports the *last* wipe timestamp
+(`ServerInfoSnapshot.WipeTimeUtc`) but never a schedule, so any "next wipe" countdown is necessarily a
+user-entered guess (Unknown/Weekly/Biweekly/Monthly) — the UI always labels it "(your estimate)" and
+never presents it as Rust+-reported. The summary itself (player count, time since wipe, last companion
+event) reads straight from each saved server's existing `IMapCacheRepository`/`ICompanionEventRepository`
+snapshot without opening a live connection, so a user with several saved servers gets an at-a-glance
+view of all of them from the Servers list alone.
+
+Personal map pins were added the same day (`IPersonalMapPinRepository`/`SqlitePersonalMapPinRepository`,
+migration 15, `personal_map_pins` table) as the first fully-wired "MANUAL"-sourced map layer — Rust+ has
+no concept of user map annotations, so a pin is placed by typing a grid reference (reusing
+`MapGrid`'s label-parsing convention via a new `TryParseCellWorldCenter` inverse, rather than adding
+map-click JS interop) and a short note, and is rendered through the same `MapOverlayItem`/`MapCanvas`
+pipeline as every Rust+-sourced marker. Pins are loaded by `MapDashboardService.AttachPersonalPins`
+whenever a server's map loads (mirroring the existing `AttachSavedTopology` pattern) and are strictly
+scoped to the server they were created on.
+
 ## Phase 4.5 — External map topology
 
 **Goal:** Add useful map data that Rust+ does not expose without contaminating the Rust+ adapter.
@@ -208,6 +226,13 @@ so this is explicitly a heuristic, not a verified signal — see `docs/protocol-
 positions are seeded once from the already-cached map at session start (`RustPlusLiveSessionSeed.Monuments`),
 since Rust+'s live polling never re-fetches the five-token map on a timer.
 
+The Events page gained a CSV export on 2026-08-25 (`CompanionEventCsvExporter`,
+`IEventExportFilePicker`/`WindowsEventExportFilePicker`, mirroring the existing Diagnostics page
+export's exact save-dialog-then-write-stream shape rather than inventing a new pattern). It exports
+whatever is in `MapDashboardState.Events` for the currently open server, in the same newest-first
+order already shown on the page, entirely for the user's own local record-keeping — nothing is sent
+anywhere.
+
 ## Phase 7 — Vending marketplace
 
 **Goal:** Search offers and locate machines.
@@ -259,6 +284,15 @@ by the app's own persisted `PairedEntityKind`, never by the payload's shape (see
 `docs/protocol-evidence.md`). Switches support Toggle/Strobe; Storage Monitor rows show capacity and
 resolved item names via the existing `ItemCatalog`; Alarms are read-only. See
 `docs/protocol-evidence.md` for the full evidence trail.
+
+The Devices page gained a "Recent alarm activity" list on 2026-08-25, showing every
+`CompanionEventKind.AlarmTriggered` event already in `MapDashboardState.Events` when at least one
+alarm is paired. It is deliberately server-wide, not per-alarm: the alarm-triggered FCM push carries
+only the in-game alarm's own name, never an entity ID, so there is no reliable way to link a trigger
+to one specific `PairedEntity` (two alarms could share a name, or the in-game name could differ from
+the app's saved nickname) without risking a silent mismatch. Building true per-alarm history would
+need a schema change (an entity-id column on `companion_events`) and the FCM payload would still need
+a best-effort name match at ingestion — deferred rather than shipped as a false-precision feature.
 
 ## Phase 9 — Cameras
 
@@ -349,6 +383,15 @@ asterisk sound via `System.Media.SystemSounds`). It is packed as a *mute* bit ra
 in `NotificationPreferencesStore`'s existing single-byte encoding: a preferences byte saved by an
 older build has that bit unset, and treating unset as "not muted" keeps sound on by default for
 existing users instead of silently muting them on upgrade.
+
+A global quiet-hours window followed the same day (`NotificationPreferences.QuietHoursEnabled/Start/End`,
+`NotificationDispatcher` now takes a `TimeProvider` to evaluate the local time-of-day window against).
+It only gates the toast/sound in `NotificationDispatcher` — the underlying `CompanionEvent` is always
+recorded by its own source regardless. The preferences encoding grew from 1 byte to 5 (flags byte plus
+two little-endian `ushort` minutes-of-day values); a value shorter than 5 bytes (anything saved before
+this feature, including a plain single-flags-byte value) is read back as quiet hours disabled at
+midnight, never a crash or a nonsensical window. `NotificationPreferences.IsQuietHours` treats a
+start-after-end window as wrapping past midnight (e.g. 22:00-07:00) rather than empty.
 
 ## Phase 11 — Packaging and hardening
 

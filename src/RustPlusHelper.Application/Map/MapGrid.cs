@@ -127,6 +127,53 @@ public static class MapGrid
         pixelX = 0;
         pixelY = 0;
 
+        if (!TryParseLabel(label, grid.CellCount, out var column, out var row))
+        {
+            return false;
+        }
+
+        var cellWidth = (grid.Right - grid.Left) / grid.CellCount;
+        var cellHeight = (grid.Bottom - grid.Top) / grid.CellCount;
+        pixelX = grid.Left + (cellWidth * (column + 0.5));
+        pixelY = grid.Top + (cellHeight * (row + 0.5));
+        return true;
+    }
+
+    /// <summary>
+    /// Parses a player-typed grid label (e.g. "H14") directly into Rust world coordinates, the
+    /// inverse of <see cref="WorldToGrid"/> — used to place manually-entered content (e.g. personal
+    /// map pins) without needing a rendered <see cref="MapGridDefinition"/>.
+    /// </summary>
+    public static bool TryParseCellWorldCenter(
+        string? label,
+        double mapSize,
+        out float worldX,
+        out float worldY)
+    {
+        worldX = 0;
+        worldY = 0;
+        if (!double.IsFinite(mapSize) || mapSize <= 0)
+        {
+            return false;
+        }
+
+        var count = GetCellCount(mapSize);
+        if (!TryParseLabel(label, count, out var column, out var row))
+        {
+            return false;
+        }
+
+        var cellSize = mapSize / count;
+        worldX = (float)((column + 0.5) * cellSize);
+        worldY = (float)(mapSize - ((row + 0.5) * cellSize));
+        return true;
+    }
+
+    private static bool TryParseLabel(string? label, int cellCount, out int column, out int row)
+    {
+        column = 0;
+        row = 0;
+
         if (string.IsNullOrWhiteSpace(label))
         {
             return false;
@@ -147,22 +194,13 @@ public static class MapGrid
         var digits = trimmed[splitIndex..];
         if (!digits.All(char.IsAsciiDigit)
             || !int.TryParse(digits, System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture, out var row))
+                System.Globalization.CultureInfo.InvariantCulture, out row))
         {
             return false;
         }
 
-        var column = ColumnIndex(trimmed[..splitIndex]);
-        if (column < 0 || column >= grid.CellCount || row < 0 || row >= grid.CellCount)
-        {
-            return false;
-        }
-
-        var cellWidth = (grid.Right - grid.Left) / grid.CellCount;
-        var cellHeight = (grid.Bottom - grid.Top) / grid.CellCount;
-        pixelX = grid.Left + (cellWidth * (column + 0.5));
-        pixelY = grid.Top + (cellHeight * (row + 0.5));
-        return true;
+        column = ColumnIndex(trimmed[..splitIndex]);
+        return column >= 0 && column < cellCount && row >= 0 && row < cellCount;
     }
 
     /// <summary>Inverse of <see cref="ColumnName"/>'s bijective base-26 encoding.</summary>

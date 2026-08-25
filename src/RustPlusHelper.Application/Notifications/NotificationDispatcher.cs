@@ -16,17 +16,20 @@ public sealed class NotificationDispatcher : IDisposable
     private readonly RustPlusAlarmNotificationListener _alarmListener;
     private readonly NotificationPreferencesStore _preferencesStore;
     private readonly IDesktopNotifier _notifier;
+    private readonly TimeProvider _timeProvider;
 
     public NotificationDispatcher(
         RustPlusLiveSessionManager liveSession,
         RustPlusAlarmNotificationListener alarmListener,
         NotificationPreferencesStore preferencesStore,
-        IDesktopNotifier notifier)
+        IDesktopNotifier notifier,
+        TimeProvider timeProvider)
     {
         _liveSession = liveSession;
         _alarmListener = alarmListener;
         _preferencesStore = preferencesStore;
         _notifier = notifier;
+        _timeProvider = timeProvider;
         _liveSession.EventRecorded += HandleEventRecorded;
         _alarmListener.AlarmTriggered += HandleAlarmTriggered;
     }
@@ -34,7 +37,7 @@ public sealed class NotificationDispatcher : IDisposable
     private void HandleEventRecorded(object? sender, CompanionEvent item)
     {
         var preferences = _preferencesStore.Get();
-        if (!preferences.IsEnabled(item.Kind))
+        if (!preferences.IsEnabled(item.Kind) || IsQuietHoursNow(preferences))
         {
             return;
         }
@@ -53,13 +56,19 @@ public sealed class NotificationDispatcher : IDisposable
         }
 
         var preferences = _preferencesStore.Get();
-        if (!preferences.AlarmEvents)
+        if (!preferences.AlarmEvents || IsQuietHoursNow(preferences))
         {
             return;
         }
 
         _notifier.Show(notification.Title, notification.Message, preferences.PlaySound);
     }
+
+    /// <summary>Quiet hours only gate the toast/sound shown here — the event itself is always
+    /// recorded to history by its own source (RustPlusLiveSessionManager/RecordExternalEvent),
+    /// regardless of this dispatcher's preferences.</summary>
+    private bool IsQuietHoursNow(NotificationPreferences preferences) =>
+        preferences.IsQuietHours(TimeOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime));
 
     public void Dispose()
     {

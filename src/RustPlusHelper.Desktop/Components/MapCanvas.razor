@@ -20,6 +20,7 @@
     private MapMarkersSnapshot? _renderedMarkers;
     private IReadOnlyList<CompanionEvent>? _renderedEvents;
     private SavedMapTopology? _renderedTopology;
+    private IReadOnlyList<PersonalMapPin>? _renderedPersonalPins;
     private uint? _renderedMapSize;
     private IReadOnlyDictionary<string, bool>? _renderedLayerVisibility;
     private long _handledFocusSequence;
@@ -44,6 +45,7 @@
             || !ReferenceEquals(_renderedMarkers, State.Markers)
             || !ReferenceEquals(_renderedEvents, State.Events)
             || !ReferenceEquals(_renderedTopology, State.Topology)
+            || !ReferenceEquals(_renderedPersonalPins, State.PersonalPins)
             || _renderedMapSize != State.Server?.MapSize;
         if (!requiresFullRender)
         {
@@ -146,6 +148,7 @@
         _renderedMarkers = State.Markers;
         _renderedEvents = State.Events;
         _renderedTopology = State.Topology;
+        _renderedPersonalPins = State.PersonalPins;
         _renderedMapSize = State.Server?.MapSize;
         _renderedLayerVisibility = layerVisibility;
         await FocusRequestedItemAsync();

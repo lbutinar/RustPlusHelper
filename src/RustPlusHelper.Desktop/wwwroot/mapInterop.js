@@ -26,7 +26,8 @@
         "deathHistory",
         "movementTrails",
         "smartDevices",
-        "cameras"
+        "cameras",
+        "personalPins"
     ];
 
     const markerGlyphs = {
@@ -42,6 +43,7 @@
         "death": "†",
         "radius": "○",
         "travelling-vendor": "TV",
+        "personal-pin": "📍",
         "unknown": "?"
     };
 

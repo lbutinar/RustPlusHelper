@@ -60,6 +60,29 @@ public sealed class ServerManagerTests
     }
 
     [Fact]
+    public void SetWipeCycleUpdatesOnlyThatFieldAndPersists()
+    {
+        var repository = new InMemoryServerRepository();
+        var manager = new ServerManager(repository, new FixedTimeProvider(FixedUtc));
+        var saved = manager.Save(new ServerProfileDraft(null, "EU Main", "companion.example.invalid", 28082));
+        Assert.Equal(WipeCycle.Unknown, saved.WipeCycle);
+
+        var updated = manager.SetWipeCycle(saved.Id, WipeCycle.Weekly);
+
+        Assert.Equal(WipeCycle.Weekly, updated.WipeCycle);
+        Assert.Equal("EU Main", updated.DisplayName);
+        Assert.Equal(WipeCycle.Weekly, repository.GetById(saved.Id)!.WipeCycle);
+    }
+
+    [Fact]
+    public void SetWipeCycleThrowsForAnUnknownServer()
+    {
+        var manager = new ServerManager(new InMemoryServerRepository(), new FixedTimeProvider(FixedUtc));
+
+        Assert.Throws<ArgumentException>(() => manager.SetWipeCycle(Guid.NewGuid(), WipeCycle.Monthly));
+    }
+
+    [Fact]
     public void SavesPlayerIdAndCanonicalTokenThroughProtectedStoreBoundary()
     {
         var repository = new InMemoryServerRepository();

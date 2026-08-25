@@ -67,6 +67,11 @@ server requires it.
 - **Select** makes a server the default without opening its map. **Edit** lets you change its saved
   details (leave the player-token field blank to keep the existing one). **Remove** asks for
   confirmation before deleting a server and its saved pairing.
+- Each saved server shows a quick status summary (player count, time since the last wipe, and its
+  most recent event) from whatever was last cached, without opening a live connection. Rust+ only
+  reports the *last* wipe, never a schedule, so if you set a **Wipe cycle estimate** (Weekly/Biweekly/
+  Monthly), the "next wipe" shown is always your own guess — labelled "(your estimate)" — not
+  something Rust+ told the app.
 
 ## The map
 
@@ -89,6 +94,10 @@ The **Map** page is the main view once a server is open:
   every 1-2 minutes (not every exact step) so a multi-day trail stays readable instead of turning into
   a tangle. It resets automatically at the next server wipe, and a teammate's existing path stays
   visible while they're offline — only new points stop being added until they're back online.
+- **Personal pins** let you mark your own spots on the map — a loot stash, an ambush point, anywhere
+  worth remembering. Type a grid reference (e.g. `H14`) and a short note in the layer panel, then
+  click **Add pin**. Pins are entirely local to you and this server, never sent to the game or your
+  team, and survive restarting the app; remove one with its **Remove** button.
 
 Grid squares and monument names match the labels used in the official Rust+ app.
 
@@ -105,7 +114,8 @@ Grid squares and monument names match the labels used in the official Rust+ app.
   connection lost/restored, teammates coming online, dying, or crossing into a new grid square, world
   markers appearing or disappearing, a crate spawning near a known oil rig (a best-effort guess at
   activation — Rust+ does not report this directly), and (see below) vending and Smart Alarm changes.
-  This history is kept locally per server and survives restarting the app.
+  This history is kept locally per server and survives restarting the app. Click **Export as CSV**
+  to save it to a file for your own records — nothing is sent anywhere.
 
 ## Vending
 
@@ -126,7 +136,10 @@ yourself, once per server.
 Storage Monitor from Rust the same way you would with the official app. Switches support **Toggle**
 and a 3-second **Strobe**; Storage Monitors show live capacity and contents; Alarms are read-only —
 RustPlusHelper shows a desktop notification when one triggers (see Notifications below), but Rust+
-does not expose a way to arm/disarm one remotely.
+does not expose a way to arm/disarm one remotely. Once you've paired at least one alarm, a **Recent
+alarm activity** list appears below your devices showing every trigger — this covers all of your
+paired alarms together, since Rust+ doesn't tell the app which specific alarm triggered beyond its
+in-game name.
 
 **Cameras:** enter a camera's in-game code (shown on its computer station) and a nickname, then
 **Add camera**. Click **View** to watch its live feed. Only the controls that camera actually supports
@@ -145,6 +158,9 @@ it — Rust+ only allows one active subscription per connection.
   so you can, for example, keep alarm notifications on while muting vending price chatter.
 - **Play a sound** plays the Windows system asterisk sound alongside every notification from an
   enabled category above; turn it off to keep notifications silent.
+- **Quiet hours** suppresses the toast/sound during a time window you set (e.g. overnight) — the
+  underlying event is still recorded to the Events history either way, only the desktop notification
+  is held back.
 
 ## Staying minimized
 

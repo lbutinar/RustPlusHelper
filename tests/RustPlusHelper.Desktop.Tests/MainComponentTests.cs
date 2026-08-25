@@ -31,6 +31,7 @@ public sealed class MainComponentTests : BunitContext
     private readonly InMemoryPairedEntityRepository _pairedEntities;
     private readonly RecordingDiagnosticsExportFilePicker _diagnosticsExportFilePicker;
     private readonly FakeClientFactory _liveSessionClientFactory;
+    private readonly RecordingEventExportFilePicker _eventExportFilePicker;
 
     public MainComponentTests()
     {
@@ -62,12 +63,13 @@ public sealed class MainComponentTests : BunitContext
             TimeProvider.System);
         _pairedEntities = new InMemoryPairedEntityRepository();
         _liveSessionClientFactory = new FakeClientFactory();
+        var eventHistory = new InMemoryCompanionEventRepository();
         var liveSession = new RustPlusLiveSessionManager(
             new RustPlusSavedConnectionResolver(serverManager, _secretStore),
             _liveSessionClientFactory,
             TimeProvider.System,
             RustPlusPollingOptions.Default,
-            new InMemoryCompanionEventRepository(),
+            eventHistory,
             _pairedEntities,
             new InMemoryMovementTrailRepository());
         var entityPairing = new RustPlusEntityPairingManager(
@@ -85,6 +87,7 @@ public sealed class MainComponentTests : BunitContext
             new UnavailableMapTopologyDiscovery(),
             new InMemoryMapTopologyRepository(),
             TimeProvider.System);
+        var personalMapPins = new InMemoryPersonalMapPinRepository();
         _dashboard = new MapDashboardService(
             client,
             connection,
@@ -93,6 +96,7 @@ public sealed class MainComponentTests : BunitContext
             liveSession,
             mapCache,
             mapTopology,
+            personalMapPins,
             TimeProvider.System);
 
         // Externally constructed instances are owned by this short-lived test process and keep the
@@ -110,6 +114,9 @@ public sealed class MainComponentTests : BunitContext
         Services.AddSingleton<IPairedEntityRepository>(_pairedEntities);
         Services.AddSingleton(entityPairing);
         Services.AddSingleton<IMapCacheRepository>(mapCache);
+        Services.AddSingleton<IPersonalMapPinRepository>(personalMapPins);
+        Services.AddSingleton<ICompanionEventRepository>(eventHistory);
+        Services.AddSingleton(TimeProvider.System);
         Services.AddSingleton(mapTopology);
         Services.AddSingleton<IMapFilePicker, NullMapFilePicker>();
         Services.AddSingleton<IStartupRegistration>(new InMemoryStartupRegistration());
@@ -117,6 +124,8 @@ public sealed class MainComponentTests : BunitContext
 
         _diagnosticsExportFilePicker = new RecordingDiagnosticsExportFilePicker();
         Services.AddSingleton<IDiagnosticsExportFilePicker>(_diagnosticsExportFilePicker);
+        _eventExportFilePicker = new RecordingEventExportFilePicker();
+        Services.AddSingleton<IEventExportFilePicker>(_eventExportFilePicker);
         Services.AddSingleton(new DiagnosticsExportService(
             [new InMemoryHealthCheck("Fake check", HealthStatus.Healthy, "All good.")],
             _serverRepository,
@@ -183,6 +192,43 @@ public sealed class MainComponentTests : BunitContext
 
         component.WaitForAssertion(() =>
             Assert.Contains("isn't a valid grid reference", component.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PersonalPinsCanBeAddedAndRemovedFromTheMapPage()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.WaitForElement("[data-testid='add-pin']");
+
+        component.Find("[data-testid='pin-grid-input']").Input("ZZ999");
+        component.Find("[data-testid='pin-note-input']").Input("Bad grid");
+        component.Find("form.pin-add-form").Submit();
+        component.WaitForAssertion(() =>
+            Assert.Contains("isn't a valid grid reference", component.Markup, StringComparison.Ordinal));
+
+        component.Find("[data-testid='pin-grid-input']").Input("A0");
+        component.Find("[data-testid='pin-note-input']").Input("Ambush spot");
+        component.Find("form.pin-add-form").Submit();
+
+        component.WaitForAssertion(() =>
+            Assert.Contains("Ambush spot", component.Markup, StringComparison.Ordinal));
+        var pinRepository = Services.GetRequiredService<IPersonalMapPinRepository>();
+        var pin = Assert.Single(pinRepository.GetAll(profile.Id));
+        Assert.Equal("Ambush spot", pin.Note);
+
+        component.Find("[data-testid='remove-pin']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.DoesNotContain("Ambush spot", component.Markup, StringComparison.Ordinal);
+            Assert.Empty(pinRepository.GetAll(profile.Id));
+        });
     }
 
     [Fact]
@@ -501,6 +547,60 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public async Task DevicesPageShowsRecentAlarmActivityWhenAnAlarmIsPaired()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+        _pairedEntities.Add(new PairedEntity(
+            Guid.NewGuid(), serverId, 777UL, PairedEntityKind.Alarm, "Front door alarm", DateTimeOffset.UtcNow));
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var triggeredEvent = new CompanionEvent(
+            Guid.NewGuid(),
+            serverId,
+            DateTimeOffset.UtcNow,
+            CompanionEventKind.AlarmTriggered,
+            CompanionEventSource.Transport,
+            "Front Door Alarm",
+            "Someone is here!");
+        var state = MapDashboardState.NotStarted with { ServerId = serverId, Events = [triggeredEvent] };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Contains("Recent alarm activity", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("Front Door Alarm", component.Markup, StringComparison.Ordinal);
+            Assert.Contains("Someone is here!", component.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task DevicesPageHidesAlarmActivityWhenNoAlarmIsPaired()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<DevicesPage>(parameters => parameters.Add(page => page.State, state));
+
+        component.WaitForAssertion(() =>
+            Assert.DoesNotContain("Recent alarm activity", component.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task TeamPageSendsAChatMessageThroughTheLiveSession()
     {
         var serverManager = Services.GetRequiredService<ServerManager>();
@@ -794,6 +894,63 @@ public sealed class MainComponentTests : BunitContext
     }
 
     [Fact]
+    public async Task ServersPageShowsCachedStatusSummaryAndSavesWipeCycleEstimate()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+
+        var mapCache = Services.GetRequiredService<IMapCacheRepository>();
+        // Comfortably clear of both truncation boundaries this test checks (Xd ago / next wipe in ~Yd):
+        // 2.5 days elapsed always floors to "2d ago", and a 7-day weekly cycle leaves 4.5 days
+        // remaining, which always floors to "~4d" — neither is within a day of flipping due to the
+        // small amount of real time this test takes to run.
+        var wipeTimeUtc = DateTimeOffset.UtcNow.AddDays(-2.5);
+        mapCache.Upsert(new CachedServerMap(
+            profile.Id,
+            DateTimeOffset.UtcNow,
+            new ServerInfoSnapshot(
+                "Test server", null, null, "Procedural Map", 4500, wipeTimeUtc,
+                42, 200, 0, null, null, null, null, null, null),
+            new ServerMapSnapshot(1000, 1000, 50, "#FF1C3440", [], [1, 2, 3])));
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        // Opening the app auto-connects to the last-selected server and records its own
+        // "connected" companion event, so seed the test event afterwards to keep it
+        // unambiguously the most recent one for this assertion.
+        var eventHistory = Services.GetRequiredService<ICompanionEventRepository>();
+        eventHistory.Append(
+            new CompanionEvent(
+                Guid.NewGuid(), profile.Id, DateTimeOffset.UtcNow,
+                CompanionEventKind.MarkerAppeared, CompanionEventSource.Transport, "Loot marker placed"),
+            200,
+            DateTimeOffset.MinValue);
+
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Servers", StringComparison.Ordinal))
+            .Click();
+        component.WaitForElement("[data-testid='server-status-summary']");
+
+        Assert.Contains("42 / 200 players", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("Wiped 2d ago", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("Last event: Loot marker placed", component.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("next wipe", component.Markup, StringComparison.Ordinal);
+
+        component.Find("[data-testid='server-wipe-cycle']").Change("Weekly");
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Equal(WipeCycle.Weekly, _serverRepository.GetById(profile.Id)!.WipeCycle);
+            Assert.Contains("next wipe in ~4d (your estimate)", component.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void ServerPageMasksAndProtectsManualPairingDetails()
     {
         var component = Render<Main>();
@@ -885,6 +1042,16 @@ public sealed class MainComponentTests : BunitContext
         component.Find("[data-testid='notify-sound']").Change(false);
         Assert.False(preferencesStore.Get().PlaySound);
         Assert.False(preferencesStore.Get().MarkerEvents, "Toggling sound must not affect a category.");
+
+        Assert.False(preferencesStore.Get().QuietHoursEnabled);
+        Assert.DoesNotContain("notify-quiet-hours-start", component.Markup, StringComparison.Ordinal);
+        component.Find("[data-testid='notify-quiet-hours-enabled']").Change(true);
+        Assert.True(preferencesStore.Get().QuietHoursEnabled);
+
+        component.Find("[data-testid='notify-quiet-hours-start']").Change("22:00");
+        component.Find("[data-testid='notify-quiet-hours-end']").Change("07:00");
+        Assert.Equal(new TimeOnly(22, 0), preferencesStore.Get().QuietHoursStart);
+        Assert.Equal(new TimeOnly(7, 0), preferencesStore.Get().QuietHoursEnd);
     }
 
     [Fact]
@@ -907,6 +1074,32 @@ public sealed class MainComponentTests : BunitContext
             component.WaitForAssertion(() =>
                 Assert.Contains(exportPath, component.Find("[data-testid='export-result']").TextContent, StringComparison.Ordinal));
             Assert.True(File.Exists(exportPath));
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public void EventsPageExportsHistoryToThePickedLocation()
+    {
+        var component = Render<Main>();
+        component.WaitForElement(".map-page");
+        component.FindAll("button.nav-item")
+            .Single(button => button.TextContent.Contains("Events", StringComparison.Ordinal))
+            .Click();
+        component.WaitForElement("[data-testid='export-events']");
+
+        var exportPath = Path.Combine(Path.GetTempPath(), $"rustplushelper-events-test-{Guid.NewGuid():N}.csv");
+        _eventExportFilePicker.NextPath = exportPath;
+        try
+        {
+            component.Find("[data-testid='export-events']").Click();
+            component.WaitForAssertion(() =>
+                Assert.Contains(exportPath, component.Find("[data-testid='export-events-result']").TextContent, StringComparison.Ordinal));
+            Assert.True(File.Exists(exportPath));
+            Assert.StartsWith("OccurredAtUtc,Kind,Source,Title,Detail,WorldX,WorldY", File.ReadAllText(exportPath), StringComparison.Ordinal);
         }
         finally
         {
@@ -938,6 +1131,13 @@ public sealed class MainComponentTests : BunitContext
     }
 
     private sealed class RecordingDiagnosticsExportFilePicker : IDiagnosticsExportFilePicker
+    {
+        public string? NextPath { get; set; }
+
+        public Task<string?> PickSaveLocationAsync(string suggestedFileName) => Task.FromResult(NextPath);
+    }
+
+    private sealed class RecordingEventExportFilePicker : IEventExportFilePicker
     {
         public string? NextPath { get; set; }
 

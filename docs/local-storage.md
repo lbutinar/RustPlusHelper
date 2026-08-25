@@ -16,8 +16,9 @@ file-level backup while the app is open. Prefer closing the application before c
 
 - migration history;
 - one application-level Steam64 player identity;
-- saved server names, companion host/port, proxy choice, effective pairing-identity snapshot, and
-  timestamps;
+- saved server names, companion host/port, proxy choice, effective pairing-identity snapshot,
+  timestamps, and an optional user-entered wipe-cycle estimate (Unknown/Weekly/Biweekly/Monthly —
+  never a Rust+-reported schedule);
 - purpose-labelled DPAPI ciphertext for pairing secrets.
 - latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp;
 - optional per-server display rasters and paths derived from an automatically matched or manually
@@ -27,10 +28,12 @@ file-level backup while the app is open. Prefer closing the application before c
 - saved camera codes/nicknames and paired Smart Switch/Alarm/Storage Monitor entity IDs;
 - downsampled team-member movement trail points (unsigned Steam64 ID, world X/Y, and a timestamp),
   kept up to a 14-day safety cap and cascade-deleted with their server; live chat text and raw team
-  snapshots themselves are not persisted.
+  snapshots themselves are not persisted;
+- user-placed personal map pins (world X/Y, a short note, and a timestamp) — entirely local, never
+  sent to the game server.
 
 A map refresh replaces the prior snapshot for that server; deleting a server cascades its cached map,
-companion events, saved cameras, paired entities, and movement trail points.
+companion events, saved cameras, paired entities, movement trail points, and personal map pins.
 Importing topology replaces the previous derived topology for that server. Only the source filename,
 SHA-256 fingerprint, decoded metadata, normalized paths, and 384-pixel RGBA overlays are kept; the
 original file and absolute path are not copied.

@@ -60,6 +60,62 @@ public sealed class NotificationPreferencesTests
         Assert.True(store.Get().PlaySound);
     }
 
+    [Fact]
+    public void RoundTripsQuietHoursWindow()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        var store = new NotificationPreferencesStore(secrets);
+        var preferences = NotificationPreferences.Default with
+        {
+            QuietHoursEnabled = true,
+            QuietHoursStart = new TimeOnly(22, 30),
+            QuietHoursEnd = new TimeOnly(7, 15)
+        };
+
+        store.Save(preferences);
+
+        Assert.Equal(preferences, store.Get());
+    }
+
+    [Fact]
+    public void PreferencesSavedBeforeQuietHoursExistedDefaultToDisabled()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        // A single flags byte with no quiet-hours window bytes — simulates a value saved by a
+        // version of the app that predates quiet hours (and also predates PlaySound, which the same
+        // byte length covers).
+        secrets.Store(ApplicationSecretKind.NotificationPreferences, [0x1F]);
+        var store = new NotificationPreferencesStore(secrets);
+
+        var preferences = store.Get();
+        Assert.False(preferences.QuietHoursEnabled);
+        Assert.Equal(default, preferences.QuietHoursStart);
+        Assert.Equal(default, preferences.QuietHoursEnd);
+    }
+
+    [Theory]
+    [InlineData(false, 23, 0, false)] // disabled window never applies regardless of time
+    [InlineData(true, 23, 0, true)] // 22:00-07:00 window, non-wrapping check at 23:00 -> inside
+    [InlineData(true, 3, 0, true)] // same window, past midnight at 03:00 -> inside (wraps)
+    [InlineData(true, 12, 0, false)] // midday -> outside
+    [InlineData(true, 22, 0, true)] // exactly at start -> inclusive
+    [InlineData(true, 7, 0, false)] // exactly at end -> exclusive
+    public void IsQuietHoursHandlesAWindowThatWrapsPastMidnight(
+        bool enabled,
+        int hour,
+        int minute,
+        bool expected)
+    {
+        var preferences = NotificationPreferences.Default with
+        {
+            QuietHoursEnabled = enabled,
+            QuietHoursStart = new TimeOnly(22, 0),
+            QuietHoursEnd = new TimeOnly(7, 0)
+        };
+
+        Assert.Equal(expected, preferences.IsQuietHours(new TimeOnly(hour, minute)));
+    }
+
     [Theory]
     [InlineData(CompanionEventKind.ConnectionEstablished, true)]
     [InlineData(CompanionEventKind.TeamMemberDied, true)]
@@ -260,6 +316,61 @@ public sealed class RustPlusAlarmNotificationListenerTests
 public sealed class NotificationDispatcherTests
 {
     [Fact]
+    public void QuietHoursSuppressesTheNotification()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        var preferencesStore = new NotificationPreferencesStore(secrets);
+        preferencesStore.Save(NotificationPreferences.Default with
+        {
+            QuietHoursEnabled = true,
+            QuietHoursStart = new TimeOnly(22, 0),
+            QuietHoursEnd = new TimeOnly(7, 0)
+        });
+        var servers = CreateServerManager();
+        var liveSession = CreateLiveSession(servers);
+        using var alarmListener = new RustPlusAlarmNotificationListener(
+            new NoopAlarmListenerProvider(), secrets, servers, liveSession, PollingOptions());
+        var notifier = new RecordingNotifier();
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 23, 0, 0, TimeSpan.Zero));
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier, clock);
+
+        liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.ConnectionEstablished, "Connected");
+
+        Assert.Empty(notifier.Shown);
+    }
+
+    [Fact]
+    public void OutsideTheQuietHoursWindowNotificationsStillShow()
+    {
+        using var secrets = new InMemoryApplicationSecretStore();
+        var preferencesStore = new NotificationPreferencesStore(secrets);
+        preferencesStore.Save(NotificationPreferences.Default with
+        {
+            QuietHoursEnabled = true,
+            QuietHoursStart = new TimeOnly(22, 0),
+            QuietHoursEnd = new TimeOnly(7, 0)
+        });
+        var servers = CreateServerManager();
+        var liveSession = CreateLiveSession(servers);
+        using var alarmListener = new RustPlusAlarmNotificationListener(
+            new NoopAlarmListenerProvider(), secrets, servers, liveSession, PollingOptions());
+        var notifier = new RecordingNotifier();
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier, clock);
+
+        liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.ConnectionEstablished, "Connected");
+
+        Assert.Single(notifier.Shown);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
+    [Fact]
     public void ShowsANotificationForAnEnabledCategoryAndSkipsADisabledOne()
     {
         using var secrets = new InMemoryApplicationSecretStore();
@@ -270,7 +381,7 @@ public sealed class NotificationDispatcherTests
         using var alarmListener = new RustPlusAlarmNotificationListener(
             new NoopAlarmListenerProvider(), secrets, servers, liveSession, PollingOptions());
         var notifier = new RecordingNotifier();
-        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier);
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier, TimeProvider.System);
 
         liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.ConnectionEstablished, "Connected");
         liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.MarkerAppeared, "Cargo ship appeared");
@@ -290,7 +401,7 @@ public sealed class NotificationDispatcherTests
         using var alarmListener = new RustPlusAlarmNotificationListener(
             new NoopAlarmListenerProvider(), secrets, servers, liveSession, PollingOptions());
         var notifier = new RecordingNotifier();
-        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier);
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier, TimeProvider.System);
 
         liveSession.RecordExternalEvent(Guid.NewGuid(), CompanionEventKind.ConnectionEstablished, "Connected");
 
@@ -309,7 +420,7 @@ public sealed class NotificationDispatcherTests
         await using var alarmListener = new RustPlusAlarmNotificationListener(
             provider, secrets, servers, liveSession, PollingOptions());
         var notifier = new RecordingNotifier();
-        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier);
+        using var dispatcher = new NotificationDispatcher(liveSession, alarmListener, preferencesStore, notifier, TimeProvider.System);
 
         alarmListener.Load();
         await provider.WaitForConnectionAsync();

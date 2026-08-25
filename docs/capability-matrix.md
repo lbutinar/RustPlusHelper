@@ -45,3 +45,5 @@ Classifications describe the primary verified source.
 | Server-wide kill feed and raid events | **REQUIRES RUST SERVER ACCESS** | Plugin/log/server source |
 | Historical positions/events | **AVAILABLE DIRECTLY THROUGH RUST+** | Application records successive direct snapshots locally |
 | Existing authoritative history archive | **REQUIRES ADDITIONAL DATA SOURCE** | Unofficial history API is deferred |
+| Wipe schedule / next-wipe date | **NOT CURRENTLY POSSIBLE** | Rust+ reports only the last wipe timestamp, never a schedule; any countdown is a user-entered estimate, always labelled as such |
+| Personal map pins | **REQUIRES ADDITIONAL DATA SOURCE** | Entirely user-entered and local; Rust+ has no concept of personal map annotations |

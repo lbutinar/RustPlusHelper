@@ -1,3 +1,5 @@
+@inject RustPlusHelper.Desktop.Services.IEventExportFilePicker ExportFilePicker
+
 <section class="content-page">
     <div class="page-heading">
         <div>
@@ -5,7 +7,18 @@
             <h1>Events</h1>
             <p>Transport changes and team/marker transitions are derived by the centralized background monitor.</p>
         </div>
+        <button type="button"
+                class="ghost-button"
+                data-testid="export-events"
+                disabled="@_isExporting"
+                @onclick="ExportAsync">
+            @(_isExporting ? "Exporting…" : "Export as CSV")
+        </button>
     </div>
+    @if (_exportMessage is not null)
+    {
+        <p class="events-export-message" data-testid="export-events-result">@_exportMessage</p>
+    }
 
     <div class="surface-card event-page-card">
         <div class="timeline-row">
@@ -37,6 +50,39 @@
 @code {
     [Parameter, EditorRequired]
     public MapDashboardState State { get; set; } = MapDashboardState.NotStarted;
+
+    private bool _isExporting;
+    private string? _exportMessage;
+
+    private async Task ExportAsync()
+    {
+        _isExporting = true;
+        _exportMessage = null;
+        try
+        {
+            var fileName = $"rustplushelper-events-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.csv";
+            var path = await ExportFilePicker.PickSaveLocationAsync(fileName);
+            if (path is null)
+            {
+                return;
+            }
+
+            await using (var stream = System.IO.File.Create(path))
+            {
+                RustPlusHelper.Application.RustPlus.CompanionEventCsvExporter.Write(State.Events, stream);
+            }
+
+            _exportMessage = $"Saved to {path}";
+        }
+        catch (Exception ex)
+        {
+            _exportMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
 
     private static string EventDescription(CompanionEventKind kind) => kind switch
     {

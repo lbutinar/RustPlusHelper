@@ -108,6 +108,38 @@
                 }
             </div>
         }
+
+        @if (PairedEntities.Any(entity => entity.Kind == PairedEntityKind.Alarm))
+        {
+            <div class="surface-card">
+                <div class="panel-heading"><h2>Recent alarm activity</h2></div>
+                @if (RecentAlarmTriggers.Count == 0)
+                {
+                    <div class="empty-inline-state">No alarm has triggered yet on this server.</div>
+                }
+                else
+                {
+                    <p class="alarm-history-note">
+                        Every paired alarm's triggers, in one list — Rust+ does not identify which specific
+                        alarm triggered beyond its in-game name shown below.
+                    </p>
+                    <div class="chat-list">
+                        @foreach (var item in RecentAlarmTriggers)
+                        {
+                            <article class="chat-message">
+                                <div>
+                                    <header><strong>@item.Title</strong><time>@item.OccurredAtUtc.ToLocalTime().ToString("MMM d, HH:mm")</time></header>
+                                    @if (!string.IsNullOrWhiteSpace(item.Detail))
+                                    {
+                                        <p>@item.Detail</p>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </div>
+        }
     }
 
     <div class="page-heading camera-heading">
@@ -283,6 +315,12 @@
 
     private IReadOnlyList<PairedEntity> PairedEntities =>
         ServerId is { } serverId ? PairedEntityRepository.GetAll(serverId) : [];
+
+    // Not linked to a specific paired alarm: Rust+'s alarm-triggered push carries only the in-game
+    // alarm name, never an entity ID, so this shows every alarm's triggers for the server together
+    // rather than a per-alarm history that could silently mismatch a renamed or same-named alarm.
+    private IReadOnlyList<CompanionEvent> RecentAlarmTriggers =>
+        State.Events.Where(item => item.Kind == CompanionEventKind.AlarmTriggered).Take(10).ToArray();
 
     protected override void OnInitialized()
     {

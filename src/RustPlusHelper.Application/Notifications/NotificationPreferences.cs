@@ -11,7 +11,14 @@ public sealed record NotificationPreferences(
     bool VendingEvents = true,
     bool AlarmEvents = true,
     /// <summary>Global, not per-category: whether a shown notification also plays a sound.</summary>
-    bool PlaySound = true)
+    bool PlaySound = true,
+    /// <summary>Global: while enabled and the local time-of-day falls in
+    /// [<see cref="QuietHoursStart"/>, <see cref="QuietHoursEnd"/>), no toast/sound is shown for any
+    /// category — the event is still recorded to history exactly as it always is; this only gates the
+    /// desktop notification.</summary>
+    bool QuietHoursEnabled = false,
+    TimeOnly QuietHoursStart = default,
+    TimeOnly QuietHoursEnd = default)
 {
     public static NotificationPreferences Default { get; } = new();
 
@@ -37,6 +44,21 @@ public sealed record NotificationPreferences(
         CompanionEventKind.AlarmTriggered => AlarmEvents,
         _ => true
     };
+
+    /// <summary>Whether <paramref name="localTimeOfDay"/> falls inside the configured quiet-hours
+    /// window. A start after end is treated as a window that wraps past midnight (e.g. 22:00-07:00)
+    /// rather than an empty/invalid range.</summary>
+    public bool IsQuietHours(TimeOnly localTimeOfDay)
+    {
+        if (!QuietHoursEnabled)
+        {
+            return false;
+        }
+
+        return QuietHoursStart <= QuietHoursEnd
+            ? localTimeOfDay >= QuietHoursStart && localTimeOfDay < QuietHoursEnd
+            : localTimeOfDay >= QuietHoursStart || localTimeOfDay < QuietHoursEnd;
+    }
 }
 
 /// <summary>Persists <see cref="NotificationPreferences"/> as a single packed byte via the existing
@@ -56,6 +78,13 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
     /// users who saved preferences before this feature shipped, instead of silently muting them.</summary>
     private const byte MuteSoundFlag = 0x20;
 
+    private const byte QuietHoursFlag = 0x40;
+
+    /// <summary>Bytes 1-4 (start/end minutes-of-day as little-endian ushorts) are absent from a value
+    /// saved before quiet hours existed, or from any legacy single-byte value — both are read back as
+    /// disabled quiet hours starting at midnight, never a crash or a nonsensical window.</summary>
+    private const int QuietHoursByteLength = 5;
+
     public NotificationPreferences Get()
     {
         var stored = secrets.Retrieve(ApplicationSecretKind.NotificationPreferences);
@@ -65,13 +94,17 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
         }
 
         var flags = stored[0];
+        var hasQuietHoursWindow = stored.Length >= QuietHoursByteLength;
         return new NotificationPreferences(
             (flags & ConnectionFlag) != 0,
             (flags & TeamFlag) != 0,
             (flags & MarkerFlag) != 0,
             (flags & VendingFlag) != 0,
             (flags & AlarmFlag) != 0,
-            (flags & MuteSoundFlag) == 0);
+            (flags & MuteSoundFlag) == 0,
+            (flags & QuietHoursFlag) != 0,
+            hasQuietHoursWindow ? MinutesToTimeOfDay(BitConverter.ToUInt16(stored, 1)) : default,
+            hasQuietHoursWindow ? MinutesToTimeOfDay(BitConverter.ToUInt16(stored, 3)) : default);
     }
 
     public void Save(NotificationPreferences preferences)
@@ -107,6 +140,21 @@ public sealed class NotificationPreferencesStore(IApplicationSecretStore secrets
             flags |= MuteSoundFlag;
         }
 
-        secrets.Store(ApplicationSecretKind.NotificationPreferences, [flags]);
+        if (preferences.QuietHoursEnabled)
+        {
+            flags |= QuietHoursFlag;
+        }
+
+        var bytes = new byte[QuietHoursByteLength];
+        bytes[0] = flags;
+        BitConverter.GetBytes(TimeOfDayToMinutes(preferences.QuietHoursStart)).CopyTo(bytes, 1);
+        BitConverter.GetBytes(TimeOfDayToMinutes(preferences.QuietHoursEnd)).CopyTo(bytes, 3);
+        secrets.Store(ApplicationSecretKind.NotificationPreferences, bytes);
     }
+
+    private static TimeOnly MinutesToTimeOfDay(ushort minutesSinceMidnight) =>
+        new(minutesSinceMidnight / 60, minutesSinceMidnight % 60);
+
+    private static ushort TimeOfDayToMinutes(TimeOnly timeOfDay) =>
+        (ushort)((timeOfDay.Hour * 60) + timeOfDay.Minute);
 }

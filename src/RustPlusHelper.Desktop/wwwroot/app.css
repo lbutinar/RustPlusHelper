@@ -774,6 +774,7 @@ button {
 .layer-symbol.deathHistory { border-color: #ff5a36; box-shadow: 0 0 7px rgba(255, 90, 54, 0.55); }
 .layer-symbol.smartDevices { border-color: #7fc8b2; }
 .layer-symbol.cameras { border-color: #ac91d8; }
+.layer-symbol.personalPins { border-color: #ffd166; }
 
 .layer-copy {
     display: flex;
@@ -848,6 +849,73 @@ button {
     color: var(--muted);
     font-size: 9px;
     line-height: 1.5;
+}
+
+.personal-pins-panel {
+    margin: 0 16px 18px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 14px;
+}
+
+.personal-pins-panel h2 {
+    font-size: 13px;
+}
+
+.pin-add-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.pin-add-form label {
+    display: grid;
+    gap: 5px;
+}
+
+.pin-add-form span {
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.pin-add-form input {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text);
+}
+
+.pin-error {
+    margin-top: 8px;
+    color: var(--red);
+    font-size: 10px;
+}
+
+.pin-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.pin-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: var(--panel-2);
+}
+
+.pin-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
 }
 
 .event-strip {
@@ -1340,6 +1408,13 @@ button {
     font-size: 9px;
 }
 
+.alarm-history-note {
+    margin: 0;
+    padding: 10px 18px 0;
+    color: var(--muted-2);
+    font-size: 9px;
+}
+
 .camera-controls {
     display: flex;
     flex-wrap: wrap;
@@ -1557,6 +1632,45 @@ button {
 .server-transport {
     display: block;
     color: var(--muted-2);
+    font-size: 8px;
+}
+
+.server-status-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.server-status-summary span {
+    color: var(--muted-2);
+    font-size: 8px;
+}
+
+.server-status-summary .muted-note {
+    font-style: italic;
+}
+
+.wipe-cycle-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.wipe-cycle-picker span {
+    color: var(--muted-2);
+    font-size: 8px;
+}
+
+.wipe-cycle-picker select {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 3px 6px;
+    background: #111513;
+    color: var(--text);
+    font: inherit;
     font-size: 8px;
 }
 
@@ -1940,6 +2054,21 @@ button {
     opacity: 0.5;
 }
 
+.quiet-hours-window {
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.quiet-hours-window input[type="time"] {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #111513;
+    color: var(--text);
+    font: inherit;
+    font-size: 10px;
+}
+
 .setting-value.status-ok {
     border-color: rgba(94, 173, 122, 0.32);
     background: rgba(94, 173, 122, 0.09);
@@ -1952,7 +2081,8 @@ button {
     color: #ec8f89;
 }
 
-.diagnostics-export-message {
+.diagnostics-export-message,
+.events-export-message {
     margin: 0 24px 18px;
     color: var(--muted);
     font-size: 10px;
@@ -2048,6 +2178,7 @@ button {
 .marker-radius,
 .marker-travelling-vendor { background: #8b392f; border-color: #f3988e; }
 .marker-unknown { background: #4f4e4a; border-color: #bebbb1; }
+.marker-personal-pin { background: #6a4a1d; border-color: #ffd166; }
 
 .rust-marker-wrap.offline {
     filter: grayscale(0.85);

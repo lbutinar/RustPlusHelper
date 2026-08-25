@@ -185,6 +185,60 @@
                 </div>
             }
 
+            @if (State.ServerId is not null)
+            {
+                <div class="personal-pins-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="eyebrow">MANUAL</span>
+                            <h2>Personal pins</h2>
+                        </div>
+                    </div>
+                    <form class="pin-add-form" @onsubmit="AddPin" @onsubmit:preventDefault>
+                        <label>
+                            <span>GRID</span>
+                            <input data-testid="pin-grid-input"
+                                   placeholder="e.g. H14"
+                                   maxlength="6"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   @bind="_pinGridQuery"
+                                   @bind:event="oninput" />
+                        </label>
+                        <label>
+                            <span>NOTE</span>
+                            <input data-testid="pin-note-input"
+                                   placeholder="Loot stash"
+                                   maxlength="200"
+                                   @bind="_pinNote"
+                                   @bind:event="oninput" />
+                        </label>
+                        <button type="submit" data-testid="add-pin" class="primary-button">Add pin</button>
+                    </form>
+                    @if (_pinError is not null)
+                    {
+                        <div class="pin-error" data-testid="pin-error" role="alert">@_pinError</div>
+                    }
+                    @if (State.PersonalPins is { Count: > 0 } pins)
+                    {
+                        <div class="pin-list">
+                            @foreach (var pin in pins)
+                            {
+                                <div class="pin-row" @key="pin.Id">
+                                    <span title="@pin.Note">@pin.Note</span>
+                                    <button type="button"
+                                            class="ghost-button"
+                                            data-testid="remove-pin"
+                                            @onclick="() => RemovePin(pin.Id)">
+                                        Remove
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
             <div class="source-note">
                 <strong>Truthful layers</strong>
                 <p>Unavailable data stays disabled. Nothing on this map is inferred without a source label.</p>
@@ -251,11 +305,20 @@
     [Parameter]
     public EventCallback OnTopologyImportRequested { get; set; }
 
+    [Parameter]
+    public EventCallback<AddPersonalPinRequest> OnPersonalPinAdded { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnPersonalPinRemoved { get; set; }
+
     private MapFocusRequest? _lastExternalFocusRequest;
     private MapFocusRequest? _effectiveFocusRequest;
     private long _focusSequence;
     private string _gridQuery = string.Empty;
     private string? _gridSearchError;
+    private string _pinGridQuery = string.Empty;
+    private string _pinNote = string.Empty;
+    private string? _pinError;
 
     protected override void OnParametersSet()
     {
@@ -290,6 +353,34 @@
             $"pixel:{pixelX.ToString(System.Globalization.CultureInfo.InvariantCulture)},{pixelY.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
             ++_focusSequence);
     }
+
+    private async Task AddPin()
+    {
+        _pinError = null;
+        if (State.Server?.MapSize is not { } mapSize)
+        {
+            _pinError = "The map hasn't finished loading yet.";
+            return;
+        }
+
+        if (!MapGrid.TryParseCellWorldCenter(_pinGridQuery, mapSize, out var worldX, out var worldY))
+        {
+            _pinError = $"\"{_pinGridQuery}\" isn't a valid grid reference for this map.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_pinNote))
+        {
+            _pinError = "Enter a short note for this pin.";
+            return;
+        }
+
+        await OnPersonalPinAdded.InvokeAsync(new AddPersonalPinRequest(worldX, worldY, _pinNote.Trim()));
+        _pinGridQuery = string.Empty;
+        _pinNote = string.Empty;
+    }
+
+    private Task RemovePin(Guid id) => OnPersonalPinRemoved.InvokeAsync(id);
 
     private int VisibleLayerCount => State.Layers.Count(layer => layer.IsVisible && layer.IsAvailable);
 

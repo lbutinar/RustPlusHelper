@@ -61,6 +61,43 @@ public sealed class MapDashboardServiceTests
     }
 
     [Fact]
+    public async Task AddedPersonalPinsPersistAndRenderAsOverlayItems()
+    {
+        var repository = new InMemoryServerRepository();
+        using var secrets = new InMemorySecretStore();
+        var servers = new ServerManager(repository, TimeProvider.System, secrets);
+        var profile = servers.SaveWithPairing(
+            new ServerProfileDraft(null, "Saved server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "123456789");
+        var factory = new CountingFakeClientFactory();
+        using var connections = new RustPlusConnectionManager(servers, secrets, factory, TimeProvider.System);
+        await using var liveSession = CreateLiveSession(servers, secrets, factory);
+        var personalPins = new InMemoryPersonalMapPinRepository();
+        await using var service = CreateService(
+            servers, connections, liveSession, new InMemoryMapCacheRepository(), personalPins);
+        await service.InitializeAsync();
+        Assert.Equal(profile.Id, service.Current.ServerId);
+
+        service.AddPersonalPin(1200, 2400, "Loot stash");
+
+        var pin = Assert.Single(service.Current.PersonalPins!);
+        Assert.Equal("Loot stash", pin.Note);
+        Assert.Equal(profile.Id, pin.ServerId);
+        Assert.Single(personalPins.GetAll(profile.Id));
+
+        var model = MapRenderModelFactory.Create(service.Current);
+        Assert.NotNull(model);
+        var item = Assert.Single(model.Items, item => item.Kind == "personal-pin");
+        Assert.Equal("Loot stash", item.Label);
+        Assert.True(model.LayerVisibility["personalPins"]);
+
+        service.RemovePersonalPin(pin.Id);
+
+        Assert.Empty(service.Current.PersonalPins!);
+        Assert.Empty(personalPins.GetAll(profile.Id));
+    }
+
+    [Fact]
     public async Task AggregatesRecordedTeamDeathsIntoGridHeatSpots()
     {
         await using var fixture = CreateFixture();
@@ -310,6 +347,7 @@ public sealed class MapDashboardServiceTests
             liveSession,
             new InMemoryMapCacheRepository(),
             CreateTopologyManager(),
+            new InMemoryPersonalMapPinRepository(),
             TimeProvider.System);
         return new DashboardFixture(service, connections, liveSession, secrets);
     }
@@ -318,7 +356,8 @@ public sealed class MapDashboardServiceTests
         ServerManager servers,
         RustPlusConnectionManager connections,
         RustPlusLiveSessionManager liveSession,
-        IMapCacheRepository cache) =>
+        IMapCacheRepository cache,
+        IPersonalMapPinRepository? personalPins = null) =>
         new(
             new FakeRustPlusClient(),
             new RustPlusConnectionOptions("fake.invalid", 28082, 1, 2),
@@ -327,6 +366,7 @@ public sealed class MapDashboardServiceTests
             liveSession,
             cache,
             CreateTopologyManager(),
+            personalPins ?? new InMemoryPersonalMapPinRepository(),
             TimeProvider.System);
 
     private static MapTopologyManager CreateTopologyManager() =>

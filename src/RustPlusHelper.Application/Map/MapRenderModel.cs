@@ -216,6 +216,22 @@ public static class MapRenderModelFactory
                 gridDeaths.Max(item => item.Event.OccurredAtUtc)));
         }
 
+        foreach (var pin in state.PersonalPins ?? [])
+        {
+            items.Add(CreateItem(
+                $"personal-pin:{pin.Id}",
+                MapLayerKind.PersonalPins,
+                "personal-pin",
+                pin.Note,
+                "📍",
+                pin.WorldX,
+                pin.WorldY,
+                mapSize,
+                width,
+                height,
+                margin));
+        }
+
         foreach (var marker in state.Markers?.Markers ?? [])
         {
             if (marker.X is not { } x || marker.Y is not { } y)
@@ -410,6 +426,7 @@ public static class MapRenderModelFactory
         MapLayerKind.MovementTrails => "movementTrails",
         MapLayerKind.SmartDevices => "smartDevices",
         MapLayerKind.Cameras => "cameras",
+        MapLayerKind.PersonalPins => "personalPins",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

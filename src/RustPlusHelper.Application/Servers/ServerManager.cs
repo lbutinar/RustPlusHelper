@@ -86,6 +86,24 @@ public sealed class ServerManager(
         return profile;
     }
 
+    /// <summary>Updates only the wipe-cycle estimate — a display convenience the user sets
+    /// themselves, unrelated to the pairing identity <see cref="Save"/> otherwise manages.</summary>
+    public ServerProfile SetWipeCycle(Guid serverId, WipeCycle cycle)
+    {
+        ServerProfile profile;
+        lock (_stateLock)
+        {
+            var existing = Profiles.FirstOrDefault(candidate => candidate.Id == serverId) ?? repository.GetById(serverId)
+                ?? throw new ArgumentException("Unknown server.", nameof(serverId));
+            profile = existing with { WipeCycle = cycle, UpdatedUtc = timeProvider.GetUtcNow() };
+            repository.Upsert(profile);
+            SetProfiles(repository.GetAll());
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+        return profile;
+    }
+
     public ServerProfile SaveWithPairing(ServerProfileDraft draft, ReadOnlySpan<char> playerToken)
     {
         ArgumentNullException.ThrowIfNull(draft);

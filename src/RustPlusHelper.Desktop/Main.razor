@@ -80,7 +80,9 @@
                              OnLayerChanged="HandleLayerChanged"
                              OnRefreshRequested="RefreshMap"
                              OnLiveDataRefreshRequested="RefreshLiveData"
-                             OnTopologyImportRequested="ImportTopology" />
+                             OnTopologyImportRequested="ImportTopology"
+                             OnPersonalPinAdded="AddPersonalPin"
+                             OnPersonalPinRemoved="RemovePersonalPin" />
                     break;
                 case AppSection.Team:
                     <TeamPage State="State" />
@@ -170,6 +172,11 @@
 
     private void HandleLayerChanged(LayerVisibilityChange change) =>
         Dashboard.SetLayerVisibility(change.Kind, change.IsVisible);
+
+    private void AddPersonalPin(AddPersonalPinRequest request) =>
+        Dashboard.AddPersonalPin(request.WorldX, request.WorldY, request.Note);
+
+    private void RemovePersonalPin(Guid id) => Dashboard.RemovePersonalPin(id);
 
     private async Task RefreshMap() => await Dashboard.RefreshSelectedServerAsync();
 

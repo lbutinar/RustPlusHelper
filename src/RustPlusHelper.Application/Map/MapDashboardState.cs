@@ -41,7 +41,8 @@ public enum MapLayerKind
     DeathHistory,
     MovementTrails,
     SmartDevices,
-    Cameras
+    Cameras,
+    PersonalPins
 }
 
 public sealed record MapLayerState(
@@ -76,7 +77,10 @@ public sealed record MapDashboardState(
     string? TopologyError = null,
     // In-memory-only recent positions per currently-online team member, copied from
     // RustPlusLiveSessionState.MovementTrails. Null and an empty dictionary are equivalent.
-    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>>? MovementTrails = null)
+    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>>? MovementTrails = null,
+    // Loaded from IPersonalMapPinRepository for the current ServerId. Null and an empty list are
+    // equivalent.
+    IReadOnlyList<PersonalMapPin>? PersonalPins = null)
 {
     public static MapDashboardState NotStarted { get; } = new(
         DashboardConnectionState.NotStarted,
@@ -118,7 +122,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.Monuments, "Monuments", true, true, "DIRECT"),
         new(MapLayerKind.Events, "World events", true, true, "DIRECT + DIFF"),
         new(MapLayerKind.DeathHistory, "Team death hotspots", false, false, "DERIVED · LOCAL HISTORY", "No team death positions have been recorded yet."),
-        new(MapLayerKind.MovementTrails, "Movement trails", false, false, "DERIVED · SESSION ONLY", "No recent team movement has been recorded yet."),
+        new(MapLayerKind.MovementTrails, "Movement trails", false, false, "DERIVED · LOCAL HISTORY", "No recent team movement has been recorded yet."),
         new(
             MapLayerKind.SmartDevices,
             "Smart devices",
@@ -132,7 +136,8 @@ public sealed record MapDashboardState(
             false,
             false,
             "EXTERNAL",
-            "Camera codes and positions require user or catalogue data.")
+            "Camera codes and positions require user or catalogue data."),
+        new(MapLayerKind.PersonalPins, "Personal pins", true, true, "MANUAL")
     ];
 
     public static IReadOnlyList<MapLayerState> CreateLiveMapLayers(
@@ -247,7 +252,7 @@ public sealed record MapDashboardState(
             "Movement trails",
             movementTrailsAvailable,
             movementTrailsAvailable,
-            "DERIVED · SESSION ONLY",
+            "DERIVED · LOCAL HISTORY",
             movementTrailsAvailable ? null : "No recent team movement has been recorded yet."),
         new(
             MapLayerKind.SmartDevices,
@@ -262,7 +267,8 @@ public sealed record MapDashboardState(
             false,
             false,
             "EXTERNAL",
-            "Camera codes and positions require user or catalogue data.")
+            "Camera codes and positions require user or catalogue data."),
+        new(MapLayerKind.PersonalPins, "Personal pins", true, true, "MANUAL")
     ];
 
     private static MapLayerState PathLayer(
