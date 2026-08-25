@@ -14,7 +14,8 @@ public static class VerificationArtifactWriter
         VerificationReport report,
         byte[] mapJpeg,
         IReadOnlyCollection<string> forbiddenSecrets,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? alignmentHtml = null)
     {
         ArgumentNullException.ThrowIfNull(report);
         ArgumentNullException.ThrowIfNull(mapJpeg);
@@ -39,6 +40,14 @@ public static class VerificationArtifactWriter
             await File.WriteAllBytesAsync(
                 Path.Combine(outputDirectory, "map.jpg"),
                 mapJpeg,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (alignmentHtml is not null)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "alignment.html"),
+                alignmentHtml,
                 cancellationToken).ConfigureAwait(false);
         }
 

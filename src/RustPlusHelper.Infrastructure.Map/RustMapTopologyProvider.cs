@@ -788,6 +788,16 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
         return default;
     }
 
+    /// <summary>
+    /// Ore/rock potential and sulfur potential, each backed by a specific documented Facepunch
+    /// Topology flag (bit indices follow the same reference topology enum ordering already used by
+    /// <see cref="TopologyColor"/>, see docs/protocol-evidence.md): Cliffside(22) "spawns ore nodes";
+    /// Decor(9)/Clutter(24) "spawn harvestable ores and decorative rocks"; Swamp(13) "spawns swamp
+    /// trees and sulfur pickups". Biome/splat are deliberately not used here — Facepunch documents no
+    /// confirmed biome-to-resource-type rule, and the .map format has no separate splat byte-map layer
+    /// (only an unrelated per-path Splat integer), so adding either would assert precision the source
+    /// data does not support.
+    /// </summary>
     private static Rgba ResourceColor(uint value)
     {
         if (HasAny(value, 22))
@@ -795,8 +805,13 @@ public sealed class RustMapTopologyProvider : IMapTopologyProvider
             return new Rgba(255, 116, 38, 175);
         }
 
-        return HasAny(value, 9, 24)
-            ? new Rgba(255, 202, 58, 90)
+        if (HasAny(value, 9, 24))
+        {
+            return new Rgba(255, 202, 58, 90);
+        }
+
+        return HasAny(value, 13)
+            ? new Rgba(198, 209, 71, 140)
             : default;
     }
 

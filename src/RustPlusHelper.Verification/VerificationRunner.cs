@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using RustPlusHelper.Application.Map;
 using RustPlusHelper.Application.RustPlus;
 
 namespace RustPlusHelper.Verification;
@@ -20,6 +21,7 @@ public sealed class VerificationRunner(IRustPlusClient client)
         MarkerVerificationSummary? markerSummary = null;
         CameraVerificationSummary? cameraSummary = null;
         byte[] mapJpeg = [];
+        string? alignmentHtml = null;
 
         await client.ConnectAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -91,6 +93,12 @@ public sealed class VerificationRunner(IRustPlusClient client)
                     markerData.Markers.Sum(marker => marker.VendingOrders?.Count ?? 0));
             }
 
+            if (server.Data is { MapSize: { } mapSize } && map.Data is { Width: { } width, Height: { } height, OceanMargin: { } oceanMargin })
+            {
+                var alignmentMarkers = MapAlignmentReport.BuildMarkers(mapSize, width, height, oceanMargin, map.Data.Monuments);
+                alignmentHtml = MapAlignmentReport.BuildHtml("map.jpg", width, height, alignmentMarkers);
+            }
+
             if (cameraCode is not null)
             {
                 var camera = await client.SubscribeToCameraAsync(cameraCode, cancellationToken).ConfigureAwait(false);
@@ -127,7 +135,7 @@ public sealed class VerificationRunner(IRustPlusClient client)
             markerSummary,
             cameraSummary);
 
-        return new VerificationRunResult(report, mapJpeg);
+        return new VerificationRunResult(report, mapJpeg, alignmentHtml);
     }
 
     private static VerificationRequestStatus Status<T>(RustPlusResult<T> result) => result.IsSuccess

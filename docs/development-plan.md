@@ -94,6 +94,14 @@ separate focus mechanism.
 **Done:** known positions align with the official app and cached map reopens offline. Cache reopening
 is automated; live visual alignment is still pending.
 
+A `MapAlignmentReport` (`RustPlusHelper.Application.Map`) was added on 2026-08-25, wired into the
+Phase 0 live verification command (`src/RustPlusHelper.Verification`). It overlays each monument at
+the pixel produced by the app's own `MapProjection`/`MapGrid` math, using the monument's own
+Rust+-reported world position — the same ground truth as the JPEG itself, so the check needs no
+official Rust+ app, only a real paired server. Running the live command now also writes
+`alignment.html`; opening it and confirming each labelled monument sits on its visible structure in
+the satellite image is the concrete remaining step, and still requires a human with a paired server.
+
 ## Phase 4.5 — External map topology
 
 **Goal:** Add useful map data that Rust+ does not expose without contaminating the Rust+ adapter.
@@ -112,8 +120,15 @@ raster/polyline rendering, Windows fallback file picker.
 matching therefore never uses recency or size alone. Format drift and large/corrupt files are bounded
 and tested with synthetic containers/cache layouts plus a manual read-only current-game cache smoke
 test. Exact node locations remain impossible without server access. Build-snapshot prefab no-build
-zones are rendered with explicit source/mismatch warnings; higher-fidelity biome/splat spawn-rule
-evaluation remains.
+zones are rendered with explicit source/mismatch warnings.
+
+The "Ore potential" layer was renamed to "Resource potential" and extended on 2026-08-25 with a
+sulfur tier (Swamp topology), alongside its existing two ore/rock tiers (Cliffside; Decor/Clutter) —
+see `docs/protocol-evidence.md` for the specific Facepunch Topology wiki sentence backing each tier.
+Investigating the originally planned "biome/splat spawn-rule evaluation" found that Facepunch documents
+no confirmed biome-to-resource-type rule, and the `.map` format has no separate splat byte-map layer
+(only an unrelated per-path `Splat` integer) — so this stretch item is closed within the evidence the
+source format actually provides, rather than left open pending data that does not exist.
 
 **Done for this slice:** a definite size mismatch stores nothing; successful imports survive restart;
 source paths are not retained; source classification remains visible in the layer panel; derived

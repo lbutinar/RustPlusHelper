@@ -120,7 +120,15 @@ and keeps only display-ready derivatives. Automatic discovery first correlates t
 and world name in Rust's local `output_log.txt`; documented `MapType.Size.Seed.map` matching is a
 secondary path. Current client cache names may append build/hash/checksum segments and may not expose
 the Rust+ seed. Rust+ exposes no map checksum, so same-size-only candidates are never auto-selected.
-The ore overlay is topology potential, not exact live node state.
+The resource-potential overlay is topology potential, not exact live node state. It has two ore/rock
+tiers and one sulfur tier, each backed by a specific documented [Facepunch Topology](https://wiki.facepunch.com/rust/Topology)
+sentence: Cliffside "spawns ore nodes" (high), Decor/Clutter "spawn harvestable ores and decorative
+rocks" (moderate), and Swamp "spawns swamp trees and sulfur pickups" (sulfur). Facepunch documents no
+confirmed biome-to-resource-type rule, and the `.map` format has no separate splat byte-map layer —
+`PathData.Splat` is an unrelated per-path integer, not a per-cell ground-texture layer — so biome and
+splat are deliberately not used as resource-type inputs; doing so would assert precision the source
+data does not support. The already-decoded biome layer remains available as its own separate,
+visually distinct layer for context.
 
 The terrain-slope layer is derived locally from the `.map` `height` grid. Signed 16-bit samples are
 converted to Unity world metres using the independently reviewed Rust Map Parser 0.4.0 constants,
@@ -415,7 +423,7 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Question | Current position | Required evidence |
 |---|---|---|
 | Facepunch secure proxy reliability | Selected live server returned HTTP 418 before WebSocket upgrade; current proxy viability is unconfirmed | Successful live check on another server or upstream clarification |
-| Grid visual alignment | Current Facepunch formula is implemented; exact JPEG alignment still needs a live golden comparison | Compare several positions with the official Rust+ app |
+| Grid visual alignment | Current Facepunch formula is implemented; a `MapAlignmentReport`-generated `alignment.html` (see the live-verification command) now overlays each monument's own Rust+-reported position onto the Rust+ map JPEG for a human visual check; no live run against a real paired server has confirmed it yet | Run the live verification command against a real paired server and open `alignment.html` |
 | Pairing-token lifetime/rejection codes | Unofficial implementations document behavior; may change | Controlled expired/re-pair test |
 | Unknown marker evolution | Expected because newer travelling-vendor fields already demonstrate drift | Preserve unknown type and capture future fixture |
 | Companion history endpoint | Documented by rustplus.js but unofficial | Defer; local history is authoritative for the app |

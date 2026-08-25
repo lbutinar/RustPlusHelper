@@ -90,6 +90,20 @@ public sealed class RustMapTopologyProviderTests
     }
 
     [Fact]
+    public async Task ColorsSwampTopologyAsSulfurPotentialDistinctFromOre()
+    {
+        using var mapFile = TestMapFile.Create(topologyBits: [1u << 13, 1u << 22, 1u << 9, 0]);
+        var provider = new RustMapTopologyProvider();
+
+        var result = await provider.ReadAsync(mapFile.Path);
+
+        Assert.NotNull(result.ResourcePotentialRaster);
+        Assert.True(PixelCount(result.ResourcePotentialRaster, 198, 209, 71, 140) > 0);
+        Assert.True(PixelCount(result.ResourcePotentialRaster, 255, 116, 38, 175) > 0);
+        Assert.True(PixelCount(result.ResourcePotentialRaster, 255, 202, 58, 90) > 0);
+    }
+
+    [Fact]
     public async Task UsesSerializedWaterSurfaceForDepthAndBuildPlanning()
     {
         using var mapFile = TestMapFile.Create(
@@ -133,7 +147,8 @@ public sealed class RustMapTopologyProviderTests
         public static TestMapFile Create(
             int serializationVersion = 10,
             short[]? heightSamples = null,
-            short[]? waterSamples = null)
+            short[]? waterSamples = null,
+            uint[]? topologyBits = null)
         {
             var directory = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
@@ -149,7 +164,7 @@ public sealed class RustMapTopologyProviderTests
 
             if (serializationVersion == 10)
             {
-                var world = CreateWorld(heightSamples, waterSamples);
+                var world = CreateWorld(heightSamples, waterSamples, topologyBits);
                 using var encoded = LZ4Legacy.Encode(file, leaveOpen: true);
                 Serializer.Serialize(encoded, world);
             }
@@ -159,13 +174,14 @@ public sealed class RustMapTopologyProviderTests
 
         public void Dispose() => Directory.Delete(System.IO.Path.GetDirectoryName(Path)!, recursive: true);
 
-        private static TestWorldData CreateWorld(short[]? heightSamples, short[]? waterSamples)
+        private static TestWorldData CreateWorld(short[]? heightSamples, short[]? waterSamples, uint[]? topologyBits)
         {
-            var topology = new byte[16];
-            BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(0, 4), 1u << 5);
-            BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(4, 4), 1u << 14);
-            BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(8, 4), 1u << 22);
-            BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(12, 4), 1u << 21);
+            var topologyValues = topologyBits ?? [1u << 5, 1u << 14, 1u << 22, 1u << 21];
+            var topology = new byte[topologyValues.Length * 4];
+            for (var index = 0; index < topologyValues.Length; index++)
+            {
+                BinaryPrimitives.WriteUInt32LittleEndian(topology.AsSpan(index * 4, 4), topologyValues[index]);
+            }
             var world = new TestWorldData
             {
                 Size = 4500,

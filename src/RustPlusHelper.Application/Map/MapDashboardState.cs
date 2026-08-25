@@ -103,7 +103,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.BuildPlanning, "Build planning", false, false, "DERIVED · MIXED EXTERNAL SOURCES", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Elevation, "Elevation + contours", false, false, "DERIVED FROM .MAP HEIGHTS", "Import the selected server's Rust .map file."),
         new(MapLayerKind.WaterDepth, "Water depth + shoreline", false, false, "DERIVED FROM .MAP TERRAIN/WATER", "Import the selected server's Rust .map file."),
-        new(MapLayerKind.ResourcePotential, "Ore potential", false, false, "DERIVED FROM .MAP", "Import a .map file; this never shows live nodes."),
+        new(MapLayerKind.ResourcePotential, "Resource potential", false, false, "DERIVED FROM .MAP", "Import a .map file; this never shows live nodes."),
         new(MapLayerKind.Roads, "Road paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Railways, "Rail paths", false, false, "EXTERNAL .MAP", "Import the selected server's Rust .map file."),
         new(MapLayerKind.Rivers, "River channels", false, false, "EXTERNAL .MAP WIDTHS", "Import the selected server's Rust .map file."),
@@ -181,12 +181,12 @@ public sealed record MapDashboardState(
             "Depth is serialized water height minus terrain height; local water-culling volumes are not represented."),
         new(
             MapLayerKind.ResourcePotential,
-            "Ore potential",
+            "Resource potential",
             false,
             topology?.Data.ResourcePotentialRaster is not null,
             topology?.Data.ResourcePotentialRaster is not null ? "DERIVED · NOT LIVE NODES" : "UNAVAILABLE",
             topology?.Data.ResourcePotentialRaster is not null
-                ? "Potential comes from topology only; exact spawned nodes require server access."
+                ? "Ore/rock and sulfur potential come from documented topology flags only; exact spawned nodes require server access."
                 : "Import a .map file; this never shows live nodes."),
         PathLayer(MapLayerKind.Roads, "Road paths", MapPathKind.Road, topology),
         PathLayer(MapLayerKind.Railways, "Rail paths", MapPathKind.Railway, topology),

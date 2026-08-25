@@ -60,12 +60,18 @@ public static class Program
                 command.UseLiveServer
                     ? [connection.PlayerToken.ToString(System.Globalization.CultureInfo.InvariantCulture)]
                     : [],
-                timeout.Token).ConfigureAwait(false);
+                timeout.Token,
+                result.AlignmentHtml).ConfigureAwait(false);
 
             Console.WriteLine($"Verification report: {Path.Combine(outputDirectory, "summary.json")}");
             if (result.MapJpeg.Length > 0)
             {
                 Console.WriteLine($"Map image: {Path.Combine(outputDirectory, "map.jpg")}");
+            }
+
+            if (result.AlignmentHtml is not null)
+            {
+                Console.WriteLine($"Map alignment check: {Path.Combine(outputDirectory, "alignment.html")}");
             }
 
             if (command.CameraCode is not null && result.Report.Requests.TryGetValue("camera", out var cameraStatus))

@@ -73,13 +73,24 @@ There is no automatic fallback from proxy to direct transport.
 The command writes:
 
 - `summary.json`: aggregate counts/status only;
-- `map.jpg`: server-provided map image when available.
+- `map.jpg`: server-provided map image when available;
+- `alignment.html`: a map-alignment check, when both server info and the map succeeded.
 
-Both remain under ignored `artifacts/`. Before sharing either file:
+All three remain under ignored `artifacts/`. Before sharing any of them:
 
 1. Confirm the summary has no endpoint, IDs, names, messages, or token.
 2. Decide whether the server map itself is acceptable to disclose.
 3. Never commit output merely because it is redacted automatically.
+
+## Map alignment check
+
+`alignment.html` overlays a labelled dot on `map.jpg` for every monument, at the pixel this app's own
+grid/projection math computes from that monument's own Rust+-reported world position — the same
+ground truth as the JPEG itself, so this check needs no official Rust+ app. Open it in a browser (it
+loads `map.jpg` from the same folder) and confirm each label sits on that monument's visible structure
+in the satellite image. A consistent offset in one direction across every monument would indicate a
+projection or grid regression; this is currently the outstanding step for Phase 4's live golden
+alignment (see `docs/development-plan.md`).
 
 ## Clearing user-secrets
 

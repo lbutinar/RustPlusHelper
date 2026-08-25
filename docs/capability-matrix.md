@@ -38,7 +38,7 @@ Classifications describe the primary verified source.
 | CCTV stream and supported input | **AVAILABLE DIRECTLY THROUGH RUST+** | Requires known camera code; ray stream is client-decoded via `RustPlusApi.Camera` |
 | CCTV discovery and map position | **REQUIRES ADDITIONAL DATA SOURCE** | No Rust+ discovery; user enters and nicknames a known code per server |
 | Exact live resource-node locations | **REQUIRES RUST SERVER ACCESS** | Dynamic spawned entities are not in Rust+ or static `.map` data |
-| Resource spawn potential | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from imported topology; biome/splat spawn-rule evaluation is still needed for higher fidelity |
+| Resource spawn potential | **REQUIRES ADDITIONAL DATA SOURCE** | Derived from imported topology only (ore/rock and sulfur tiers, each backed by a documented Facepunch Topology flag); no confirmed biome/splat resource rule exists to add |
 | Exact recycler locations | **REQUIRES ADDITIONAL DATA SOURCE** | Static catalogue or parsed server map |
 | Arbitrary world-entity enumeration | **NOT CURRENTLY POSSIBLE** | No verified generic entity request |
 | Server-wide kill feed and raid events | **REQUIRES RUST SERVER ACCESS** | Plugin/log/server source |

@@ -65,4 +65,4 @@ public sealed record VerificationReport(
     MarkerVerificationSummary? Markers,
     CameraVerificationSummary? Camera = null);
 
-public sealed record VerificationRunResult(VerificationReport Report, byte[] MapJpeg);
+public sealed record VerificationRunResult(VerificationReport Report, byte[] MapJpeg, string? AlignmentHtml = null);
