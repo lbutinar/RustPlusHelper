@@ -24,6 +24,7 @@
         "monuments",
         "events",
         "deathHistory",
+        "movementTrails",
         "smartDevices",
         "cameras"
     ];
@@ -272,7 +273,8 @@
         const styles = {
             roads: { color: "#d7a66b", weight: 2.2, opacity: 0.82 },
             railways: { color: "#202426", weight: 2.5, opacity: 0.9, dashArray: "5 4" },
-            rivers: { color: "#4ab6df", weight: 2.8, opacity: 0.9 }
+            rivers: { color: "#4ab6df", weight: 2.8, opacity: 0.9 },
+            movementTrails: { color: "#c77dff", weight: 2, opacity: 0.75, dashArray: "1 6" }
         };
         const points = polyline.points.map(point => [entry.height - point.pixelY, point.pixelX]);
         const line = L.polyline(points, {

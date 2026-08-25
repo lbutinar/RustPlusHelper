@@ -172,6 +172,7 @@ public sealed class MapDashboardService(
                 current,
                 current.Team is not null,
                 current.Markers is not null,
+                current.MovementTrails?.Count > 0,
                 result.Topology)
         });
     }
@@ -463,6 +464,7 @@ public sealed class MapDashboardService(
                     current,
                     current.Team is not null,
                     current.Markers is not null,
+                    current.MovementTrails?.Count > 0,
                     result.Topology ?? current.Topology)
             });
     }
@@ -539,7 +541,12 @@ public sealed class MapDashboardService(
             Team = team,
             Chat = chat,
             Markers = markers,
-            Layers = BuildLiveLayers(state, team is not null, markers is not null, state.Topology)
+            Layers = BuildLiveLayers(
+                state,
+                team is not null,
+                markers is not null,
+                state.MovementTrails?.Count > 0,
+                state.Topology)
         };
     }
 
@@ -610,6 +617,7 @@ public sealed class MapDashboardService(
         var team = preserveLiveState ? current.Team : null;
         var chat = preserveLiveState ? current.Chat : null;
         var markers = preserveLiveState ? current.Markers : null;
+        var movementTrailsAvailable = preserveLiveState && current.MovementTrails?.Count > 0;
         return new MapDashboardState(
             DashboardConnectionState.Ready,
             "Cached map · refreshing live data",
@@ -626,7 +634,7 @@ public sealed class MapDashboardService(
             chat,
             markers,
             preserveLiveState ? current.Events : [],
-            BuildLiveLayers(current, team is not null, markers is not null),
+            BuildLiveLayers(current, team is not null, markers is not null, movementTrailsAvailable),
             warning);
     }
 
@@ -726,6 +734,7 @@ public sealed class MapDashboardService(
             var team = live.Team ?? current.Team;
             var chat = live.Chat ?? current.Chat;
             var markers = live.Markers ?? current.Markers;
+            var movementTrails = live.MovementTrails ?? current.MovementTrails;
             return current with
             {
                 ConnectionLabel = live.Label,
@@ -733,6 +742,7 @@ public sealed class MapDashboardService(
                 Team = team,
                 Chat = chat,
                 Markers = markers,
+                MovementTrails = movementTrails,
                 LiveDataRetrievedAtUtc = live.LastRefreshUtc ?? current.LiveDataRetrievedAtUtc,
                 IsLiveDataRefreshing = live.Status is RustPlusLiveSessionStatus.Connecting
                     or RustPlusLiveSessionStatus.Reconnecting,
@@ -743,6 +753,7 @@ public sealed class MapDashboardService(
                     current with { Events = live.Events },
                     team is not null,
                     markers is not null,
+                    movementTrails?.Count > 0,
                     current.Topology)
             };
         });
@@ -777,6 +788,7 @@ public sealed class MapDashboardService(
         MapDashboardState previous,
         bool teamAvailable,
         bool markersAvailable,
+        bool movementTrailsAvailable,
         SavedMapTopology? topology = null)
     {
         var deathHistoryAvailable = previous.Events.Any(item =>
@@ -788,6 +800,7 @@ public sealed class MapDashboardService(
             teamAvailable,
             markersAvailable,
             deathHistoryAvailable,
+            movementTrailsAvailable,
             topology);
         return layers.Select(layer =>
         {
@@ -839,6 +852,7 @@ public sealed class MapDashboardService(
                 state,
                 state.Team is not null,
                 state.Markers is not null,
+                state.MovementTrails?.Count > 0,
                 topology)
         };
     }

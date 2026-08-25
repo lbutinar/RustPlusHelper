@@ -84,6 +84,11 @@ The **Map** page is the main view once a server is open:
   markers, monuments, and (once a matching `.map` file is imported) biome, elevation, roads/rails/
   rivers, build-planning, and similar terrain layers. Toggling a layer is instant; it never
   re-downloads or re-renders the base map.
+- **Movement trails** draws each teammate's path on the map, saved across restarts so it carries over
+  a multi-day play session — not just the current app session. It's downsampled to a point roughly
+  every 1-2 minutes (not every exact step) so a multi-day trail stays readable instead of turning into
+  a tangle. It resets automatically at the next server wipe, and a teammate's existing path stays
+  visible while they're offline — only new points stop being added until they're back online.
 
 Grid squares and monument names match the labels used in the official Rust+ app.
 
@@ -122,9 +127,12 @@ does not expose a way to arm/disarm one remotely.
 **Cameras:** enter a camera's in-game code (shown on its computer station) and a nickname, then
 **Add camera**. Click **View** to watch its live feed. Only the controls that camera actually supports
 appear — Zoom for PTZ cameras, Shoot/Reload for auto-turrets, directional look nudges for cameras that
-can pan, and forward/back/strafe/ascend/descend for drones. **Stop viewing** releases the camera so
-someone else (or you, on another camera) can use it — Rust+ only allows one active subscription per
-connection.
+can pan, and forward/back/strafe/ascend/descend for drones. For cameras that can pan, you can also
+click and drag the video itself to look around continuously instead of clicking the nudge buttons
+repeatedly. For drones, holding **W/A/S/D** flies forward/left/back/right and **E**/**Q** ascends/
+descends for as long as the key is held (one direction at a time — it does not combine into diagonal
+movement). **Stop viewing** releases the camera so someone else (or you, on another camera) can use
+it — Rust+ only allows one active subscription per connection.
 
 ## Settings
 

@@ -150,7 +150,8 @@ public sealed class RustPlusAlarmNotificationListenerTests
         TimeProvider.System,
         PollingOptions(),
         eventRepository ?? new InMemoryCompanionEventRepository(),
-        new InMemoryPairedEntityRepository());
+        new InMemoryPairedEntityRepository(),
+        new InMemoryMovementTrailRepository());
 
     private static RustPlusPollingOptions PollingOptions() => new(
         TimeSpan.FromHours(1),
@@ -158,7 +159,8 @@ public sealed class RustPlusAlarmNotificationListenerTests
         TimeSpan.FromHours(1),
         TimeSpan.FromHours(1),
         TimeSpan.FromSeconds(1),
-        [TimeSpan.FromMilliseconds(5)]);
+        [TimeSpan.FromMilliseconds(5)],
+        TimeSpan.FromHours(1));
 
     private static Task WaitUntilAsync(Func<bool> condition) =>
         AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
@@ -291,7 +293,8 @@ public sealed class NotificationDispatcherTests
         TimeProvider.System,
         PollingOptions(),
         eventRepository ?? new InMemoryCompanionEventRepository(),
-        new InMemoryPairedEntityRepository());
+        new InMemoryPairedEntityRepository(),
+        new InMemoryMovementTrailRepository());
 
     private static RustPlusPollingOptions PollingOptions() => new(
         TimeSpan.FromHours(1),
@@ -299,7 +302,8 @@ public sealed class NotificationDispatcherTests
         TimeSpan.FromHours(1),
         TimeSpan.FromHours(1),
         TimeSpan.FromSeconds(1),
-        [TimeSpan.FromMilliseconds(5)]);
+        [TimeSpan.FromMilliseconds(5)],
+        TimeSpan.FromHours(1));
 
     private sealed class NeverConnectingClientFactory : IRustPlusClientFactory
     {

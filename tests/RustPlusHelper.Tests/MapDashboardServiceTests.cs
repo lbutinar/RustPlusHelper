@@ -89,6 +89,66 @@ public sealed class MapDashboardServiceTests
         Assert.True(model.LayerVisibility["deathHistory"]);
     }
 
+    [Fact]
+    public async Task RendersMovementTrailsAsPolylines()
+    {
+        await using var fixture = CreateFixture();
+        await fixture.Service.InitializeAsync();
+        var steamId = ulong.MaxValue - 42;
+        var trails = new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>
+        {
+            [steamId] =
+            [
+                new MovementTrailPoint(1200, 2200, DateTimeOffset.UtcNow.AddMinutes(-2)),
+                new MovementTrailPoint(1300, 2300, DateTimeOffset.UtcNow)
+            ]
+        };
+        var state = fixture.Service.Current with
+        {
+            MovementTrails = trails,
+            Layers = MapDashboardState.CreateLiveMapLayers(true, true, false, true)
+        };
+
+        var model = MapRenderModelFactory.Create(state);
+
+        Assert.NotNull(model);
+        var trail = Assert.Single(model.Polylines, polyline => polyline.Layer == MapLayerKind.MovementTrails);
+        Assert.Equal(2, trail.Points.Count);
+        Assert.Contains("Kakec", trail.Label, StringComparison.Ordinal);
+        Assert.True(model.LayerVisibility["movementTrails"]);
+    }
+
+    [Fact]
+    public async Task MovementTrailPointsBeforeTheServersLastWipeAreExcludedFromRendering()
+    {
+        await using var fixture = CreateFixture();
+        await fixture.Service.InitializeAsync();
+        var steamId = ulong.MaxValue - 42;
+        var wipeTimeUtc = DateTimeOffset.UtcNow.AddDays(-1);
+        var trails = new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>
+        {
+            [steamId] =
+            [
+                new MovementTrailPoint(1000, 2000, wipeTimeUtc.AddDays(-3)),
+                new MovementTrailPoint(1100, 2100, wipeTimeUtc.AddDays(-2)),
+                new MovementTrailPoint(1200, 2200, wipeTimeUtc.AddHours(1)),
+                new MovementTrailPoint(1300, 2300, wipeTimeUtc.AddHours(2))
+            ]
+        };
+        var state = fixture.Service.Current with
+        {
+            Server = fixture.Service.Current.Server! with { WipeTimeUtc = wipeTimeUtc },
+            MovementTrails = trails,
+            Layers = MapDashboardState.CreateLiveMapLayers(true, true, false, true)
+        };
+
+        var model = MapRenderModelFactory.Create(state);
+
+        Assert.NotNull(model);
+        var trail = Assert.Single(model.Polylines, polyline => polyline.Layer == MapLayerKind.MovementTrails);
+        Assert.Equal(2, trail.Points.Count);
+    }
+
     private static CompanionEvent Death(
         Guid serverId,
         float x,
@@ -286,7 +346,8 @@ public sealed class MapDashboardServiceTests
             TimeProvider.System,
             RustPlusPollingOptions.Default,
             new InMemoryCompanionEventRepository(),
-            new InMemoryPairedEntityRepository());
+            new InMemoryPairedEntityRepository(),
+            new InMemoryMovementTrailRepository());
 
     private static Task WaitUntilAsync(Func<bool> condition) =>
         AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(10));

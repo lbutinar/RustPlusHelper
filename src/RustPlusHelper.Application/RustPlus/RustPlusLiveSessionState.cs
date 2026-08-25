@@ -82,6 +82,11 @@ public sealed record PairedEntityLiveState(
     IReadOnlyList<StorageItemSnapshot> Items,
     string? Error);
 
+/// <summary>One persisted, timestamped position sample on a team member's movement trail. The
+/// timestamp lets rendering filter a member's trail to positions at or after the server's last wipe,
+/// the same convention already used for the team-death hotspot layer.</summary>
+public sealed record MovementTrailPoint(float X, float Y, DateTimeOffset SampledAtUtc);
+
 public sealed record RustPlusLiveSessionSeed(
     ServerInfoSnapshot? Server = null,
     TeamSnapshot? Team = null,
@@ -99,7 +104,12 @@ public sealed record RustPlusLiveSessionState(
     MapMarkersSnapshot? Markers,
     DateTimeOffset? LastRefreshUtc,
     string? Error,
-    IReadOnlyList<CompanionEvent> Events)
+    IReadOnlyList<CompanionEvent> Events,
+    /// <summary>Persisted, downsampled positions per team member seen this server, oldest first —
+    /// loaded from <see cref="IMovementTrailRepository"/> at session start and appended to live as new
+    /// samples are recorded. Survives app restarts and a member going offline; rendering is expected
+    /// to filter to positions at or after the server's last wipe, like the death-hotspot layer.</summary>
+    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>> MovementTrails)
 {
     public static RustPlusLiveSessionState Stopped { get; } = new(
         null,
@@ -111,5 +121,6 @@ public sealed record RustPlusLiveSessionState(
         null,
         null,
         null,
-        []);
+        [],
+        new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>());
 }

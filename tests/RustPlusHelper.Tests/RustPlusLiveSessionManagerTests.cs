@@ -39,6 +39,70 @@ public sealed class RustPlusLiveSessionManagerTests
     }
 
     [Fact]
+    public async Task MovementTrailsPersistTheFirstSampleAndDedupeIdenticalRepeats()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true, x: 100)],
+            [Markers(1)]));
+        var trails = new InMemoryMovementTrailRepository();
+        // A long sample interval so this test only exercises the identical-position dedupe path —
+        // every poll reports the same x=100, so only the very first sample should ever persist,
+        // regardless of how many times the fast test-interval poll loop fires.
+        await using var manager = CreateManager(
+            servers, secrets, factory, movementTrails: trails, movementTrailSampleInterval: TimeSpan.FromHours(1));
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => factory.Clients[0].TeamCallCount >= 5);
+
+        var trail = Assert.Single(trails.GetAll(profile.Id)[76561198000000000]);
+        Assert.Equal(100, trail.X);
+        Assert.Equal(trail, manager.Current.MovementTrails[76561198000000000].Single());
+    }
+
+    [Fact]
+    public async Task MovementTrailsPersistAChangedPositionOnlyAfterTheSampleIntervalElapses()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true, x: 100), Team(online: true, alive: true, x: 105)],
+            [Markers(1)]));
+        var trails = new InMemoryMovementTrailRepository();
+        // A short real interval (rather than freezing TimeProvider, which would also freeze the poll
+        // loop's own scheduling and stop it from ever polling again) so waiting past it is fast.
+        await using var manager = CreateManager(
+            servers, secrets, factory, movementTrails: trails, movementTrailSampleInterval: TimeSpan.FromMilliseconds(150));
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => trails.GetAll(profile.Id).TryGetValue(76561198000000000, out var points) && points.Count >= 2);
+
+        var points = trails.GetAll(profile.Id)[76561198000000000];
+        Assert.Equal(100, points[0].X);
+        Assert.Equal(105, points[1].X);
+    }
+
+    [Fact]
+    public async Task MovementTrailHistorySurvivesAMemberGoingOffline()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true), Team(online: false, alive: false)],
+            [Markers(1)]));
+        var trails = new InMemoryMovementTrailRepository();
+        await using var manager = CreateManager(servers, secrets, factory, movementTrails: trails);
+
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Events.Any(
+            item => item.Kind == CompanionEventKind.TeamMemberDisconnected));
+
+        Assert.Contains(76561198000000000UL, manager.Current.MovementTrails.Keys);
+        Assert.Single(trails.GetAll(profile.Id)[76561198000000000]);
+    }
+
+    [Fact]
     public async Task ReconnectsWithBackoffAndEmitsTransportLifecycle()
     {
         using var secrets = new InMemorySecretStore();
@@ -530,9 +594,11 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
-                [TimeSpan.FromMilliseconds(5)]),
+                [TimeSpan.FromMilliseconds(5)],
+                TimeSpan.FromSeconds(90)),
             history,
-            new InMemoryPairedEntityRepository());
+            new InMemoryPairedEntityRepository(),
+            new InMemoryMovementTrailRepository());
         await manager.StartAsync(profile.Id);
         await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
 
@@ -558,7 +624,9 @@ public sealed class RustPlusLiveSessionManagerTests
         InMemorySecretStore secrets,
         IRustPlusClientFactory factory,
         IPairedEntityRepository? pairedEntities = null,
-        TimeProvider? timeProvider = null) =>
+        TimeProvider? timeProvider = null,
+        IMovementTrailRepository? movementTrails = null,
+        TimeSpan? movementTrailSampleInterval = null) =>
         new(
             new RustPlusSavedConnectionResolver(servers, secrets),
             factory,
@@ -569,9 +637,11 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromMilliseconds(15),
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
-                [TimeSpan.FromMilliseconds(5)]),
+                [TimeSpan.FromMilliseconds(5)],
+                movementTrailSampleInterval ?? TimeSpan.FromSeconds(90)),
             new InMemoryCompanionEventRepository(),
-            pairedEntities ?? new InMemoryPairedEntityRepository());
+            pairedEntities ?? new InMemoryPairedEntityRepository(),
+            movementTrails ?? new InMemoryMovementTrailRepository());
 
     [Fact]
     public async Task ReloadsPersistedEventsWhenMonitoringRestarts()
@@ -597,9 +667,11 @@ public sealed class RustPlusLiveSessionManagerTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromSeconds(10),
                 TimeSpan.FromSeconds(1),
-                [TimeSpan.FromMilliseconds(5)]),
+                [TimeSpan.FromMilliseconds(5)],
+                TimeSpan.FromSeconds(90)),
             history,
-            new InMemoryPairedEntityRepository());
+            new InMemoryPairedEntityRepository(),
+            new InMemoryMovementTrailRepository());
 
         await manager.StartAsync(profile.Id);
 
@@ -905,20 +977,30 @@ public sealed class RustPlusLiveSessionManagerTests
                 ? RustPlusResult<bool>.Success(true)
                 : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
 
+        public List<(float DeltaX, float DeltaY)> LookCalls { get; } = [];
+
+        public List<CameraMoveDirection> MoveCalls { get; } = [];
+
         public Task<RustPlusResult<bool>> LookCameraAsync(
             float deltaX,
             float deltaY,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_cameraSubscribed
+            CancellationToken cancellationToken = default)
+        {
+            LookCalls.Add((deltaX, deltaY));
+            return Task.FromResult(_cameraSubscribed
                 ? RustPlusResult<bool>.Success(true)
                 : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+        }
 
         public Task<RustPlusResult<bool>> MoveCameraAsync(
             CameraMoveDirection direction,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_cameraSubscribed
+            CancellationToken cancellationToken = default)
+        {
+            MoveCalls.Add(direction);
+            return Task.FromResult(_cameraSubscribed
                 ? RustPlusResult<bool>.Success(true)
                 : RustPlusResult<bool>.Failure("no_active_camera", "No camera subscription is active."));
+        }
 
         public Task UnsubscribeFromCameraAsync(CancellationToken cancellationToken = default)
         {

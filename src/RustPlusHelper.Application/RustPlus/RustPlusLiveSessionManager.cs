@@ -14,9 +14,16 @@ public sealed class RustPlusLiveSessionManager(
     TimeProvider timeProvider,
     RustPlusPollingOptions pollingOptions,
     ICompanionEventRepository eventRepository,
-    IPairedEntityRepository pairedEntities) : IAsyncDisposable, IDisposable
+    IPairedEntityRepository pairedEntities,
+    IMovementTrailRepository movementTrailRepository) : IAsyncDisposable, IDisposable
 {
     private const int EventLimit = 200;
+
+    /// <summary>Also used for the app-startup <see cref="IMovementTrailRepository.PurgeOlderThan"/>
+    /// sweep — a storage-level safety cap independent of any server's wipe time. Display filtering to
+    /// "since the server's last wipe" happens separately at render time, the same as the death-hotspot
+    /// layer, so this only needs to be generous enough to cover the longest realistic unwiped server.</summary>
+    public static readonly TimeSpan MovementTrailRetentionAge = TimeSpan.FromDays(14);
 
     /// <summary>Also used for the app-startup <see cref="ICompanionEventRepository.PurgeOlderThan"/>
     /// sweep, which covers servers whose live session hasn't run recently enough to trigger this
@@ -31,6 +38,11 @@ public sealed class RustPlusLiveSessionManager(
 
     private readonly Lock _stateLock = new();
     private readonly Dictionary<ulong, DateTimeOffset> _lastMovementEventUtc = [];
+
+    /// <summary>The last point actually persisted per member, seeded from storage at
+    /// <see cref="StartAsync"/> so a restart resumes downsampling from where it left off instead of
+    /// immediately re-persisting a near-duplicate point.</summary>
+    private readonly Dictionary<ulong, MovementTrailPoint> _lastPersistedTrailPoint = [];
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private readonly SemaphoreSlim _wakeSignal = new(0, 1);
     private CancellationTokenSource? _runCancellation;
@@ -83,6 +95,16 @@ public sealed class RustPlusLiveSessionManager(
             _lastMovementEventUtc.Clear();
             var initial = seed ?? new RustPlusLiveSessionSeed();
             var history = eventRepository.GetRecent(serverId, EventLimit);
+            var trails = movementTrailRepository.GetAll(serverId);
+            _lastPersistedTrailPoint.Clear();
+            foreach (var (steamId, points) in trails)
+            {
+                if (points.Count > 0)
+                {
+                    _lastPersistedTrailPoint[steamId] = points[^1];
+                }
+            }
+
             SetState(new RustPlusLiveSessionState(
                 serverId,
                 RustPlusLiveSessionStatus.Connecting,
@@ -93,7 +115,8 @@ public sealed class RustPlusLiveSessionManager(
                 initial.Markers,
                 initial.RetrievedAtUtc,
                 null,
-                history));
+                history,
+                trails));
             _runCancellation = new CancellationTokenSource();
             _runTask = RunAsync(serverId, _runCancellation.Token);
         }
@@ -332,7 +355,11 @@ public sealed class RustPlusLiveSessionManager(
                 if (result.IsSuccess && result.Data is not null)
                 {
                     AddTeamEvents(serverId, updated.Team, result.Data, updated.Server?.MapSize);
-                    updated = updated with { Team = result.Data };
+                    updated = updated with
+                    {
+                        Team = result.Data,
+                        MovementTrails = AppendTrailSamples(serverId, updated.MovementTrails, result.Data, now),
+                    };
                 }
                 else
                 {
@@ -415,6 +442,47 @@ public sealed class RustPlusLiveSessionManager(
         }
 
         throw new LiveTransportException("The Rust+ WebSocket closed.");
+    }
+
+    /// <summary>For each online member, persists a new downsampled trail point when warranted and
+    /// folds it into the in-memory trail dictionary so the map reflects it immediately. A position
+    /// identical to the last persisted one is never re-persisted (a stationary member); otherwise a
+    /// new point is persisted only once <see cref="RustPlusPollingOptions.MovementTrailSampleInterval"/>
+    /// has elapsed since the last one, or immediately if this member has no prior point at all.
+    /// Offline members are simply skipped — their existing history is left untouched, not dropped.</summary>
+    private IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>> AppendTrailSamples(
+        Guid serverId,
+        IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>> previousTrails,
+        TeamSnapshot team,
+        DateTimeOffset now)
+    {
+        var next = new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>(previousTrails);
+        foreach (var member in team.Members)
+        {
+            if (!member.IsOnline)
+            {
+                continue;
+            }
+
+            var last = _lastPersistedTrailPoint.GetValueOrDefault(member.SteamId);
+            if (last is not null && last.X == member.X && last.Y == member.Y)
+            {
+                continue;
+            }
+
+            if (last is not null && now - last.SampledAtUtc < pollingOptions.MovementTrailSampleInterval)
+            {
+                continue;
+            }
+
+            var point = new MovementTrailPoint(member.X, member.Y, now);
+            movementTrailRepository.Append(serverId, member.SteamId, point);
+            _lastPersistedTrailPoint[member.SteamId] = point;
+            var existing = previousTrails.TryGetValue(member.SteamId, out var points) ? points : [];
+            next[member.SteamId] = [.. existing, point];
+        }
+
+        return next;
     }
 
     private void AddTeamEvents(

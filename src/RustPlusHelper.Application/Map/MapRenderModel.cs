@@ -117,6 +117,27 @@ public static class MapRenderModelFactory
                 member.IsAlive));
         }
 
+        foreach (var (steamId, trail) in state.MovementTrails ?? new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>())
+        {
+            // Filtered to the server's last wipe, the same convention already used for the
+            // team-death hotspot layer — persisted trail history otherwise survives indefinitely.
+            var sinceWipe = state.Server.WipeTimeUtc is { } wipeTimeUtc
+                ? trail.Where(point => point.SampledAtUtc >= wipeTimeUtc).ToArray()
+                : (IReadOnlyList<MovementTrailPoint>)trail;
+            if (sinceWipe.Count < 2)
+            {
+                continue;
+            }
+
+            var name = state.Team?.Members.FirstOrDefault(member => member.SteamId == steamId)?.Name ?? "Teammate";
+            polylines.Add(new MapPolylineOverlay(
+                $"movement-trail:{steamId}",
+                MapLayerKind.MovementTrails,
+                $"{name}'s recent path",
+                1.5f,
+                sinceWipe.Select(point => MapProjection.WorldToImage(point.X, point.Y, mapSize, width, height, margin)).ToArray()));
+        }
+
         var noteIndex = 0;
         foreach (var note in state.Team?.Notes ?? [])
         {
@@ -386,6 +407,7 @@ public static class MapRenderModelFactory
         MapLayerKind.Monuments => "monuments",
         MapLayerKind.Events => "events",
         MapLayerKind.DeathHistory => "deathHistory",
+        MapLayerKind.MovementTrails => "movementTrails",
         MapLayerKind.SmartDevices => "smartDevices",
         MapLayerKind.Cameras => "cameras",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)

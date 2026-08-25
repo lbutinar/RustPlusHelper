@@ -35,7 +35,7 @@ public sealed class StorageTests
         using var connection = temporary.Database.OpenConnection();
         Assert.Equal("wal", ExecuteScalar<string>(connection, "PRAGMA journal_mode;"));
         Assert.Equal(1L, ExecuteScalar<long>(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(12L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
+        Assert.Equal(13L, ExecuteScalar<long>(connection, "SELECT MAX(version) FROM schema_migrations;"));
         var sqliteVersion = Version.Parse(ExecuteScalar<string>(connection, "SELECT sqlite_version();"));
         Assert.True(sqliteVersion >= new Version(3, 50, 2), $"Bundled SQLite {sqliteVersion} is vulnerable.");
     }
@@ -74,6 +74,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
+            Execute(connection, "DROP TABLE movement_trail_points;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 8;");
         }
 
@@ -127,6 +128,45 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void MovementTrailPointsSurviveRestartOrderedOldestFirstWithUnsignedSteamIdAsText()
+    {
+        using var temporary = new TemporaryDatabase();
+        var profile = CreateProfile(playerId: 1);
+        new SqliteServerRepository(temporary.Database).Upsert(profile);
+        var repository = new SqliteMovementTrailRepository(temporary.Database);
+        var steamId = ulong.MaxValue - 42;
+        var older = new MovementTrailPoint(1200, 2200, FixedUtc.AddMinutes(-5));
+        var newer = new MovementTrailPoint(1300, 2300, FixedUtc);
+        repository.Append(profile.Id, steamId, newer);
+        repository.Append(profile.Id, steamId, older);
+
+        var reopenedDatabase = new SqliteDatabase(temporary.Database.DatabasePath);
+        var restored = new SqliteMovementTrailRepository(reopenedDatabase).GetAll(profile.Id);
+
+        var points = Assert.Single(restored).Value;
+        Assert.Equal([older, newer], points);
+        using var connection = reopenedDatabase.OpenConnection();
+        Assert.Equal("text", ExecuteScalar<string>(connection, "SELECT typeof(steam_id) FROM movement_trail_points LIMIT 1;"));
+        Assert.Equal(steamId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ExecuteScalar<string>(connection, "SELECT steam_id FROM movement_trail_points LIMIT 1;"));
+    }
+
+    [Fact]
+    public void MovementTrailPointsAreDeletedWhenTheirServerIsRemoved()
+    {
+        using var temporary = new TemporaryDatabase();
+        var servers = new SqliteServerRepository(temporary.Database);
+        var profile = CreateProfile(playerId: 1);
+        servers.Upsert(profile);
+        var repository = new SqliteMovementTrailRepository(temporary.Database);
+        repository.Append(profile.Id, 1, new MovementTrailPoint(0, 0, FixedUtc));
+
+        servers.Remove(profile.Id);
+
+        Assert.Empty(repository.GetAll(profile.Id));
+    }
+
+    [Fact]
     public void PlayerIdentitySurvivesRestartAndUsesCanonicalUnsignedText()
     {
         using var temporary = new TemporaryDatabase();
@@ -159,6 +199,7 @@ public sealed class StorageTests
             Execute(connection, "DROP TABLE saved_cameras;");
             Execute(connection, "DROP TABLE paired_entities;");
             Execute(connection, "ALTER TABLE servers DROP COLUMN rust_plus_server_id;");
+            Execute(connection, "DROP TABLE movement_trail_points;");
             Execute(connection, "DELETE FROM schema_migrations WHERE version >= 2;");
         }
 

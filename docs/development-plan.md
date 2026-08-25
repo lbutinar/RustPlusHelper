@@ -147,7 +147,26 @@ lost/restored events are snapshot-derived, retained in a bounded per-server SQLi
 reloaded after restart. Online, alive team-member grid crossings emit at most once per member per
 minute. Alive-to-dead transitions retain the detecting snapshot's position, and the map groups those
 bounded local records by Rust grid into a derived team-death hotspot layer. It does not infer cause
-or current enemy presence. Sampled movement trails remain deferred.
+or current enemy presence.
+
+Sampled movement trails were implemented on 2026-08-25, then made persistent the same day after
+feedback that a play session can span multiple days: an in-memory-only trail that reset on every
+restart wasn't useful for that. Positions are now downsampled and persisted to a new `movement_trail_points`
+SQLite table (migration 13, `IMovementTrailRepository`/`SqliteMovementTrailRepository`) rather than
+kept only in `RustPlusLiveSessionState`. A raw 5-second-interval log spanning days would be both an
+unreadable tangle on the map and a lot of storage, so each online member's position is persisted at
+most once every `RustPlusPollingOptions.MovementTrailSampleInterval` (90 seconds by default), and never
+re-persisted at all while stationary at the same position. `RustPlusLiveSessionManager.StartAsync`
+loads each member's full stored history at session start (seeding the same in-memory debounce state
+that decides whether to persist next), so a restart resumes downsampling from where it left off rather
+than immediately logging a near-duplicate point. Retention follows the same convention as the
+team-death hotspot layer: storage keeps everything up to a generous 14-day safety cap
+(`MovementTrailRetentionAge`, purged at app startup like companion events), and rendering separately
+filters each member's trail to positions at or after the server's last reported wipe — so the map
+shows "this wipe's path" without the storage layer needing to know about wipes at all. Offline members
+keep their existing trail history; only *new* sampling pauses while they're offline. The map still
+renders each member's trail as its own polyline (`MapLayerKind.MovementTrails`), reusing the same
+`MapPolylineOverlay`/Leaflet rendering path already used for road/rail/river paths.
 
 Team chat gained a compose/send action on 2026-08-25 (`RustPlusLiveSessionManager.SendTeamMessageAsync`,
 `RustPlusApiClient.SendTeamMessageAsync`, wired into the Team page) — the app's first write action
@@ -244,9 +263,23 @@ recall known codes; there is still no automatic camera discovery. Viewing shares
 persistent connection via new methods on `RustPlusLiveSessionManager` (see `docs/architecture.md`)
 rather than a separate `CameraManager` or a second connection. Controls are shown only when the
 subscribed camera's `ControlFlags` actually support them (Zoom for PTZ, Shoot/Reload for auto-turrets,
-look/move nudges otherwise) — never a fabricated control. Continuous mouse-drag look and held-key
-drone movement are out of scope for this slice; discrete tap/nudge buttons cover the same capability
-with much less UI complexity, and remain the natural next increment.
+look/move nudges otherwise) — never a fabricated control.
+
+Continuous mouse-drag look and held-key drone movement were added on 2026-08-25 in
+`DevicesPage.razor`, alongside the existing discrete nudge buttons (kept for precise single steps).
+Both use native Blazor pointer/keyboard DOM events (`@onpointerdown`/`@onpointermove`/`@onpointerup`,
+`@onkeydown`/`@onkeyup`) rather than a new JS interop module, matching this codebase's existing
+convention that JS interop is reserved for the Leaflet map. Dragging the camera image accumulates
+pointer deltas and flushes them to `LookCameraAsync` at most every 120 ms — the same
+"accumulate but throttle the outgoing/published side" idea already used for incoming camera frames
+(`RustPlusLiveSessionManager.CameraFrameThrottle`), applied here to an outgoing command instead,
+since neither the adapter nor the manager throttles outgoing look/move calls on their own. Holding
+W/A/S/D/E/Q while a drone camera is active re-sends the matching discrete `MoveCameraAsync` call every
+400 ms until the key is released; only one direction is held at a time (no diagonal combination),
+since the app-layer `CameraMoveDirection` is a single discrete value, not a combinable bitmask. The
+component overrides `ShouldRender()` to skip re-rendering on every pointermove event — otherwise a
+fast drag would re-render the whole page at mouse-move frequency, the same freeze class already fixed
+for map layer toggles (see `AGENTS.md`).
 
 **Modules:** camera subscribe/input/frame methods on `IRustPlusClient`/`RustPlusApiClient`
 (`RustPlusApi.Camera`-backed), `ISavedCameraRepository`/`SqliteSavedCameraRepository`, the Devices &

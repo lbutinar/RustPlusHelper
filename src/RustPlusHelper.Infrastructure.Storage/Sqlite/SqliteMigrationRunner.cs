@@ -4,7 +4,7 @@ namespace RustPlusHelper.Infrastructure.Storage.Sqlite;
 
 internal static class SqliteMigrationRunner
 {
-    internal const int LatestVersion = 12;
+    internal const int LatestVersion = 13;
 
     private const string InitialSchema = """
         CREATE TABLE servers (
@@ -128,6 +128,21 @@ internal static class SqliteMigrationRunner
         ALTER TABLE servers ADD COLUMN rust_plus_server_id TEXT;
         """;
 
+    private const string MovementTrailSchema = """
+        CREATE TABLE movement_trail_points (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            server_id TEXT NOT NULL,
+            steam_id TEXT NOT NULL CHECK(length(steam_id) BETWEEN 1 AND 20),
+            sampled_utc_ms INTEGER NOT NULL,
+            world_x REAL NOT NULL,
+            world_y REAL NOT NULL,
+            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX ix_movement_trail_points_server_steam_time
+            ON movement_trail_points(server_id, steam_id, sampled_utc_ms DESC);
+        """;
+
     private const string PairedEntitySchema = """
         CREATE TABLE paired_entities (
             id TEXT NOT NULL PRIMARY KEY,
@@ -189,6 +204,7 @@ internal static class SqliteMigrationRunner
             10 => ("saved camera codes", SavedCameraSchema),
             11 => ("paired smart devices", PairedEntitySchema),
             12 => ("server rust+ id capture", ServerRustPlusIdSchema),
+            13 => ("bounded movement trail history", MovementTrailSchema),
             _ => throw new InvalidOperationException($"No migration is defined for schema version {version}.")
         };
         Execute(connection, sql, transaction);

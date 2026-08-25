@@ -39,6 +39,7 @@ public enum MapLayerKind
     Monuments,
     Events,
     DeathHistory,
+    MovementTrails,
     SmartDevices,
     Cameras
 }
@@ -72,7 +73,10 @@ public sealed record MapDashboardState(
     SavedMapTopology? Topology = null,
     bool IsTopologyImporting = false,
     string? TopologyStatus = null,
-    string? TopologyError = null)
+    string? TopologyError = null,
+    // In-memory-only recent positions per currently-online team member, copied from
+    // RustPlusLiveSessionState.MovementTrails. Null and an empty dictionary are equivalent.
+    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>>? MovementTrails = null)
 {
     public static MapDashboardState NotStarted { get; } = new(
         DashboardConnectionState.NotStarted,
@@ -114,6 +118,7 @@ public sealed record MapDashboardState(
         new(MapLayerKind.Monuments, "Monuments", true, true, "DIRECT"),
         new(MapLayerKind.Events, "World events", true, true, "DIRECT + DIFF"),
         new(MapLayerKind.DeathHistory, "Team death hotspots", false, false, "DERIVED · LOCAL HISTORY", "No team death positions have been recorded yet."),
+        new(MapLayerKind.MovementTrails, "Movement trails", false, false, "DERIVED · SESSION ONLY", "No recent team movement has been recorded yet."),
         new(
             MapLayerKind.SmartDevices,
             "Smart devices",
@@ -134,6 +139,7 @@ public sealed record MapDashboardState(
         bool teamAvailable = false,
         bool markersAvailable = false,
         bool deathHistoryAvailable = false,
+        bool movementTrailsAvailable = false,
         SavedMapTopology? topology = null) =>
     [
         new(MapLayerKind.BaseMap, "Base map", true, true, "DIRECT RUST+"),
@@ -236,6 +242,13 @@ public sealed record MapDashboardState(
             deathHistoryAvailable,
             "DERIVED · LOCAL HISTORY",
             deathHistoryAvailable ? null : "No team death positions have been recorded on this server yet."),
+        new(
+            MapLayerKind.MovementTrails,
+            "Movement trails",
+            movementTrailsAvailable,
+            movementTrailsAvailable,
+            "DERIVED · SESSION ONLY",
+            movementTrailsAvailable ? null : "No recent team movement has been recorded yet."),
         new(
             MapLayerKind.SmartDevices,
             "Smart devices",

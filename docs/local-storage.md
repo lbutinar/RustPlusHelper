@@ -21,10 +21,16 @@ file-level backup while the app is open. Prefer closing the application before c
 - purpose-labelled DPAPI ciphertext for pairing secrets.
 - latest successful Rust+ server/map snapshot, including the JPEG and retrieval timestamp;
 - optional per-server display rasters and paths derived from an automatically matched or manually
-  selected Rust `.map`.
+  selected Rust `.map`;
+- a bounded, per-server companion event history (connection/team/marker/vending/alarm events, 200-row
+  and 30-day caps);
+- saved camera codes/nicknames and paired Smart Switch/Alarm/Storage Monitor entity IDs;
+- downsampled team-member movement trail points (unsigned Steam64 ID, world X/Y, and a timestamp),
+  kept up to a 14-day safety cap and cascade-deleted with their server; live chat text and raw team
+  snapshots themselves are not persisted.
 
-Team, chat, marker history, and device data are not persisted yet. A map refresh replaces the prior
-snapshot for that server; deleting a server cascades its cached map.
+A map refresh replaces the prior snapshot for that server; deleting a server cascades its cached map,
+companion events, saved cameras, paired entities, and movement trail points.
 Importing topology replaces the previous derived topology for that server. Only the source filename,
 SHA-256 fingerprint, decoded metadata, normalized paths, and 384-pixel RGBA overlays are kept; the
 original file and absolute path are not copied.

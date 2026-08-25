@@ -81,6 +81,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IMapCacheRepository, SqliteMapCacheRepository>();
         builder.Services.AddSingleton<IMapTopologyRepository, SqliteMapTopologyRepository>();
         builder.Services.AddSingleton<ICompanionEventRepository, SqliteCompanionEventRepository>();
+        builder.Services.AddSingleton<IMovementTrailRepository, SqliteMovementTrailRepository>();
         builder.Services.AddSingleton<ISavedCameraRepository, SqliteSavedCameraRepository>();
         builder.Services.AddSingleton<IPairedEntityRepository, SqlitePairedEntityRepository>();
         builder.Services.AddSingleton<IPlayerIdentityRepository, SqlitePlayerIdentityRepository>();
@@ -133,6 +134,7 @@ public partial class App : System.Windows.Application
         _host.Services.GetRequiredService<NotificationDispatcher>(); // materializes and wires subscriptions
 
         PurgeStaleCompanionEvents();
+        PurgeStaleMovementTrails();
 
         var trayIcon = _host.Services.GetRequiredService<TrayIconService>();
         trayIcon.OpenRequested += (_, _) => ShowMainWindow();
@@ -192,6 +194,13 @@ public partial class App : System.Windows.Application
         var repository = _host!.Services.GetRequiredService<ICompanionEventRepository>();
         var timeProvider = _host.Services.GetRequiredService<TimeProvider>();
         repository.PurgeOlderThan(timeProvider.GetUtcNow() - RustPlusLiveSessionManager.EventRetentionAge);
+    }
+
+    private void PurgeStaleMovementTrails()
+    {
+        var repository = _host!.Services.GetRequiredService<IMovementTrailRepository>();
+        var timeProvider = _host.Services.GetRequiredService<TimeProvider>();
+        repository.PurgeOlderThan(timeProvider.GetUtcNow() - RustPlusLiveSessionManager.MovementTrailRetentionAge);
     }
 
     protected override void OnExit(ExitEventArgs e)
