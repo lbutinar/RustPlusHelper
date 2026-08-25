@@ -529,6 +529,38 @@ public sealed class MainComponentTests : BunitContext
         });
     }
 
+    [Fact]
+    public async Task TeamPageLoadsAndSendsClanChatOnExplicitRequestOnly()
+    {
+        var serverManager = Services.GetRequiredService<ServerManager>();
+        var profile = serverManager.SaveWithPairing(
+            new ServerProfileDraft(null, "Test server", "companion.example.invalid", 28082, false, 76561198000000000),
+            "193746281");
+        var serverId = profile.Id;
+
+        var liveSession = Services.GetRequiredService<RustPlusLiveSessionManager>();
+        await liveSession.StartAsync(serverId);
+        await WaitUntilAsync(() => liveSession.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var state = MapDashboardState.NotStarted with { ServerId = serverId };
+        var component = Render<TeamPage>(parameters => parameters.Add(page => page.State, state));
+
+        Assert.Contains("Not loaded automatically", component.Markup, StringComparison.Ordinal);
+        Assert.Null(liveSession.Current.ClanChat);
+
+        component.Find("[data-testid='clan-chat-refresh']").Click();
+        component.WaitForAssertion(() =>
+            Assert.Contains("Fake clan message", component.Markup, StringComparison.Ordinal));
+
+        component.Find("[data-testid='clan-compose-input']").Input("regroup at base");
+        component.Find("[data-testid='clan-compose-send']").Click();
+
+        await WaitUntilAsync(() => liveSession.Current.ClanChat?.Messages.Any(
+            message => message.Message == "regroup at base") == true);
+        component.WaitForAssertion(() =>
+            Assert.Contains("regroup at base", component.Markup, StringComparison.Ordinal));
+    }
+
     private static Task WaitUntilAsync(Func<bool> condition) =>
         AsyncTestHelpers.WaitUntilAsync(condition, TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(5));
 

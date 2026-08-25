@@ -39,6 +39,7 @@ public sealed class NotificationPreferencesTests
     [InlineData(CompanionEventKind.ConnectionEstablished, true)]
     [InlineData(CompanionEventKind.TeamMemberDied, true)]
     [InlineData(CompanionEventKind.MarkerAppeared, false)]
+    [InlineData(CompanionEventKind.OilRigActivated, false)]
     [InlineData(CompanionEventKind.VendingStockChanged, true)]
     [InlineData(CompanionEventKind.AlarmTriggered, false)]
     public void IsEnabledRoutesEachKindToItsOwnCategory(CompanionEventKind kind, bool categoryEnabled)
@@ -47,7 +48,8 @@ public sealed class NotificationPreferencesTests
         {
             CompanionEventKind.ConnectionEstablished => NotificationPreferences.Default with { ConnectionEvents = categoryEnabled },
             CompanionEventKind.TeamMemberDied => NotificationPreferences.Default with { TeamEvents = categoryEnabled },
-            CompanionEventKind.MarkerAppeared => NotificationPreferences.Default with { MarkerEvents = categoryEnabled },
+            CompanionEventKind.MarkerAppeared or CompanionEventKind.OilRigActivated =>
+                NotificationPreferences.Default with { MarkerEvents = categoryEnabled },
             CompanionEventKind.VendingStockChanged => NotificationPreferences.Default with { VendingEvents = categoryEnabled },
             CompanionEventKind.AlarmTriggered => NotificationPreferences.Default with { AlarmEvents = categoryEnabled },
             _ => throw new ArgumentOutOfRangeException(nameof(kind))

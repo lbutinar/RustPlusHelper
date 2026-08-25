@@ -16,6 +16,7 @@ Classifications describe the primary verified source.
 | Team roster, position, online/alive state | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |
 | Grid reference | **AVAILABLE DIRECTLY THROUGH RUST+** | Locally derived from direct coordinates/map size |
 | Team chat read/send | **AVAILABLE DIRECTLY THROUGH RUST+** | Team chat requests/broadcast |
+| Clan chat read/send | **AVAILABLE DIRECTLY THROUGH RUST+** | Separate clan chat requests; optional — most players are not in a clan |
 | Team map notes | **AVAILABLE DIRECTLY THROUGH RUST+** | Team snapshot |
 | Death/respawn event | **AVAILABLE THROUGH EXISTING OPEN-SOURCE LIBRARIES** | Snapshot-derived from alive and timestamps |
 | Killer, weapon, cause of death | **REQUIRES RUST SERVER ACCESS** | Plugin/log/RCON-class data source |

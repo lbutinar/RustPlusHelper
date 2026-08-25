@@ -98,10 +98,14 @@ Grid squares and monument names match the labels used in the official Rust+ app.
   while a server is open. The chat panel shows recent team chat and lets you send a message from the
   box at the bottom — type and press Enter or click **Send**. A sent message appears immediately; if
   it fails to send, an error appears below the box instead.
+- **Clan chat**, below team chat, works the same way but for your Rust clan (a separate, optional
+  concept from your team) — click **Load clan chat** to check it (most players are not in a clan, so
+  this is never checked automatically), then **Refresh** to check again or send a message.
 - **Events** is a running history of what RustPlusHelper has actually observed for this server:
   connection lost/restored, teammates coming online, dying, or crossing into a new grid square, world
-  markers appearing or disappearing, and (see below) vending and Smart Alarm changes. This history is
-  kept locally per server and survives restarting the app.
+  markers appearing or disappearing, a crate spawning near a known oil rig (a best-effort guess at
+  activation — Rust+ does not report this directly), and (see below) vending and Smart Alarm changes.
+  This history is kept locally per server and survives restarting the app.
 
 ## Vending
 

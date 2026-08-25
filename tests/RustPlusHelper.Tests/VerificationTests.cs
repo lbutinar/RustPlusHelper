@@ -131,6 +131,14 @@ public sealed class VerificationTests
             CancellationToken cancellationToken = default) =>
             inner.SendTeamMessageAsync(message, cancellationToken);
 
+        public Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default) =>
+            inner.GetClanChatAsync(cancellationToken);
+
+        public Task<RustPlusResult<bool>> SendClanMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default) =>
+            inner.SendClanMessageAsync(message, cancellationToken);
+
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
             inner.GetMapMarkersAsync(cancellationToken);
 

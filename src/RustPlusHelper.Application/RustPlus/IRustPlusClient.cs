@@ -31,6 +31,13 @@ public interface IRustPlusClient : IAsyncDisposable
     /// assigned timestamp), so callers can show it immediately without waiting for the next poll.</summary>
     Task<RustPlusResult<TeamChatMessageSnapshot>> SendTeamMessageAsync(string message, CancellationToken cancellationToken = default);
 
+    Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a message to clan chat. Unlike <see cref="SendTeamMessageAsync"/>, Rust+ does not
+    /// echo the sent message back — callers should re-read <see cref="GetClanChatAsync"/> after a
+    /// successful send.</summary>
+    Task<RustPlusResult<bool>> SendClanMessageAsync(string message, CancellationToken cancellationToken = default);
+
     Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Subscribes to a camera's ray stream, replacing any previous subscription (the

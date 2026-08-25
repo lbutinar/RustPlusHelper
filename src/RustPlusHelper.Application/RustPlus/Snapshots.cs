@@ -55,6 +55,16 @@ public sealed record TeamChatMessageSnapshot(
 
 public sealed record TeamChatSnapshot(IReadOnlyList<TeamChatMessageSnapshot> Messages);
 
+/// <summary>No colour field — unlike <see cref="TeamChatMessageSnapshot"/>, the pinned package's clan
+/// message type carries no colour.</summary>
+public sealed record ClanChatMessageSnapshot(
+    ulong SteamId,
+    string Name,
+    string Message,
+    DateTimeOffset SentAtUtc);
+
+public sealed record ClanChatSnapshot(IReadOnlyList<ClanChatMessageSnapshot> Messages);
+
 public sealed record MapPositionSnapshot(float X, float Y);
 
 public enum MapMarkerKind

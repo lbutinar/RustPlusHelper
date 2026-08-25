@@ -1,5 +1,6 @@
 using System.Globalization;
 using RustPlusApi.Data;
+using RustPlusApi.Data.Clans;
 using RustPlusApi.Data.Entities;
 using RustPlusApi.Data.Events;
 using RustPlusApi.Data.Markers;
@@ -99,6 +100,13 @@ internal static class RustPlusApiMapper
         source.Message,
         $"#{source.Color.ToArgb():X8}",
         ToUtc(source.Time));
+
+    internal static ClanChatSnapshot Map(ClanChatInfo source) => new(
+        source.Messages?.Select(message => new ClanChatMessageSnapshot(
+            message.SteamId,
+            message.Name,
+            message.Message,
+            ToUtc(message.Time))).ToArray() ?? []);
 
     internal static MapMarkersSnapshot Map(MapMarkers source)
     {

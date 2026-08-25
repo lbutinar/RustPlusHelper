@@ -39,45 +39,103 @@
             </div>
         </div>
 
-        <div class="surface-card chat-card">
-            <div class="panel-heading"><h2>Recent team chat</h2><span class="source-pill">DIRECT</span></div>
-            <div class="chat-list">
-                @if (State.Chat is null)
+        <div class="chat-column">
+            <div class="surface-card chat-card">
+                <div class="panel-heading"><h2>Recent team chat</h2><span class="source-pill">DIRECT</span></div>
+                <div class="chat-list">
+                    @if (State.Chat is null)
+                    {
+                        <div class="empty-inline-state">Recent team chat was not returned by the latest Rust+ refresh.</div>
+                    }
+                    @foreach (var message in State.Chat?.Messages ?? [])
+                    {
+                        <article class="chat-message">
+                            <div class="avatar small">@Initial(message.Name)</div>
+                            <div>
+                                <header><strong>@message.Name</strong><time>@message.SentAtUtc.ToString("HH:mm")</time></header>
+                                <p>@message.Message</p>
+                            </div>
+                        </article>
+                    }
+                </div>
+                <div class="chat-compose">
+                    <input type="text"
+                           data-testid="chat-compose-input"
+                           placeholder="Message your team…"
+                           maxlength="256"
+                           disabled="@_isSendingChat"
+                           @bind="_draftMessage"
+                           @bind:event="oninput"
+                           @onkeydown="HandleComposeKeyDownAsync" />
+                    <button type="button"
+                            class="ghost-button"
+                            data-testid="chat-compose-send"
+                            disabled="@(_isSendingChat || string.IsNullOrWhiteSpace(_draftMessage))"
+                            @onclick="SendChatMessageAsync">
+                        Send
+                    </button>
+                </div>
+                @if (_chatSendError is not null)
                 {
-                    <div class="empty-inline-state">Recent team chat was not returned by the latest Rust+ refresh.</div>
+                    <div class="chat-compose-error" role="alert">@_chatSendError</div>
                 }
-                @foreach (var message in State.Chat?.Messages ?? [])
-                {
-                    <article class="chat-message">
-                        <div class="avatar small">@Initial(message.Name)</div>
-                        <div>
-                            <header><strong>@message.Name</strong><time>@message.SentAtUtc.ToString("HH:mm")</time></header>
-                            <p>@message.Message</p>
+            </div>
+
+            <div class="surface-card chat-card">
+                <div class="panel-heading">
+                    <h2>Clan chat</h2>
+                    <button type="button"
+                            class="ghost-button"
+                            data-testid="clan-chat-refresh"
+                            disabled="@_isRefreshingClanChat"
+                            @onclick="RefreshClanChatAsync">
+                        @(_clanChatLoaded ? "Refresh" : "Load clan chat")
+                    </button>
+                </div>
+                <div class="chat-list">
+                    @if (!_clanChatLoaded)
+                    {
+                        <div class="empty-inline-state">
+                            Not loaded automatically — most players are not in a clan. Click "Load clan chat" to check.
                         </div>
-                    </article>
+                    }
+                    else if (LiveSession.Current.ClanChat is not { Messages.Count: > 0 })
+                    {
+                        <div class="empty-inline-state">No clan chat messages, or this player is not in a clan.</div>
+                    }
+                    @foreach (var message in LiveSession.Current.ClanChat?.Messages ?? [])
+                    {
+                        <article class="chat-message">
+                            <div class="avatar small">@Initial(message.Name)</div>
+                            <div>
+                                <header><strong>@message.Name</strong><time>@message.SentAtUtc.ToString("HH:mm")</time></header>
+                                <p>@message.Message</p>
+                            </div>
+                        </article>
+                    }
+                </div>
+                <div class="chat-compose">
+                    <input type="text"
+                           data-testid="clan-compose-input"
+                           placeholder="Message your clan…"
+                           maxlength="256"
+                           disabled="@_isSendingClanMessage"
+                           @bind="_clanDraftMessage"
+                           @bind:event="oninput"
+                           @onkeydown="HandleClanComposeKeyDownAsync" />
+                    <button type="button"
+                            class="ghost-button"
+                            data-testid="clan-compose-send"
+                            disabled="@(_isSendingClanMessage || string.IsNullOrWhiteSpace(_clanDraftMessage))"
+                            @onclick="SendClanMessageAsync">
+                        Send
+                    </button>
+                </div>
+                @if (_clanChatError is not null)
+                {
+                    <div class="chat-compose-error" role="alert">@_clanChatError</div>
                 }
             </div>
-            <div class="chat-compose">
-                <input type="text"
-                       data-testid="chat-compose-input"
-                       placeholder="Message your team…"
-                       maxlength="256"
-                       disabled="@_isSendingChat"
-                       @bind="_draftMessage"
-                       @bind:event="oninput"
-                       @onkeydown="HandleComposeKeyDownAsync" />
-                <button type="button"
-                        class="ghost-button"
-                        data-testid="chat-compose-send"
-                        disabled="@(_isSendingChat || string.IsNullOrWhiteSpace(_draftMessage))"
-                        @onclick="SendChatMessageAsync">
-                    Send
-                </button>
-            </div>
-            @if (_chatSendError is not null)
-            {
-                <div class="chat-compose-error" role="alert">@_chatSendError</div>
-            }
         </div>
     </div>
 </section>
@@ -92,6 +150,12 @@
     private string _draftMessage = string.Empty;
     private bool _isSendingChat;
     private string? _chatSendError;
+
+    private bool _clanChatLoaded;
+    private bool _isRefreshingClanChat;
+    private string _clanDraftMessage = string.Empty;
+    private bool _isSendingClanMessage;
+    private string? _clanChatError;
 
     private static string Initial(string? name) => string.IsNullOrWhiteSpace(name)
         ? "?"
@@ -134,6 +198,55 @@
         if (args.Key == "Enter")
         {
             await SendChatMessageAsync();
+        }
+    }
+
+    private async Task RefreshClanChatAsync()
+    {
+        if (_isRefreshingClanChat)
+        {
+            return;
+        }
+
+        _isRefreshingClanChat = true;
+        _clanChatError = null;
+        var result = await LiveSession.RefreshClanChatAsync();
+        _isRefreshingClanChat = false;
+        _clanChatLoaded = true;
+        if (!result.IsSuccess)
+        {
+            _clanChatError = result.Error?.Message ?? "Clan chat could not be loaded.";
+        }
+    }
+
+    private async Task SendClanMessageAsync()
+    {
+        var message = _clanDraftMessage.Trim();
+        if (message.Length == 0 || _isSendingClanMessage)
+        {
+            return;
+        }
+
+        _isSendingClanMessage = true;
+        _clanChatError = null;
+        var result = await LiveSession.SendClanMessageAsync(message);
+        _isSendingClanMessage = false;
+        _clanChatLoaded = true;
+        if (result.IsSuccess)
+        {
+            _clanDraftMessage = string.Empty;
+        }
+        else
+        {
+            _clanChatError = result.Error?.Message ?? "The message could not be sent.";
+        }
+    }
+
+    private async Task HandleClanComposeKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SendClanMessageAsync();
         }
     }
 }

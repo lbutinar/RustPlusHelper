@@ -269,6 +269,20 @@ public sealed class RustPlusConnectionManagerTests
                 RustPlusResult<TeamChatMessageSnapshot>.Failure("not_configured", "No send result configured."));
         }
 
+        public Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(RustPlusResult<ClanChatSnapshot>.Success(new ClanChatSnapshot([])));
+        }
+
+        public Task<RustPlusResult<bool>> SendClanMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(RustPlusResult<bool>.Failure("not_configured", "No send result configured."));
+        }
+
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();

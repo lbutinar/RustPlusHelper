@@ -28,7 +28,8 @@ public enum CompanionEventKind
     VendingStockChanged,
     VendingOfferAdded,
     VendingOfferRemoved,
-    AlarmTriggered
+    AlarmTriggered,
+    OilRigActivated
 }
 
 public enum CompanionEventSource
@@ -92,7 +93,11 @@ public sealed record RustPlusLiveSessionSeed(
     TeamSnapshot? Team = null,
     TeamChatSnapshot? Chat = null,
     MapMarkersSnapshot? Markers = null,
-    DateTimeOffset? RetrievedAtUtc = null);
+    DateTimeOffset? RetrievedAtUtc = null,
+    /// <summary>The cached map's monuments, if already known — used only to power the oil-rig
+    /// activation heuristic in <see cref="RustPlusLiveSessionManager"/>. Rust+'s live polling never
+    /// re-fetches the map, so this is seeded once at session start rather than kept live.</summary>
+    IReadOnlyList<MapMonumentSnapshot>? Monuments = null);
 
 public sealed record RustPlusLiveSessionState(
     Guid? ServerId,
@@ -109,7 +114,15 @@ public sealed record RustPlusLiveSessionState(
     /// loaded from <see cref="IMovementTrailRepository"/> at session start and appended to live as new
     /// samples are recorded. Survives app restarts and a member going offline; rendering is expected
     /// to filter to positions at or after the server's last wipe, like the death-hotspot layer.</summary>
-    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>> MovementTrails)
+    IReadOnlyDictionary<ulong, IReadOnlyList<MovementTrailPoint>> MovementTrails,
+    /// <summary>Seeded once at session start (see <see cref="RustPlusLiveSessionSeed.Monuments"/>);
+    /// used only to detect a crate appearing near a known oil rig.</summary>
+    IReadOnlyList<MapMonumentSnapshot> Monuments,
+    /// <summary>Populated only by an explicit <see cref="RustPlusLiveSessionManager.RefreshClanChatAsync"/>
+    /// call, never by background polling — most players are not in a clan, so continuously polling
+    /// clan chat the way team chat is polled would spend request budget on an empty result for the
+    /// common case.</summary>
+    ClanChatSnapshot? ClanChat = null)
 {
     public static RustPlusLiveSessionState Stopped { get; } = new(
         null,
@@ -122,5 +135,6 @@ public sealed record RustPlusLiveSessionState(
         null,
         null,
         [],
-        new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>());
+        new Dictionary<ulong, IReadOnlyList<MovementTrailPoint>>(),
+        []);
 }

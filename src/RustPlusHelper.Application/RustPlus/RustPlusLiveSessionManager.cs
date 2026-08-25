@@ -116,7 +116,8 @@ public sealed class RustPlusLiveSessionManager(
                 initial.RetrievedAtUtc,
                 null,
                 history,
-                trails));
+                trails,
+                initial.Monuments ?? []));
             _runCancellation = new CancellationTokenSource();
             _runTask = RunAsync(serverId, _runCancellation.Token);
         }
@@ -391,7 +392,7 @@ public sealed class RustPlusLiveSessionManager(
                 ThrowIfTransportFailure("Map markers", result.Error);
                 if (result.IsSuccess && result.Data is not null)
                 {
-                    AddMarkerEvents(serverId, updated.Markers, result.Data);
+                    AddMarkerEvents(serverId, updated.Markers, result.Data, updated.Monuments);
                     updated = updated with { Markers = result.Data };
                 }
                 else
@@ -562,7 +563,15 @@ public sealed class RustPlusLiveSessionManager(
         }
     }
 
-    private void AddMarkerEvents(Guid serverId, MapMarkersSnapshot? previous, MapMarkersSnapshot current)
+    /// <summary>Rust+ reports no oil-rig-activation event; this is a locally chosen heuristic
+    /// distance, not a documented monument boundary. See docs/protocol-evidence.md.</summary>
+    private const float OilRigActivationRadius = 75f;
+
+    private void AddMarkerEvents(
+        Guid serverId,
+        MapMarkersSnapshot? previous,
+        MapMarkersSnapshot current,
+        IReadOnlyList<MapMonumentSnapshot> monuments)
     {
         if (previous is null)
         {
@@ -571,6 +580,9 @@ public sealed class RustPlusLiveSessionManager(
 
         var oldMarkers = ToMarkerDictionary(previous.Markers);
         var newMarkers = ToMarkerDictionary(current.Markers);
+        var oilRigs = monuments
+            .Where(monument => IsOilRig(monument.TokenOrName) && monument.X is not null && monument.Y is not null)
+            .ToArray();
         foreach (var marker in newMarkers.Where(entry => !oldMarkers.ContainsKey(entry.Key)).Select(entry => entry.Value))
         {
             AddEvent(
@@ -578,6 +590,22 @@ public sealed class RustPlusLiveSessionManager(
                 CompanionEventKind.MarkerAppeared,
                 CompanionEventSource.SnapshotDiff,
                 $"{MarkerLabel(marker)} appeared");
+
+            if (marker.Kind == MapMarkerKind.Crate && marker.X is { } crateX && marker.Y is { } crateY)
+            {
+                var activatedRig = oilRigs.FirstOrDefault(monument =>
+                    Distance(crateX, crateY, monument.X!.Value, monument.Y!.Value) <= OilRigActivationRadius);
+                if (activatedRig is not null)
+                {
+                    AddEvent(
+                        serverId,
+                        CompanionEventKind.OilRigActivated,
+                        CompanionEventSource.SnapshotDiff,
+                        $"{MonumentCatalog.Resolve(activatedRig.TokenOrName).Name} crate spawned — possible activation",
+                        $"Heuristic: a crate appeared within {OilRigActivationRadius:0}m of this monument. Rust+ does not report rig activation directly.",
+                        new MapPositionSnapshot(crateX, crateY));
+                }
+            }
         }
 
         foreach (var marker in oldMarkers.Where(entry => !newMarkers.ContainsKey(entry.Key)).Select(entry => entry.Value))
@@ -761,6 +789,53 @@ public sealed class RustPlusLiveSessionManager(
             {
                 Chat = new TeamChatSnapshot([.. current.Chat?.Messages ?? [], sent])
             });
+        }
+
+        return result;
+    }
+
+    /// <summary>Fetches clan chat on explicit request only — never on a background timer, unlike team
+    /// chat. Most players are not in a clan, so continuous polling would spend request budget on an
+    /// empty/error result for the common case.</summary>
+    public async Task<RustPlusResult<ClanChatSnapshot>> RefreshClanChatAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var client = GetActiveClient();
+        if (client is null)
+        {
+            return RustPlusResult<ClanChatSnapshot>.Failure(
+                "not_connected", "The live Rust+ connection is not ready.");
+        }
+
+        var result = await client.GetClanChatAsync(cancellationToken).ConfigureAwait(false);
+        if (result.IsSuccess && result.Data is not null)
+        {
+            UpdateState(current => current with { ClanChat = result.Data });
+        }
+
+        return result;
+    }
+
+    /// <summary>Unlike <see cref="SendTeamMessageAsync"/>, the pinned package's clan-send call echoes
+    /// no message back, so the sent message can't be appended optimistically — this instead re-fetches
+    /// clan chat on success so <see cref="Current"/> reflects the real, server-confirmed result.</summary>
+    public async Task<RustPlusResult<bool>> SendClanMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        var client = GetActiveClient();
+        if (client is null)
+        {
+            return RustPlusResult<bool>.Failure("not_connected", "The live Rust+ connection is not ready.");
+        }
+
+        var result = await client.SendClanMessageAsync(message, cancellationToken).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            await RefreshClanChatAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return result;
@@ -1192,6 +1267,12 @@ public sealed class RustPlusLiveSessionManager(
             MapMarkerKind.TravellingVendor => "Travelling vendor",
             _ => marker.Kind.ToString()
         };
+
+    private static bool IsOilRig(string? monumentToken) =>
+        MonumentCatalog.Resolve(monumentToken).Name is "Small Oil Rig" or "Large Oil Rig";
+
+    private static float Distance(float x1, float y1, float x2, float y2) =>
+        MathF.Sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)));
 
     private sealed class LiveTransportException(string message) : Exception(message);
 }

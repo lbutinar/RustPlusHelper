@@ -38,6 +38,15 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
             FixedUtc.AddMinutes(-5))
     ];
 
+    private readonly List<ClanChatMessageSnapshot> _fakeClanMessages =
+    [
+        new ClanChatMessageSnapshot(
+            76561198000000001,
+            "Marko",
+            "Fake clan message: don't forget to recycle before the wipe",
+            FixedUtc.AddMinutes(-20))
+    ];
+
     public bool IsConnected { get; private set; }
 
     public event EventHandler<CameraFrameSnapshot>? CameraFrameReceived;
@@ -141,6 +150,24 @@ public sealed class FakeRustPlusClient : IRustPlusClient, IDisposable
         var sent = new TeamChatMessageSnapshot(ulong.MaxValue - 42, "Kakec", message, "#FFFFFFFF", DateTimeOffset.UtcNow);
         _fakeChatMessages.Add(sent);
         return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Success(sent));
+    }
+
+    public Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default) =>
+        ConnectedResult(new ClanChatSnapshot(_fakeClanMessages.ToArray()), cancellationToken);
+
+    public Task<RustPlusResult<bool>> SendClanMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsConnected)
+        {
+            return Task.FromResult(RustPlusResult<bool>.Failure("not_connected", "The fake Rust+ client is not connected."));
+        }
+
+        _fakeClanMessages.Add(new ClanChatMessageSnapshot(ulong.MaxValue - 42, "Kakec", message, DateTimeOffset.UtcNow));
+        return Task.FromResult(RustPlusResult<bool>.Success(true));
     }
 
     public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>

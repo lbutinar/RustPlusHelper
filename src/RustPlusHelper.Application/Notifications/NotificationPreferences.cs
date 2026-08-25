@@ -25,7 +25,9 @@ public sealed record NotificationPreferences(
             or CompanionEventKind.TeamMemberDied
             or CompanionEventKind.TeamMemberRespawned
             or CompanionEventKind.TeamMemberChangedGrid => TeamEvents,
-        CompanionEventKind.MarkerAppeared or CompanionEventKind.MarkerDisappeared => MarkerEvents,
+        CompanionEventKind.MarkerAppeared
+            or CompanionEventKind.MarkerDisappeared
+            or CompanionEventKind.OilRigActivated => MarkerEvents,
         CompanionEventKind.VendingPriceChanged
             or CompanionEventKind.VendingStockChanged
             or CompanionEventKind.VendingOfferAdded

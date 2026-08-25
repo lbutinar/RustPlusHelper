@@ -159,6 +159,20 @@ public sealed class RustPlusApiClient : IRustPlusClient
             cancellationToken);
     }
 
+    public Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            client => client.GetClanChatAsync(cancellationToken),
+            RustPlusApiMapper.Map,
+            cancellationToken);
+
+    public Task<RustPlusResult<bool>> SendClanMessageAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        return ExecuteAsync(client => client.SendClanMessageAsync(message, cancellationToken), cancellationToken);
+    }
+
     public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync(
             client => client.GetMapMarkersAsync(cancellationToken),
@@ -336,6 +350,35 @@ public sealed class RustPlusApiClient : IRustPlusClient
             }
 
             return RustPlusResult<TSnapshot>.Success(mapper(response.Data));
+        });
+    }
+
+    /// <summary>For calls whose success response carries no data payload (e.g. clan-message send) —
+    /// unlike <see cref="ExecuteCameraCommandAsync"/>, this is not gated by <see cref="_lifecycleGate"/>
+    /// since it never touches camera/connection lifecycle state.</summary>
+    private Task<RustPlusResult<bool>> ExecuteAsync(
+        Func<ApiInterface, Task<Response>> operation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var client = _client;
+        if (client?.IsConnected != true)
+        {
+            return Task.FromResult(RustPlusResult<bool>.Failure("not_connected", "The Rust+ client is not connected."));
+        }
+
+        return GuardTransportExceptionsAsync(async () =>
+        {
+            var response = await operation(client).ConfigureAwait(false);
+            if (!response.IsSuccess)
+            {
+                var code = response.Error?.Code.ToString() ?? "unknown_error";
+                var message = SecretRedactor.Redact(response.Error?.Message ?? "Rust+ returned no data.", _tokenText);
+                return RustPlusResult<bool>.Failure(code, message);
+            }
+
+            return RustPlusResult<bool>.Success(true);
         });
     }
 

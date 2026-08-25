@@ -174,6 +174,15 @@ against a live server outside device control. On success the echoed message is a
 state immediately, ahead of the next poll; see `docs/protocol-evidence.md` for what remains unverified
 (message length/rate limits, send-specific rejection codes).
 
+Clan chat (a separate Rust concept from teams) was added the same day, reusing the pinned package's
+`GetClanChatAsync`/`SendClanMessageAsync`. Unlike team chat, it is never polled in the background —
+most players are not in a clan, so continuously polling it would spend request budget on an empty or
+error result for the common case — it is only fetched on an explicit "Load clan chat"/"Refresh" action
+on the Team page (`RustPlusLiveSessionManager.RefreshClanChatAsync`). The pinned package's clan-send
+call also does not echo the sent message back (unlike team chat's), so
+`RustPlusLiveSessionManager.SendClanMessageAsync` re-fetches clan chat on a successful send instead of
+optimistically appending a locally constructed message.
+
 **Modules:** team/chat services, polling scheduler, snapshot differ, event bus/history.
 
 **Risks/tests:** request budget, duplicates, movement spam; deterministic scenario transitions.
@@ -189,6 +198,15 @@ state immediately, ahead of the next poll; see `docs/protocol-evidence.md` for w
 **Risks/tests:** marker reuse and schema drift; unknown-type and recorded snapshot tests.
 
 **Done:** all known markers render and unknown markers remain visible without failure.
+
+Oil-rig activation detection was added on 2026-08-25 as a snapshot-diff heuristic in
+`RustPlusLiveSessionManager.AddMarkerEvents`: a newly-appeared `Crate` marker within a locally chosen
+75 m of a known Small/Large Oil Rig monument emits a `CompanionEventKind.OilRigActivated` companion
+event (notifiable, grouped under the existing marker-events preference category) alongside the
+existing generic `MarkerAppeared` event. Rust+ reports no rig-activation event and no crate sub-type,
+so this is explicitly a heuristic, not a verified signal — see `docs/protocol-evidence.md`. Monument
+positions are seeded once from the already-cached map at session start (`RustPlusLiveSessionSeed.Monuments`),
+since Rust+'s live polling never re-fetches the five-token map on a timer.
 
 ## Phase 7 — Vending marketplace
 

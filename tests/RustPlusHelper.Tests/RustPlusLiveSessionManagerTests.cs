@@ -39,6 +39,107 @@ public sealed class RustPlusLiveSessionManagerTests
     }
 
     [Fact]
+    public async Task OilRigActivationHeuristicFiresWhenACrateAppearsNearAnOilRigMonument()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var oilRigCrate = new MapMarkerSnapshot(99, MapMarkerKind.Crate, 1020, 1010);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1), new MapMarkersSnapshot([oilRigCrate])]));
+        var seed = new RustPlusLiveSessionSeed(Monuments: [new MapMonumentSnapshot("large_oil_rig", 1000, 1000)]);
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id, seed);
+        await WaitUntilAsync(() => manager.Current.Events.Any(item => item.Kind == CompanionEventKind.OilRigActivated));
+
+        var oilRigEvent = Assert.Single(manager.Current.Events, item => item.Kind == CompanionEventKind.OilRigActivated);
+        Assert.Contains("Large Oil Rig", oilRigEvent.Title, StringComparison.Ordinal);
+        Assert.Equal(new MapPositionSnapshot(1020, 1010), oilRigEvent.Position);
+    }
+
+    [Fact]
+    public async Task OilRigActivationHeuristicDoesNotFireForACrateFarFromAnyOilRig()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var farCrate = new MapMarkerSnapshot(99, MapMarkerKind.Crate, 4000, 4000);
+        var factory = new ScriptedFactory(_ => new ScriptedClient(
+            [Team(online: true, alive: true)],
+            [Markers(1), new MapMarkersSnapshot([farCrate])]));
+        var seed = new RustPlusLiveSessionSeed(Monuments: [new MapMonumentSnapshot("large_oil_rig", 1000, 1000)]);
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        await manager.StartAsync(profile.Id, seed);
+        await WaitUntilAsync(() => manager.Current.Events.Any(
+            item => item.Kind == CompanionEventKind.MarkerAppeared && item.Title.Contains("Crate", StringComparison.Ordinal)));
+
+        Assert.DoesNotContain(manager.Current.Events, item => item.Kind == CompanionEventKind.OilRigActivated);
+    }
+
+    [Fact]
+    public async Task RefreshClanChatAsyncPopulatesClanChatState()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+        factory.Clients[0].ClanChatMessages.Add(new ClanChatMessageSnapshot(333, "Ally", "gate's open", DateTimeOffset.UnixEpoch));
+
+        var result = await manager.RefreshClanChatAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains(manager.Current.ClanChat!.Messages, message => message.Message == "gate's open");
+    }
+
+    [Fact]
+    public async Task RefreshClanChatAsyncFailsWhenNotConnected()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        var result = await manager.RefreshClanChatAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("not_connected", result.Error?.Code);
+    }
+
+    [Fact]
+    public async Task SendClanMessageAsyncRefreshesClanChatOnSuccess()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+        await manager.StartAsync(profile.Id);
+        await WaitUntilAsync(() => manager.Current.Status == RustPlusLiveSessionStatus.Connected);
+
+        var result = await manager.SendClanMessageAsync("moving out");
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains("moving out", factory.Clients[0].SentClanMessages);
+        Assert.Contains(manager.Current.ClanChat!.Messages, message => message.Message == "moving out");
+    }
+
+    [Fact]
+    public async Task SendClanMessageAsyncFailsWhenNotConnected()
+    {
+        using var secrets = new InMemorySecretStore();
+        var servers = CreatePairedServer(secrets, out var profile);
+        var factory = new ScriptedFactory(_ => new ScriptedClient([Team(online: true, alive: true)], [Markers(1)]));
+        await using var manager = CreateManager(servers, secrets, factory);
+
+        var result = await manager.SendClanMessageAsync("hello");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("not_connected", result.Error?.Code);
+    }
+
+    [Fact]
     public async Task MovementTrailsPersistTheFirstSampleAndDedupeIdenticalRepeats()
     {
         using var secrets = new InMemorySecretStore();
@@ -923,6 +1024,40 @@ public sealed class RustPlusLiveSessionManagerTests
             SentTeamMessages.Add(message);
             return Task.FromResult(RustPlusResult<TeamChatMessageSnapshot>.Success(
                 new TeamChatMessageSnapshot(111, "Tester", message, "#FFFFFFFF", DateTimeOffset.UnixEpoch)));
+        }
+
+        public List<ClanChatMessageSnapshot> ClanChatMessages { get; } = [];
+
+        public List<string> SentClanMessages { get; } = [];
+
+        /// <summary>Test hook: makes the next/every <see cref="GetClanChatAsync"/> call fail (e.g. to
+        /// simulate a player who is not in a clan).</summary>
+        public bool FailClanChat { get; set; }
+
+        public Task<RustPlusResult<ClanChatSnapshot>> GetClanChatAsync(CancellationToken cancellationToken = default)
+        {
+            if (!IsConnected)
+            {
+                return Task.FromResult(RustPlusResult<ClanChatSnapshot>.Failure("not_connected", "Disconnected."));
+            }
+
+            return Task.FromResult(FailClanChat
+                ? RustPlusResult<ClanChatSnapshot>.Failure("not_in_clan", "Test-configured failure.")
+                : RustPlusResult<ClanChatSnapshot>.Success(new ClanChatSnapshot(ClanChatMessages.ToArray())));
+        }
+
+        public Task<RustPlusResult<bool>> SendClanMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsConnected)
+            {
+                return Task.FromResult(RustPlusResult<bool>.Failure("not_connected", "Disconnected."));
+            }
+
+            SentClanMessages.Add(message);
+            ClanChatMessages.Add(new ClanChatMessageSnapshot(222, "ClanTester", message, DateTimeOffset.UnixEpoch));
+            return Task.FromResult(RustPlusResult<bool>.Success(true));
         }
 
         public Task<RustPlusResult<MapMarkersSnapshot>> GetMapMarkersAsync(CancellationToken cancellationToken = default)

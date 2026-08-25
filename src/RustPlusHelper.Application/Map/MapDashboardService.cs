@@ -695,7 +695,8 @@ public sealed class MapDashboardService(
             Current.Team,
             Current.Chat,
             Current.Markers,
-            Current.LiveDataRetrievedAtUtc);
+            Current.LiveDataRetrievedAtUtc,
+            Current.Map?.Monuments);
         await liveSession.StartAsync(serverId, seed, cancellationToken).ConfigureAwait(false);
     }
 

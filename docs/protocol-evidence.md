@@ -64,6 +64,8 @@ The pinned C# adapter currently wraps only read operations needed for Phase 0:
 | `GetTeamChatAsync` | `GetTeamChatAsync` | recent team chat |
 | `GetMapMarkersAsync` | `GetMapMarkersAsync` | known marker groups and unknown raw marker types |
 | `SendTeamMessageAsync` | `SendTeamMessageAsync` | the sent message echoed back with its assigned Steam64 ID/name/colour/timestamp |
+| `GetClanChatAsync` | `GetClanChatAsync` | recent clan chat |
+| `SendClanMessageAsync` | `SendClanMessageAsync` | success/failure only — unlike team chat, no message is echoed back |
 
 Connection authentication is represented by server, companion port, Steam64 player ID, signed
 32-bit player token, and optional Facepunch proxy flag. RustPlusApi places these into its authenticated
@@ -90,6 +92,22 @@ token cost, or send-specific rejection code has been observed; the app imposes o
 client-side field limit as a sanity cap, not a claimed protocol constant, and otherwise surfaces
 whatever error Rust+ returns. On success the app appends the echoed message to its own in-memory chat
 state immediately rather than waiting for the next 10-second chat poll.
+
+Clan chat (added 2026-08-25) is a separate, optional Rust+ surface — clans are a distinct concept from
+teams, and most players are not in one. Unlike team chat, clan chat is never polled on a background
+timer; it is fetched only on an explicit user action, to avoid spending request budget on an
+empty/error result for players without a clan. `SendClanMessageAsync`'s success response carries no
+data (unlike `SendTeamMessageAsync`'s echoed message), so a successful send is followed by an explicit
+`GetClanChatAsync` re-fetch rather than an optimistic local append. The same unverified-limits caveat
+as team chat applies: no documented length limit, token cost, or rejection code for clan sends.
+
+Oil-rig activation detection (added 2026-08-25) is a heuristic, not a Rust+-reported event: Rust+ has
+no rig-activation signal and no crate sub-type, so a newly-appeared generic `Crate` marker within a
+locally chosen 75 m of a known Small/Large Oil Rig monument position is treated as a possible
+activation. That 75 m radius is an application convention, not a documented monument boundary, and the
+heuristic can both miss an activation (if the crate spawns further out) and false-positive (an
+unrelated crate/marker spawning coincidentally nearby). It is always emitted alongside, not instead of,
+the existing generic `MarkerAppeared` event for that crate.
 
 ## Source-verified fields retained by the adapter
 
@@ -440,3 +458,5 @@ traffic. A future fixture-capture mechanism must be reviewed for credentials bef
 | Same-size `.map` wipe identity | Rust+ exposes no map checksum | User confirmation or a future authoritative external fingerprint source |
 | No-build catalogue/server build match | `.map` files contain no Rust build ID; bundled geometry is from build 24181174 | Build-identifying map metadata or a matching locally installed Rust build |
 | Team chat send length/rate limit and rejection codes | Unverified; no length limit, send-specific token cost, or rejection code is documented | Live send attempts against a real server, including an intentionally long message |
+| Clan chat send length/rate limit and rejection codes, and `NoTeam`-style "not in a clan" behavior | Unverified; not yet observed against a real clan-enabled server | Live read/send attempts as a clan member and as a non-member |
+| Oil-rig activation heuristic accuracy | 75 m radius is a locally chosen convention, not a documented monument boundary; not yet verified against a live activation | Trigger a real rig activation on a paired server and compare the reported crate position to the heuristic's radius |
